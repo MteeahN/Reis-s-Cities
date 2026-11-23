@@ -11,7 +11,7 @@ import {
   WebGLRenderer,
 } from 'three';
 import { CameraController } from '../camera/CameraController';
-import { BUILDING_CATEGORY_LABEL, getBuilding, type ServiceKind } from '../data/buildings';
+import { BUILDING_CATEGORY_LABEL, getBuilding, HEIGHT_LABEL, WEALTH_LABEL, type ServiceKind } from '../data/buildings';
 import { SAVE_FORMAT, SAVE_VERSION, newId, restoreCity, serializeCity, type CitySaveData } from '../save/CitySave';
 import { Achievements, type AchievementContext } from '../systems/Achievements';
 import { StatsHistory, type StatsSample } from '../systems/StatsHistory';
@@ -54,7 +54,7 @@ import { ToolManager } from '../tools/ToolManager';
 import { requestWorld } from '../world/generation/WorldGenClient';
 import { pickGround } from '../world/TerrainPicker';
 import { World } from '../world/World';
-import { APP_VERSION, CELL_SIZE, START_MINUTE_OFFSET, WATER_LEVEL, WORLD_SIZE, type GameSpeed } from './config';
+import { APP_VERSION, CELL_SIZE, GRID_CELLS, START_MINUTE_OFFSET, WATER_LEVEL, WORLD_SIZE, type GameSpeed } from './config';
 import { EventBus } from './EventBus';
 import type { BuildingInfo, GameEvents, RoadInfo, RoadMode, ToolId } from './events';
 import { Input, type PointerInfo } from './Input';
@@ -954,6 +954,8 @@ export class Game {
       name: def.name,
       category: BUILDING_CATEGORY_LABEL[def.category],
       styleName: def.spec ? ARCH_STYLE_DEFS[b.style ?? 'modern'].name : undefined,
+      wealthName: def.zone === ZoneType.Residential ? WEALTH_LABEL[def.wealth ?? 2] : undefined,
+      heightLimit: b.zone && this.city.districtHeight[b.j * GRID_CELLS + b.i] ? HEIGHT_LABEL[this.city.districtHeight[b.j * GRID_CELLS + b.i]] : undefined,
       w: b.w,
       d: b.d,
       cost: b.cost,

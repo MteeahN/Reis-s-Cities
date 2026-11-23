@@ -72,7 +72,12 @@ export interface BuildingDef {
   model: BuildingPart[];
   /** Procedural spec of growable buildings (lets the renderer build colour/roof variants). */
   spec?: ProceduralSpec;
+  /** Who a growable is built for: 1 modest, 2 middle, 3 wealthy (zoned buildings only). */
+  wealth?: Wealth;
 }
+
+/** Household wealth a growable is built for. */
+export type Wealth = 1 | 2 | 3;
 
 export interface UtilitySpec {
   /** Electricity produced (kW). */
@@ -201,17 +206,21 @@ interface TemplateArgs {
   residents?: number;
   workers?: number;
   pollution?: number;
+  /** Default: middle (2). */
+  wealth?: Wealth;
+  /** Raises land value around it (villas, landmark offices). */
+  landValue?: { amount: number; radius: number };
 }
 
 /** Builds a growable catalogue entry; its model is generated from the compact spec. */
 function zoned(a: TemplateArgs): BuildingDef {
   const occupants = (a.residents ?? 0) + (a.workers ?? 0);
   const category: BuildingCategory =
-    a.zone === ZoneType.Residential ? 'residential' : a.zone === ZoneType.Industrial ? 'industrial' : a.spec.style === 'office' ? 'office' : 'commercial';
+    a.zone === ZoneType.Residential ? 'residential' : a.zone === ZoneType.Industrial ? 'industrial' : a.zone === ZoneType.Office ? 'office' : 'commercial';
   return {
     id: a.id,
     name: a.name,
-    description: `${a.level}. seviye ${category === 'residential' ? 'konut' : category === 'industrial' ? 'sanayi' : 'ticaret'} binası.`,
+    description: `${a.level}. seviye ${({ residential: 'konut', commercial: 'ticaret', industrial: 'sanayi', office: 'ofis' } as Record<string, string>)[category]} binası${a.zone === ZoneType.Residential ? ` (${['', 'mütevazı', 'orta gelirli', 'varlıklı'][a.wealth ?? 2]} haneler)` : ''}.`,
     category,
     placement: 'zone',
     zone: a.zone,
@@ -230,27 +239,64 @@ function zoned(a: TemplateArgs): BuildingDef {
     unlockPopulation: 0,
     model: proceduralParts(a.spec),
     spec: a.spec,
+    wealth: a.wealth ?? 2,
+    landValueEffect: a.landValue,
   };
 }
+
+export const WEALTH_LABEL: Record<Wealth, string> = { 1: 'Mütevazı', 2: 'Orta', 3: 'Varlıklı' };
+
+/** Storeys a growable rises to (roughly what a passer-by would count). */
+export function storeysOf(def: BuildingDef): number {
+  const s = def.spec;
+  if (!s) return 1;
+  if (s.style === 'warehouse' || s.style === 'factory') return 1 + Math.floor(s.floors / 2);
+  if (s.style === 'tower') return s.floors + 1;
+  if (s.style === 'office' && (s.variant ?? 0) % 2 === 0) return Math.ceil(s.floors * 1.25);
+  return Math.max(1, s.floors);
+}
+
+/** Height limits a district can be zoned with: 0 none, 1 low (≤ 3 storeys), 2 mid-rise (≤ 7). */
+export const HEIGHT_LIMITS = [Infinity, 3, 7] as const;
+export const HEIGHT_LABEL = ['Sınırsız', 'Alçak (≤ 3 kat)', 'Orta (≤ 7 kat)'] as const;
 
 const R = ZoneType.Residential;
 const C = ZoneType.Commercial;
 const I = ZoneType.Industrial;
+const O = ZoneType.Office;
 
 export const ZONED_BUILDINGS: readonly BuildingDef[] = [
   // Residential — level 1: detached houses
   zoned({ id: 'res1_house_a', name: 'Müstakil Ev', zone: R, level: 1, residents: 4, spec: { style: 'house', footprint: [1, 1], floors: 1, wall: RES_WALLS[0], accent: '#a89f92', roof: RES_ROOFS[0], ground: 'grass' } }),
   zoned({ id: 'res1_house_b', name: 'İki Katlı Ev', zone: R, level: 1, residents: 5, spec: { style: 'house', footprint: [1, 1], floors: 2, wall: RES_WALLS[2], accent: '#a89f92', roof: RES_ROOFS[2], ground: 'grass', variant: 1 } }),
   zoned({ id: 'res1_house_c', name: 'Bahçeli Ev', zone: R, level: 1, residents: 6, spec: { style: 'house', footprint: [1, 2], floors: 2, wall: RES_WALLS[1], accent: '#a89f92', roof: RES_ROOFS[1], ground: 'grass' } }),
-  zoned({ id: 'res1_house_d', name: 'Geniş Müstakil Ev', zone: R, level: 1, residents: 8, spec: { style: 'house', footprint: [2, 2], floors: 2, wall: RES_WALLS[3], accent: '#9a8f80', roof: RES_ROOFS[3], ground: 'grass', variant: 1 } }),
+  zoned({ id: 'res1_house_d', name: 'Villa', zone: R, level: 1, residents: 8, wealth: 3, landValue: { amount: 4, radius: 3 }, spec: { style: 'house', footprint: [2, 2], floors: 2, wall: RES_WALLS[3], accent: '#9a8f80', roof: RES_ROOFS[3], ground: 'grass', variant: 1 } }),
   // Residential — level 2: apartments
   zoned({ id: 'res2_apt_s', name: 'Apartman', zone: R, level: 2, residents: 12, spec: { style: 'apartment', footprint: [1, 1], floors: 3, wall: RES_WALLS[4], accent: '#b3aa9c', roof: '#777', ground: 'grass' } }),
   zoned({ id: 'res2_apt_m', name: 'Apartman', zone: R, level: 2, residents: 24, spec: { style: 'apartment', footprint: [1, 2], floors: 4, wall: RES_WALLS[0], accent: '#a39a8c', roof: '#777', ground: 'grass' } }),
-  zoned({ id: 'res2_apt_l', name: 'Site Apartmanı', zone: R, level: 2, residents: 48, spec: { style: 'apartment', footprint: [2, 2], floors: 5, wall: RES_WALLS[2], accent: '#8f9aa3', roof: '#777', ground: 'grass' } }),
+  zoned({ id: 'res2_apt_l', name: 'Site Apartmanı', zone: R, level: 2, residents: 48, wealth: 1, spec: { style: 'apartment', footprint: [2, 2], floors: 5, wall: RES_WALLS[2], accent: '#8f9aa3', roof: '#777', ground: 'grass' } }),
   // Residential — level 3: modern housing / towers
   zoned({ id: 'res3_tower_s', name: 'Modern Konut', zone: R, level: 3, residents: 30, spec: { style: 'tower', footprint: [1, 1], floors: 6, wall: '#e9edf0', accent: '#5f6b75', roof: '#777', ground: 'paving' } }),
   zoned({ id: 'res3_tower_m', name: 'Modern Konut', zone: R, level: 3, residents: 60, spec: { style: 'tower', footprint: [1, 2], floors: 9, wall: '#dfe6ea', accent: '#4d5a64', roof: '#777', ground: 'paving', variant: 1 } }),
-  zoned({ id: 'res3_tower_l', name: 'Konut Kulesi', zone: R, level: 3, residents: 120, spec: { style: 'tower', footprint: [2, 2], floors: 14, wall: '#eef1f3', accent: '#3f4b55', roof: '#777', ground: 'paving', variant: 1 } }),
+  // Residential — more kinds: terraces, perimeter blocks, villas and social housing.
+  zoned({ id: 'res1_row', name: 'Sıra Evler', zone: R, level: 1, residents: 9, wealth: 1, spec: { style: 'rowhouse', footprint: [2, 1], floors: 2, wall: '#e3b49a', accent: '#efe9dc', roof: '#6b4f3f', ground: 'grass' } }),
+  zoned({ id: 'res1_row_deep', name: 'Bahçeli Sıra Evler', zone: R, level: 1, residents: 10, spec: { style: 'rowhouse', footprint: [2, 2], floors: 2, wall: '#efe3c4', accent: '#a89f92', roof: '#5c6b7a', ground: 'grass', variant: 1 } }),
+  zoned({ id: 'res1_cottage', name: 'Tek Katlı Ev', zone: R, level: 1, residents: 3, wealth: 1, spec: { style: 'house', footprint: [1, 1], floors: 1, wall: '#e7cec3', accent: '#9a8f80', roof: '#8a5a44', ground: 'grass', variant: 3 } }),
+  zoned({ id: 'res2_row', name: 'Kent Evleri', zone: R, level: 2, residents: 16, spec: { style: 'rowhouse', footprint: [2, 1], floors: 3, wall: '#d9b38c', accent: '#efe9dc', roof: '#3f4448', ground: 'grass', variant: 2 } }),
+  zoned({ id: 'res2_row_deep', name: 'Kent Evleri', zone: R, level: 2, residents: 18, spec: { style: 'rowhouse', footprint: [2, 2], floors: 3, wall: '#c98a6a', accent: '#efe9dc', roof: '#6b4f3f', ground: 'grass', variant: 4 } }),
+  zoned({ id: 'res2_court', name: 'Avlulu Blok', zone: R, level: 2, residents: 44, spec: { style: 'courtyard', footprint: [2, 2], floors: 3, wall: '#e8d8c8', accent: '#9c8574', roof: '#6b4f3f', ground: 'grass' } }),
+  zoned({ id: 'res2_mansion', name: 'Konak', zone: R, level: 2, residents: 10, wealth: 3, landValue: { amount: 6, radius: 3 }, spec: { style: 'house', footprint: [2, 2], floors: 3, wall: '#f2eee6', accent: '#8c7b6b', roof: '#5c6b7a', ground: 'grass', variant: 2 } }),
+  zoned({ id: 'res2_villa', name: 'Bahçeli Villa', zone: R, level: 2, residents: 6, wealth: 3, landValue: { amount: 4, radius: 2 }, spec: { style: 'house', footprint: [1, 2], floors: 2, wall: '#efe3cf', accent: '#c2b8a8', roof: '#3f4448', ground: 'grass', variant: 5 } }),
+  zoned({ id: 'res2_lodge', name: 'Lojman', zone: R, level: 2, residents: 16, wealth: 1, spec: { style: 'apartment', footprint: [1, 1], floors: 4, wall: '#cfd6cf', accent: '#7d8a7a', roof: '#777', ground: 'grass', variant: 1 } }),
+  zoned({ id: 'res3_row', name: 'Lüks Kent Evleri', zone: R, level: 3, residents: 18, wealth: 3, landValue: { amount: 5, radius: 3 }, spec: { style: 'rowhouse', footprint: [2, 1], floors: 3, wall: '#efe9dc', accent: '#8c7b6b', roof: '#5c6b7a', ground: 'grass', variant: 5 } }),
+  zoned({ id: 'res3_row_deep', name: 'Lüks Kent Evleri', zone: R, level: 3, residents: 22, wealth: 3, landValue: { amount: 5, radius: 3 }, spec: { style: 'rowhouse', footprint: [2, 2], floors: 3, wall: '#e8d8c8', accent: '#a89f92', roof: '#3f4448', ground: 'grass', variant: 3 } }),
+  zoned({ id: 'res3_court', name: 'Büyük Avlulu Blok', zone: R, level: 3, residents: 80, spec: { style: 'courtyard', footprint: [2, 2], floors: 6, wall: '#d8c3a8', accent: '#b3aa9c', roof: '#5c6b7a', ground: 'grass', variant: 1 } }),
+  zoned({ id: 'res3_estate', name: 'Toplu Konut Bloğu', zone: R, level: 3, residents: 140, wealth: 1, spec: { style: 'apartment', footprint: [2, 2], floors: 10, wall: '#c9cfd6', accent: '#8f9aa3', roof: '#777', ground: 'grass', variant: 2 } }),
+  zoned({ id: 'res3_mansion', name: 'Malikâne', zone: R, level: 3, residents: 12, wealth: 3, landValue: { amount: 8, radius: 4 }, spec: { style: 'house', footprint: [2, 2], floors: 3, wall: '#efe9dc', accent: '#b0a493', roof: '#3f4448', ground: 'grass', variant: 4 } }),
+  zoned({ id: 'res3_villa', name: 'Modern Villa', zone: R, level: 3, residents: 7, wealth: 3, landValue: { amount: 5, radius: 2 }, spec: { style: 'house', footprint: [1, 2], floors: 2, wall: '#f2eee6', accent: '#5f6b75', roof: '#3f4448', ground: 'grass', variant: 11 } }),
+  zoned({ id: 'res3_lowrise', name: 'Bahçe Apartmanı', zone: R, level: 3, residents: 18, spec: { style: 'apartment', footprint: [1, 1], floors: 3, wall: '#e8d8c8', accent: '#b07a5e', roof: '#777', ground: 'grass', variant: 4 } }),
+  zoned({ id: 'res3_lowrise_m', name: 'Bahçe Apartmanı', zone: R, level: 3, residents: 30, spec: { style: 'apartment', footprint: [1, 2], floors: 3, wall: '#d8c3a8', accent: '#9c8574', roof: '#777', ground: 'grass', variant: 6 } }),
+  zoned({ id: 'res3_tower_l', name: 'Rezidans Kulesi', zone: R, level: 3, residents: 120, wealth: 3, spec: { style: 'tower', footprint: [2, 2], floors: 14, wall: '#eef1f3', accent: '#3f4b55', roof: '#777', ground: 'paving', variant: 1 } }),
 
   // Commercial — level 1: shops & markets
   zoned({ id: 'com1_shop', name: 'Bakkal', zone: C, level: 1, workers: 4, spec: { style: 'shop', footprint: [1, 1], floors: 1, wall: '#efe7da', accent: COM_ACCENTS[0], roof: '#777', ground: 'paving' } }),
@@ -258,12 +304,30 @@ export const ZONED_BUILDINGS: readonly BuildingDef[] = [
   zoned({ id: 'com1_market', name: 'Market', zone: C, level: 1, workers: 14, spec: { style: 'shop', footprint: [2, 2], floors: 1, wall: '#f1ece2', accent: COM_ACCENTS[3], roof: '#777', ground: 'paving' } }),
   // Commercial — level 2: restaurants, larger stores, small offices
   zoned({ id: 'com2_shop', name: 'Restoran', zone: C, level: 2, workers: 10, spec: { style: 'shop', footprint: [1, 1], floors: 3, wall: '#e9dccb', accent: COM_ACCENTS[2], roof: '#777', ground: 'paving' } }),
-  zoned({ id: 'com2_office', name: 'Ofis', zone: C, level: 2, workers: 24, spec: { style: 'office', footprint: [1, 2], floors: 4, wall: '#cfdbe4', accent: '#5b6770', roof: '#777', ground: 'paving' } }),
+  zoned({ id: 'com2_office', name: 'Büro Binası', zone: O, level: 2, workers: 24, spec: { style: 'office', footprint: [1, 2], floors: 4, wall: '#cfdbe4', accent: '#5b6770', roof: '#777', ground: 'paving' } }),
   zoned({ id: 'com2_store_l', name: 'Büyük Mağaza', zone: C, level: 2, workers: 36, spec: { style: 'shop', footprint: [2, 2], floors: 3, wall: '#ebe5da', accent: COM_ACCENTS[1], roof: '#777', ground: 'paving' } }),
   // Commercial — level 3: offices and shopping mall
-  zoned({ id: 'com3_office_s', name: 'Ofis Binası', zone: C, level: 3, workers: 40, spec: { style: 'office', footprint: [1, 1], floors: 8, wall: '#b9cfdd', accent: '#44515b', roof: '#777', ground: 'paving' } }),
-  zoned({ id: 'com3_office_m', name: 'Ofis Binası', zone: C, level: 3, workers: 80, spec: { style: 'office', footprint: [1, 2], floors: 10, wall: '#aac4d6', accent: '#3d4a54', roof: '#777', ground: 'paving' } }),
+  zoned({ id: 'com3_office_s', name: 'Ofis Binası', zone: O, level: 3, workers: 40, spec: { style: 'office', footprint: [1, 1], floors: 8, wall: '#b9cfdd', accent: '#44515b', roof: '#777', ground: 'paving' } }),
+  zoned({ id: 'com3_office_m', name: 'İş Merkezi', zone: O, level: 3, workers: 80, spec: { style: 'office', footprint: [1, 2], floors: 10, wall: '#aac4d6', accent: '#3d4a54', roof: '#777', ground: 'paving' } }),
+  zoned({ id: 'com1_row', name: 'Dükkân Sırası', zone: C, level: 1, workers: 10, spec: { style: 'shop', footprint: [2, 1], floors: 1, wall: '#e9dccb', accent: COM_ACCENTS[3], roof: '#777', ground: 'paving', variant: 3 } }),
+  zoned({ id: 'com1_cafe', name: 'Kafe', zone: C, level: 1, workers: 5, spec: { style: 'shop', footprint: [1, 1], floors: 1, wall: '#f1ece2', accent: COM_ACCENTS[2], roof: '#777', ground: 'paving', variant: 6 } }),
+  zoned({ id: 'com2_row', name: 'Çarşı Sırası', zone: C, level: 2, workers: 20, spec: { style: 'shop', footprint: [2, 1], floors: 2, wall: '#efe7da', accent: COM_ACCENTS[0], roof: '#777', ground: 'paving', variant: 1 } }),
+  zoned({ id: 'com2_bistro', name: 'Lokanta', zone: C, level: 2, workers: 18, spec: { style: 'shop', footprint: [1, 2], floors: 2, wall: '#e2d1bd', accent: COM_ACCENTS[2], roof: '#777', ground: 'paving', variant: 4 } }),
+  zoned({ id: 'com3_boutique', name: 'Butik Mağaza', zone: C, level: 3, workers: 16, spec: { style: 'shop', footprint: [1, 1], floors: 4, wall: '#dde3e6', accent: '#8a4fc2', roof: '#777', ground: 'paving', variant: 5 } }),
+  zoned({ id: 'com3_arcade', name: 'Pasajlı Çarşı', zone: C, level: 3, workers: 44, spec: { style: 'shop', footprint: [1, 2], floors: 5, wall: '#e9dccb', accent: COM_ACCENTS[1], roof: '#777', ground: 'paving', variant: 2 } }),
+  zoned({ id: 'com3_row', name: 'Mağazalar Caddesi', zone: C, level: 3, workers: 36, spec: { style: 'shop', footprint: [2, 1], floors: 4, wall: '#d6dccd', accent: '#1f8f8f', roof: '#777', ground: 'paving', variant: 7 } }),
   zoned({ id: 'com3_mall', name: 'Alışveriş Merkezi', zone: C, level: 3, workers: 120, spec: { style: 'mall', footprint: [2, 2], floors: 2, wall: '#e8e2d6', accent: COM_ACCENTS[0], roof: '#777', ground: 'paving' } }),
+
+  // Office — level 1: small practices; level 2: office buildings; level 3: business towers.
+  zoned({ id: 'off1_studio', name: 'Stüdyo Ofis', zone: O, level: 1, workers: 10, spec: { style: 'office', footprint: [1, 1], floors: 2, wall: '#d6d2c8', accent: '#6b5f55', roof: '#777', ground: 'paving', variant: 1 } }),
+  zoned({ id: 'off1_practice', name: 'Büro', zone: O, level: 1, workers: 18, spec: { style: 'office', footprint: [1, 2], floors: 3, wall: '#c9d2cf', accent: '#5b6770', roof: '#777', ground: 'paving', variant: 3 } }),
+  zoned({ id: 'off1_campus', name: 'Teknoloji Atölyesi', zone: O, level: 1, workers: 30, spec: { style: 'office', footprint: [2, 2], floors: 2, wall: '#b8c2c9', accent: '#2f3a44', roof: '#777', ground: 'paving', variant: 5 } }),
+  zoned({ id: 'off2_small', name: 'Ofis', zone: O, level: 2, workers: 22, spec: { style: 'office', footprint: [1, 1], floors: 5, wall: '#cfdbe4', accent: '#44515b', roof: '#777', ground: 'paving', variant: 2 } }),
+  zoned({ id: 'off2_large', name: 'Ofis Kompleksi', zone: O, level: 2, workers: 70, spec: { style: 'office', footprint: [2, 2], floors: 5, wall: '#aac4d6', accent: '#3d4a54', roof: '#777', ground: 'paving', variant: 1 } }),
+  zoned({ id: 'off3_tower', name: 'İş Kulesi', zone: O, level: 3, workers: 220, landValue: { amount: 6, radius: 5 }, spec: { style: 'office', footprint: [2, 2], floors: 16, wall: '#b9cfdd', accent: '#2f3a44', roof: '#777', ground: 'paving', variant: 2 } }),
+  zoned({ id: 'off3_lowrise', name: 'Ofis Parkı', zone: O, level: 3, workers: 30, spec: { style: 'office', footprint: [1, 1], floors: 3, wall: '#d6d2c8', accent: '#6b5f55', roof: '#777', ground: 'paving', variant: 3 } }),
+  zoned({ id: 'off3_lowrise_m', name: 'Ofis Parkı', zone: O, level: 3, workers: 48, spec: { style: 'office', footprint: [1, 2], floors: 3, wall: '#c9d2cf', accent: '#44515b', roof: '#777', ground: 'paving', variant: 5 } }),
+  zoned({ id: 'off3_lowrise_l', name: 'Kampüs Ofis', zone: O, level: 3, workers: 90, spec: { style: 'office', footprint: [2, 2], floors: 3, wall: '#b8c2c9', accent: '#2f3a44', roof: '#777', ground: 'paving', variant: 1 } }),
 
   // Industrial — level 1: workshops and warehouses
   zoned({ id: 'ind1_workshop', name: 'Atölye', zone: I, level: 1, workers: 6, pollution: 20, spec: { style: 'warehouse', footprint: [1, 1], floors: 0, wall: IND_WALLS[0], accent: '#777', roof: '#6d7378', ground: 'concrete' } }),
@@ -301,15 +365,36 @@ export const getBuilding = (id: string): BuildingDef => {
 export function growablePrice(def: BuildingDef): number {
   const cells = def.footprint[0] * def.footprint[1];
   const level = def.level ?? 1;
-  const kind = def.zone === ZoneType.Residential ? 1 : def.zone === ZoneType.Commercial ? 1.3 : 1.5;
+  const kind = def.zone === ZoneType.Residential ? 1 : def.zone === ZoneType.Commercial ? 1.3 : def.zone === ZoneType.Office ? 1.6 : 1.5;
   return Math.round((400 * cells * (0.5 + level * 0.75) * kind) / 10) * 10;
 }
 
-/** Growable templates for a zone/level, optionally restricted to a footprint. */
-export function zonedTemplates(zone: ZoneKind, level: number, footprint?: [number, number]): BuildingDef[] {
-  return ZONED_BUILDINGS.filter(
-    (b) => b.zone === zone && b.level === level && (!footprint || (b.footprint[0] === footprint[0] && b.footprint[1] === footprint[1])),
+/** What a district asks of the buildings that grow in it. */
+export interface DistrictRules {
+  /** 0 any, else the wealth buildings are built for (homes only). */
+  wealth?: number;
+  /** Index into HEIGHT_LIMITS. */
+  height?: number;
+}
+
+/**
+ * Growable templates for a zone/level, optionally restricted to a footprint
+ * and to a district's rules. The height limit is strict; the wealth is a
+ * preference (other homes are used when none of that wealth fits the lot).
+ */
+export function zonedTemplates(zone: ZoneKind, level: number, footprint?: [number, number], rules?: DistrictRules): BuildingDef[] {
+  const cap = HEIGHT_LIMITS[rules?.height ?? 0] ?? Infinity;
+  const all = ZONED_BUILDINGS.filter(
+    (b) =>
+      b.zone === zone &&
+      b.level === level &&
+      (!footprint || (b.footprint[0] === footprint[0] && b.footprint[1] === footprint[1])) &&
+      storeysOf(b) <= cap,
   );
+  const w = rules?.wealth ?? 0;
+  if (!w || zone !== ZoneType.Residential) return all;
+  const matching = all.filter((b) => b.wealth === w);
+  return matching.length ? matching : all;
 }
 
 /** Residents (for homes) or job slots (for workplaces). */

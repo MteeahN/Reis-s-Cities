@@ -19,8 +19,23 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   Stiller yalnızca renk değil yapı da değiştirir: kiremit ve mansart çatılar, panjurlar, ferforje balkonlar, çizgili
   tenteler (Avrupa); geniş saçaklı uçları kalkık çatılar, pagoda tepeler, fenerler, neon tabelalar (Asya); beyaz
   badana, teras çatılar, pergolalar, kemerler, begonviller (Akdeniz); cumbalar, geniş saçaklar, kubbeli çarşılar
-  (Osmanlı). Stil kayıtta saklanır.
-- **Binaları tek tek yerleştirme:** Binalar aracında Konut / Ticaret / Sanayi sekmeleri. Seçilen bina seçilen stilde
+  (Osmanlı). Stil kayıtta saklanır. Altı stil daha: İskandinav (koyu kırmızı ahşap, beyaz pervazlar, dik ve çimen
+  çatılar), Arap (kerpiç, mazgallı düz çatılar, meşrebiye kafesleri, rüzgâr kuleleri, kubbeler), Slav (pastel sıva,
+  oymalı pencere süsleri, soğan kubbeler), Amerikan (verandalı ahşap evler, yangın merdivenleri, çatı su tankları),
+  Orta Çağ (yarım ahşap çatkı, çıkma katlar, köşe kuleleri), Fütüristik (ışık şeritleri, cam kubbeler, halkalar).
+- **Ofis bölgesi (O, 500 nüfusta açılır):** bürolar ve iş kuleleri artık ayrı bölgede büyür. Talebi şehrin eğitimli
+  (lise ve üniversite) çalışan sayısına göre oluşur; ofisler kirlilik üretmez, ticaret oranından vergi öder. Eski
+  kayıtlarda ticaret bölgesindeki ofis binaları yüklenirken ofis bölgesine taşınır.
+- **Refah ve kat sınırı:** bölgeleme aracında konut için refah (Karışık / Mütevazı / Orta / Varlıklı) ve her bölge
+  için kat sınırı (Sınırsız / Alçak ≤ 3 kat / Orta ≤ 7 kat) seçilir ve hücrelere boyanır. Mütevazı semtlerde sıra
+  evler, lojmanlar ve toplu konut (çok sakin); varlıklı semtlerde villa, konak ve rezidanslar (az sakin, çevresinin
+  arazi değerini yükseltir) büyür. Kat sınırı katıdır: sınırı aşan binalar büyümez, bir bina sınırda daha büyük
+  karşılığı yoksa seviye atlamaz (bina panelinde gerekçesi yazılır). Refah bir tercihtir: o refahta parsele uyan bina
+  yoksa başka konut büyür. Her ikisi de kayıtta saklanır.
+- **Yeni bina türleri:** sıra evler (her biri ayrı renk, kapı ve çatılı bitişik evler), avlulu bloklar (kemerli
+  girişli, ortası bahçeli dört kanat), villa, konak, malikâne, toplu konut, bahçe apartmanları; dükkân sıraları,
+  kafe, lokanta, butik, pasajlı çarşı; stüdyo ofis, büro, teknoloji atölyesi, ofis kompleksi, ofis parkı, iş kulesi.
+- **Binaları tek tek yerleştirme:** Binalar aracında Konut / Ticaret / Sanayi / Ofis sekmeleri. Seçilen bina seçilen stilde
   elle kurulur: hazır bina bedeli ödenir (hücre sayısı ve seviyeye göre), parselin bölgesi kendiliğinden atanır, bina
   inşaattan sonra diğerleri gibi yaşar ve gelişir; yıkılırsa bedelin yarısı iade edilir.
 - **Yumuşak sokak lambaları:** gece lamba başlıkları ve yoldaki ışık halkası çok daha hafif ve yayvan; gece parlaması

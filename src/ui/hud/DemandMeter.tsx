@@ -6,7 +6,7 @@ import { useGameStore } from '../../store/gameStore';
 export const DemandMeter = memo(function DemandMeter() {
   const demand = useGameStore((s) => s.demand);
   const maxPop = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
-  const values = [demand.residential, demand.commercial, demand.industrial];
+  const values = [demand.residential, demand.commercial, demand.industrial, demand.office ?? 0];
   return (
     <div className="panel demand" data-testid="demand" title="Bölge talebi: binalar talep olan bölgelerde gelişir">
       <div className="demand-title">Talep</div>

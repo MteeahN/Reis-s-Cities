@@ -6,7 +6,7 @@ import { formatMoney } from '../../utils/format';
 
 const TAX_ROWS: { kind: TaxKind; label: string; rate: 'taxResidential' | 'taxCommercial' | 'taxIndustrial'; effect: string }[] = [
   { kind: 'residential', label: 'Konut', rate: 'taxResidential', effect: 'mutluluk ve göç' },
-  { kind: 'commercial', label: 'Ticaret', rate: 'taxCommercial', effect: 'ticaret talebi' },
+  { kind: 'commercial', label: 'Ticaret ve ofis', rate: 'taxCommercial', effect: 'ticaret ve ofis talebi' },
   { kind: 'industrial', label: 'Sanayi', rate: 'taxIndustrial', effect: 'sanayi talebi' },
 ];
 

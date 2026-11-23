@@ -1,5 +1,5 @@
 import { CELL_SIZE, GRID_CELLS } from '../core/config';
-import { ZONE_DEPTH, ZoneType } from '../data/zones';
+import { ZONE_COUNT, ZONE_DEPTH, ZoneType } from '../data/zones';
 import type { P2 } from '../entities/road/curve';
 import { IndexedSet } from '../../utils/IndexedSet';
 import { rasterizePolyline } from './Occupancy';
@@ -12,8 +12,8 @@ import { rasterizePolyline } from './Occupancy';
 export class ZoneMap {
   readonly zone = new Uint8Array(GRID_CELLS * GRID_CELLS);
   readonly zoneable = new Uint16Array(GRID_CELLS * GRID_CELLS);
-  /** Empty (no building, no road) zoned cells, per zone type (index 1..3). */
-  readonly empty: IndexedSet[] = [new IndexedSet(), new IndexedSet(), new IndexedSet(), new IndexedSet()];
+  /** Empty (no building, no road) zoned cells, per zone type (index 1..4). */
+  readonly empty: IndexedSet[] = [new IndexedSet(), new IndexedSet(), new IndexedSet(), new IndexedSet(), new IndexedSet()];
   private readonly edgeCells = new Map<number, number[]>();
   private listeners = new Set<(cells: number[]) => void>();
   version = 0;
@@ -90,22 +90,22 @@ export class ZoneMap {
     this.emit(cells);
   }
 
-  countZoned(): Record<1 | 2 | 3, number> {
-    const out = { 1: 0, 2: 0, 3: 0 } as Record<1 | 2 | 3, number>;
-    for (const z of this.zone) if (z) out[z as 1 | 2 | 3]++;
+  countZoned(): Record<1 | 2 | 3 | 4, number> {
+    const out = { 1: 0, 2: 0, 3: 0, 4: 0 } as Record<1 | 2 | 3 | 4, number>;
+    for (const z of this.zone) if (z) out[z as 1 | 2 | 3 | 4]++;
     return out;
   }
 
   /** Restores run-length encoded zoning (see serialize). */
   restore(rle: readonly number[], isFree: (c: number) => boolean): void {
-    const cells: number[][] = [[], [], [], []];
+    const cells: number[][] = [[], [], [], [], []];
     let k = 0;
     for (let r = 0; r + 1 < rle.length && k < this.zone.length; r += 2) {
       const v = rle[r];
       const n = rle[r + 1];
-      for (let c = 0; c < n && k < this.zone.length; c++, k++) if (v >= 1 && v <= 3) cells[v].push(k);
+      for (let c = 0; c < n && k < this.zone.length; c++, k++) if (v >= 1 && v <= ZONE_COUNT) cells[v].push(k);
     }
-    for (let z = 1; z <= 3; z++) if (cells[z].length) this.set(cells[z], z as ZoneType, isFree);
+    for (let z = 1; z <= ZONE_COUNT; z++) if (cells[z].length) this.set(cells[z], z as ZoneType, isFree);
   }
 
   serialize(): number[] {

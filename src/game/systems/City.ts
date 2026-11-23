@@ -1,5 +1,5 @@
 import { archStyleAt, archStyleIndex, type ArchStyle } from '../data/styles';
-import { growablePrice } from '../data/buildings';
+import { growablePrice, type DistrictRules } from '../data/buildings';
 import { CELL_SIZE, GRID_CELLS, WORLD_SIZE, TILES_PER_SIDE } from '../core/config';
 import { LINE_TYPES, type LineKind } from '../data/infrastructure';
 import { UtilityLines } from '../entities/infra/UtilityLines';
@@ -64,6 +64,10 @@ export class City {
   sandbox = false;
   /** Architectural style painted on each cell (index into ARCH_STYLES; 0 = modern). */
   readonly districtStyle = new Uint8Array(GRID_CELLS * GRID_CELLS);
+  /** Wealth homes are built for, per cell (0 mixed, 1 modest, 2 middle, 3 wealthy). */
+  readonly districtWealth = new Uint8Array(GRID_CELLS * GRID_CELLS);
+  /** Height limit per cell (index into HEIGHT_LIMITS: 0 none, 1 low, 2 mid-rise). */
+  readonly districtHeight = new Uint8Array(GRID_CELLS * GRID_CELLS);
   private utilityListeners = new Set<(u: UtilityResult) => void>();
   readonly plannerWorld: PlannerWorld;
   readonly placementWorld: PlacementWorld;
@@ -92,6 +96,7 @@ export class City {
       buildingAt: (i, j) => this.occupancy.buildingAt(i, j),
       isBuildable: (i, j) => world.grid.isBuildable(i, j) && world.isCellUnlocked(i, j),
       vertexHeight: (i, j) => world.field.vertex(i, j),
+      rulesAt: (i, j) => this.rulesAt(i, j),
     };
 
     this.roads.onChange((c) => {
@@ -287,7 +292,7 @@ export class City {
    * (re-zoning cells to their current zone only changes the style, and
    * buildings already standing there take the new style).
    */
-  setZone(cells: Iterable<number>, type: ZoneType, style?: ArchStyle): number {
+  setZone(cells: Iterable<number>, type: ZoneType, style?: ArchStyle, rules?: DistrictRules): number {
     const valid: number[] = [];
     const restyle: number[] = [];
     const bulldoze = new Set<number>();
@@ -295,7 +300,7 @@ export class City {
     for (const k of cells) {
       if (type !== ZoneType.None && !this.canZone(k)) continue;
       if (this.zones.zone[k] === type) {
-        if (sIdx >= 0 && this.districtStyle[k] !== sIdx) restyle.push(k);
+        if ((sIdx >= 0 && this.districtStyle[k] !== sIdx) || this.rulesDiffer(k, rules)) restyle.push(k);
         continue;
       }
       const bid = this.occupancy.building[k];
@@ -307,7 +312,41 @@ export class City {
     for (const id of bulldoze) this.removeGrowable(id);
     const changed = this.zones.set(valid, type, (k) => this.isCellFree(k)).length;
     if (sIdx >= 0) this.paintStyle([...valid, ...restyle], style!);
+    if (rules && type !== ZoneType.None) {
+      for (const k of [...valid, ...restyle]) {
+        if (rules.wealth !== undefined) this.districtWealth[k] = rules.wealth;
+        if (rules.height !== undefined) this.districtHeight[k] = rules.height;
+      }
+      if (sIdx < 0) this.zones.touch(restyle);
+    }
     return changed + restyle.length;
+  }
+
+  private rulesDiffer(k: number, rules?: DistrictRules): boolean {
+    if (!rules) return false;
+    return (rules.wealth !== undefined && this.districtWealth[k] !== rules.wealth) || (rules.height !== undefined && this.districtHeight[k] !== rules.height);
+  }
+
+  /**
+   * Older saves grew offices in commercial zones; offices now have their own
+   * zone. Buildings whose template moved take their template's zone (and so
+   * does their lot).
+   */
+  migrateGrowableZones(): void {
+    for (const b of this.buildings.items.values()) {
+      if (!b.zone) continue;
+      const def = getBuilding(b.defId);
+      if (def.zone && def.zone !== b.zone) {
+        b.zone = def.zone;
+        this.zones.set(b.cells, def.zone, () => false);
+      }
+    }
+  }
+
+  /** District rules (wealth, height limit) of the cell at (i, j). */
+  rulesAt(i: number, j: number): DistrictRules {
+    const k = j * GRID_CELLS + i;
+    return { wealth: this.districtWealth[k], height: this.districtHeight[k] };
   }
 
   /** Sets the district style of cells and restyles the growables standing on them. */

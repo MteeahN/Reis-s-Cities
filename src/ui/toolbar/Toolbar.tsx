@@ -201,6 +201,7 @@ function ZonePicker() {
       </div>
       <div className="divider vertical" />
       <StylePicker />
+      {zt.zone !== 0 && <DistrictRulesPicker />}
       <div className="stepper" title={zt.mode === 'fill' ? 'Parsel derinliği (hücre)' : 'Fırça boyutu'}>
         <span className="stepper-label">{zt.mode === 'fill' ? 'Derinlik' : 'Fırça'}</span>
         <div className="stepper-row">
@@ -208,6 +209,48 @@ function ZonePicker() {
           <strong data-testid="zone-size">{zt.mode === 'fill' ? `${zt.depth} hücre` : `${zt.brush * 2 - 1}×${zt.brush * 2 - 1}`}</strong>
           <button onClick={() => set(zt.mode === 'fill' ? { depth: Math.min(4, zt.depth + 1) } : { brush: Math.min(3, zt.brush + 1) })} aria-label="Artır">+</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const WEALTH_OPTIONS = [
+  { v: 0, name: 'Karışık', tip: 'Her gelir düzeyinden evler' },
+  { v: 1, name: 'Mütevazı', tip: 'Sıra evler, lojmanlar, toplu konut: çok sakin, küçük daireler' },
+  { v: 2, name: 'Orta', tip: 'Apartmanlar, avlulu bloklar, kent evleri' },
+  { v: 3, name: 'Varlıklı', tip: 'Villalar, konaklar, rezidanslar: az sakin, arazi değerini yükseltir' },
+] as const;
+const HEIGHT_OPTIONS = [
+  { v: 0, name: 'Sınırsız', tip: 'Kuleler dahil her yükseklik' },
+  { v: 1, name: 'Alçak', tip: 'En çok 3 kat: binalar bu sınırı aşan seviyeye yükselemez' },
+  { v: 2, name: 'Orta', tip: 'En çok 7 kat' },
+] as const;
+
+/** What the zone asks of the buildings growing in it: who they are for and how tall they may get. */
+function DistrictRulesPicker() {
+  const zt = useGameStore((s) => s.zoneTool);
+  const set = (patch: Partial<ZoneToolState>) => getGame()?.setZoneTool(patch);
+  return (
+    <div className="style-picker" data-testid="district-rules">
+      {zt.zone === 1 && (
+        <>
+          <span className="stepper-label">Refah</span>
+          <div className="style-row" role="group" aria-label="Refah">
+            {WEALTH_OPTIONS.map((o) => (
+              <button key={o.v} className={`style-btn ${zt.wealth === o.v ? 'active' : ''}`} onClick={() => set({ wealth: o.v })} title={o.tip} data-testid={`wealth-${o.v}`}>
+                {o.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <span className="stepper-label">Kat sınırı</span>
+      <div className="style-row" role="group" aria-label="Kat sınırı">
+        {HEIGHT_OPTIONS.map((o) => (
+          <button key={o.v} className={`style-btn ${zt.height === o.v ? 'active' : ''}`} onClick={() => set({ height: o.v })} title={o.tip} data-testid={`height-${o.v}`}>
+            {o.name}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -328,6 +371,7 @@ const BUILD_TABS = [
   { id: 'res', name: 'Konut', zone: 1 },
   { id: 'com', name: 'Ticaret', zone: 2 },
   { id: 'ind', name: 'Sanayi', zone: 3 },
+  { id: 'off', name: 'Ofis', zone: 4 },
 ] as const;
 
 function BuildingPicker() {

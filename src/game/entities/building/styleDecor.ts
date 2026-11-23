@@ -144,9 +144,81 @@ export function styledHouseRoof(p: Parts, arch: ArchStyle, b: Block, s: Procedur
       eaveHip(p, cx, cz, bw, bd, y, 2.0, s.roof, 0.9);
       box(p, [0.6, 1.6, 0.6], [cx + bw * 0.3, y + 1.0, cz - bd * 0.1], '#efe3c8');
       break;
+    case 'nordic': {
+      // Steep, eaveless gable; some are turf roofs.
+      const turf = v % 3 === 1;
+      p.push({ shape: 'gable', size: [bw + 0.2, 4.0, bd + 0.2], pos: [cx, y, cz], color: turf ? '#5e7f3f' : s.roof });
+      box(p, [0.6, 1.8, 0.6], [cx + bw * 0.25, y + 2.2, cz], '#f2f0ea');
+      break;
+    }
+    case 'arabic':
+      flatParapet(p, cx, cz, bw, bd, y, s.wall, true);
+      if (v % 2 === 0) windTower(p, cx - bw * 0.25, cz - bd * 0.2, y + 0.6, s.wall);
+      break;
+    case 'slavic':
+      p.push({ shape: 'hip', size: [bw + 0.8, 2.8, bd + 0.8], pos: [cx, y, cz], color: s.roof });
+      box(p, [bw * 0.35, 0.15, 0.15], [cx, y + 2.75, cz], s.accent);
+      break;
+    case 'american': {
+      // Side-gabled roof with a front porch roof.
+      p.push({ shape: 'gable', size: [bw + 0.6, 2.4, bd + 0.6], pos: [cx, y, cz], color: s.roof });
+      box(p, [0.7, 2.2, 0.7], [cx - bw * 0.35, y + 0.8, cz - bd * 0.2], '#8a4a36');
+      break;
+    }
+    case 'medieval':
+      p.push({ shape: 'gable', size: [bw + 0.5, 4.6, bd + 0.5], pos: [cx, y, cz], color: s.roof });
+      box(p, [0.8, 3.0, 0.8], [cx - bw * 0.3, y + 1.0, cz], '#8a8070');
+      break;
+    case 'futuristic':
+      p.push({ shape: 'dome', size: [Math.min(bw, bd) * 0.9, 1.6, Math.min(bw, bd) * 0.9], pos: [cx, y, cz], color: s.wall, segments: 14 });
+      box(p, [bw + 0.1, 0.18, bd + 0.1], [cx, y, cz], s.accent);
+      break;
     default:
       break;
   }
+}
+
+/** Flat roof with a parapet (crenellated: Arabic houses and fortifications). */
+function flatParapet(p: Parts, cx: number, cz: number, w: number, d: number, y: number, wall: string, crenels: boolean): void {
+  box(p, [w + 0.2, 0.6, d + 0.2], [cx, y, cz], wall);
+  if (!crenels) return;
+  const n = Math.max(3, Math.floor(w / 1.2));
+  for (let k = 0; k < n; k += 2) {
+    const x = cx - w / 2 + (w * (k + 0.5)) / n;
+    for (const sz of [-1, 1]) box(p, [w / n, 0.5, 0.3], [x, y + 0.6, cz + (sz * d) / 2], wall);
+  }
+}
+
+/** Wind catcher tower (badgir) with slotted openings. */
+function windTower(p: Parts, x: number, z: number, y: number, wall: string): void {
+  box(p, [1.4, 2.6, 1.4], [x, y, z], wall);
+  for (const sx of [-1, 1]) box(p, [0.06, 1.2, 0.9], [x + sx * 0.71, y + 1.2, z], DARK);
+  box(p, [1.6, 0.25, 1.6], [x, y + 2.6, z], wall);
+}
+
+/** Onion dome on a drum, with a gilded spire. */
+function onionDome(p: Parts, x: number, z: number, y: number, d: number, color: string): void {
+  cyl(p, d * 0.7, d * 0.5, [x, y, z], '#f2f0ea', 12);
+  p.push({ shape: 'dome', size: [d, d * 0.7, d], pos: [x, y + d * 0.5, z], color, segments: 12 });
+  p.push({ shape: 'cone', size: [d * 0.62, d * 0.8, d * 0.62], pos: [x, y + d * 1.1, z], color, segments: 12 });
+  cyl(p, 0.1, d * 0.7, [x, y + d * 1.85, z], '#d4b04a', 5);
+}
+
+/** Half-timbering on the street front: posts, a rail per floor and braces. */
+function halfTimber(p: Parts, b: Block, color: string, fromY: number): void {
+  const front = b.cz + b.bd / 2 + 0.04;
+  const posts = Math.max(2, Math.floor(b.bw / 1.8));
+  for (let k = 0; k <= posts; k++) box(p, [0.18, b.h - fromY, 0.06], [b.cx - b.bw / 2 + (b.bw * k) / posts, fromY, front], color);
+  for (let f = Math.ceil(fromY / b.floorH); f <= b.floors; f++) box(p, [b.bw, 0.18, 0.06], [b.cx, Math.min(b.h - 0.2, f * b.floorH), front], color);
+  for (let k = 0; k < posts; k += 2) {
+    const x = b.cx - b.bw / 2 + (b.bw * (k + 0.5)) / posts;
+    box(p, [0.14, Math.min(2.2, b.floorH * 0.8), 0.06], [x, fromY + 0.3, front], color, { rot: [0, 0, 35] });
+  }
+}
+
+/** Light strips around a volume (futuristic). */
+function glowBands(p: Parts, b: Block, color: string): void {
+  for (let f = 1; f < Math.min(b.floors, 16); f += 2) box(p, [b.bw + 0.12, 0.12, b.bd + 0.12], [b.cx, f * b.floorH + 0.1, b.cz], color);
 }
 
 /** Style details around a generated building's main volume (facades, roofs, signs, greenery). */
@@ -267,6 +339,138 @@ export function decorate(p: Parts, arch: ArchStyle, b: Block, s: ProceduralSpec,
       }
       if (b.h > 3.5) for (let k = 0; k <= Math.floor(b.bw / 2.2); k++) box(p, [0.12, b.h - 3, 0.05], [b.cx - b.bw / 2 + k * 2.2, 3.1, front + 0.03], s.accent);
       box(p, [b.bw + 0.1, 3, 0.05], [b.cx, 0.1, front + 0.02], '#cfc3a8');
+      break;
+    }
+    case 'nordic': {
+      // White corner boards and window trims; turf or a steep gable on low blocks.
+      for (const sx of [-1, 1]) box(p, [0.3, b.h, 0.3], [b.cx + (sx * b.bw) / 2, 0.1, front - 0.1], '#f2f0ea');
+      if (industrial) break;
+      const bays = Math.max(1, Math.floor(b.bw / 3));
+      for (let f = 0; f < Math.min(b.floors, 8); f++) {
+        for (let k = 0; k < bays; k++) {
+          const x = b.cx - b.bw / 2 + (b.bw * (k + 0.5)) / bays;
+          box(p, [1.4, 0.12, 0.1], [x, f * b.floorH + b.floorH * 0.25 + 0.1, front + 0.05], '#f2f0ea');
+          box(p, [1.4, 0.12, 0.1], [x, f * b.floorH + b.floorH * 0.8 + 0.1, front + 0.05], '#f2f0ea');
+        }
+      }
+      if (b.kind !== 'house') {
+        if (b.h < 14) p.push({ shape: 'gable', size: [Math.min(b.bw, 14) + 0.2, 3.4, b.bd + 0.2], pos: [b.cx, b.top, b.cz], color: s.roof });
+        else box(p, [b.bw * 0.9, 0.4, b.bd * 0.9], [b.cx, b.top, b.cz], '#5e7f3f');
+        // Glazed timber balconies.
+        for (let f = 1; f < Math.min(b.floors, 6); f++) box(p, [Math.min(3, b.bw * 0.35), 1.0, 0.8], [b.cx + (f % 2 ? 1 : -1) * b.bw * 0.22, f * b.floorH + 0.15, front + 0.4], '#c9a37a');
+      }
+      break;
+    }
+    case 'arabic': {
+      if (b.kind !== 'house') flatParapet(p, b.cx, b.cz, b.bw, b.bd, b.top, s.wall, true);
+      if (industrial) break;
+      // Mashrabiya: wooden lattice bays on the upper floors.
+      if (b.floors >= 2) {
+        const bays = b.bw > 9 ? [-b.bw * 0.25, b.bw * 0.25] : [0];
+        for (let f = 1; f < Math.min(b.floors, 6); f++) {
+          for (const x of bays) {
+            box(p, [Math.min(2.4, b.bw * 0.35), b.floorH * 0.7, 0.7], [b.cx + x, f * b.floorH + 0.4, front + 0.35], s.accent);
+            for (let k = 0; k < 4; k++) box(p, [Math.min(2.4, b.bw * 0.35) + 0.04, 0.05, 0.05], [b.cx + x, f * b.floorH + 0.6 + k * b.floorH * 0.15, front + 0.72], '#3a2a1a');
+          }
+        }
+      }
+      // Pointed-arch entrance, wind tower on low roofs, a dome on bazaars.
+      box(p, [1.8, 2.6, 0.08], [b.cx, 0.1, front + 0.04], DARK);
+      p.push({ shape: 'pyramid', size: [1.8, 0.9, 0.12], pos: [b.cx, 2.7, front + 0.04], color: DARK });
+      if (b.kind === 'mall' || (b.kind === 'shop' && b.bw > 10)) {
+        cyl(p, 4, 0.8, [b.cx, b.top + 0.6, b.cz], s.wall, 14);
+        p.push({ shape: 'dome', size: [4, 2.4, 4], pos: [b.cx, b.top + 1.4, b.cz], color: '#1f6f78', segments: 14 });
+      } else if (b.kind !== 'house' && b.h < 16 && v % 2 === 0) windTower(p, b.cx + b.bw * 0.3, b.cz - b.bd * 0.2, b.top + 0.6, s.wall);
+      break;
+    }
+    case 'slavic': {
+      if (industrial) break;
+      // Carved white window frames with a little pediment.
+      const bays = Math.max(1, Math.floor(b.bw / 3));
+      for (let f = 0; f < Math.min(b.floors, 8); f++) {
+        for (let k = 0; k < bays; k++) {
+          const x = b.cx - b.bw / 2 + (b.bw * (k + 0.5)) / bays;
+          const y = f * b.floorH + b.floorH * 0.25 + 0.1;
+          for (const sx of [-1, 1]) box(p, [0.18, b.floorH * 0.55, 0.08], [x + sx * 0.75, y, front + 0.04], s.accent);
+          p.push({ shape: 'gable', size: [1.8, 0.4, 0.12], pos: [x, y + b.floorH * 0.55, front + 0.05], color: s.accent });
+        }
+      }
+      if (b.kind !== 'house') {
+        p.push({ shape: 'hip', size: [b.bw + 0.6, 2.4, b.bd + 0.6], pos: [b.cx, b.top, b.cz], color: s.roof });
+        // Onion domes crown towers, malls and big blocks.
+        if (b.kind === 'tower' || b.kind === 'mall' || b.kind === 'office' || b.bw > 12) onionDome(p, b.cx, b.cz, b.top + 2.2, Math.min(3.2, b.bw * 0.3), v % 2 ? '#d4b04a' : s.roof);
+      }
+      break;
+    }
+    case 'american': {
+      if (industrial) {
+        // Painted brick sign along the top.
+        box(p, [b.bw * 0.7, 1.2, 0.06], [b.cx, b.h - 1.6, front + 0.04], '#e8e4da');
+        break;
+      }
+      if (b.kind === 'house') {
+        // Clapboard lines and a deep front porch with columns.
+        for (let y = 0.6; y < b.h - 0.2; y += 0.6) box(p, [b.bw + 0.06, 0.05, 0.05], [b.cx, y, front + 0.03], '#d8d4cc');
+        box(p, [b.bw * 0.9, 0.2, 1.4], [b.cx, 2.6, front + 0.7], s.roof);
+        for (const sx of [-0.4, 0, 0.4]) cyl(p, 0.2, 2.5, [b.cx + sx * b.bw, 0.1, front + 1.3], '#f2f0ea', 6);
+        box(p, [b.bw * 0.9, 0.3, 1.4], [b.cx, 0.1, front + 0.7], '#a89f92');
+        break;
+      }
+      // Stoop, cornice, fire escapes, a water tower or a billboard on the roof.
+      box(p, [b.bw + 0.4, 0.5, b.bd + 0.4], [b.cx, b.h - 0.3, b.cz], s.accent);
+      box(p, [2.2, 1.2, 1.4], [b.cx, 0.1, front + 0.7], '#8a6a56');
+      if (b.floors >= 3) {
+        const x = b.cx + b.bw * 0.28;
+        for (let f = 1; f < Math.min(b.floors, 12); f++) {
+          box(p, [2.4, 0.1, 0.9], [x, f * b.floorH + 0.1, front + 0.45], IRON);
+          box(p, [2.4, 0.7, 0.04], [x, f * b.floorH + 0.2, front + 0.9], IRON);
+          box(p, [0.08, b.floorH, 0.9], [x - 0.9, f * b.floorH + 0.1, front + 0.45], IRON, { rot: [0, 0, 30] });
+        }
+      }
+      if (b.kind === 'shop' || b.kind === 'mall') {
+        box(p, [Math.min(6, b.bw * 0.6), 2.4, 0.2], [b.cx, b.top + 0.6, b.cz], '#f4f1ea');
+        box(p, [0.2, 0.7, 0.2], [b.cx, b.top, b.cz], IRON);
+      } else if (b.h < 40) {
+        const x = b.cx - b.bw * 0.25;
+        for (const sx of [-0.5, 0.5]) for (const sz of [-0.5, 0.5]) box(p, [0.12, 1.6, 0.12], [x + sx, b.top, b.cz + sz], IRON);
+        cyl(p, 1.8, 2.2, [x, b.top + 1.6, b.cz], '#7a5a3c', 10);
+        p.push({ shape: 'cone', size: [2, 0.8, 2], pos: [x, b.top + 3.8, b.cz], color: '#4a4f55', segments: 10 });
+      }
+      break;
+    }
+    case 'medieval': {
+      if (industrial) {
+        box(p, [b.bw * 0.4, 0.6, 0.06], [b.cx, b.h * 0.6, front + 0.04], '#3a2a20');
+        break;
+      }
+      // Stone ground floor, timber framing above, jettied first floor.
+      box(p, [b.bw + 0.12, Math.min(3, b.h), 0.08], [b.cx, 0.1, front + 0.02], '#a89f92');
+      if (b.h > 3.4) {
+        halfTimber(p, b, s.accent, 3);
+        box(p, [b.bw + 0.3, 0.35, 0.6], [b.cx, 3.0, front + 0.25], s.accent);
+      }
+      if (b.kind !== 'house') {
+        p.push({ shape: 'gable', size: [Math.min(b.bw, 14) + 0.4, Math.min(6, 2.5 + b.bd * 0.3), b.bd + 0.4], pos: [b.cx, b.top, b.cz], color: s.roof });
+        if (b.bw > 10 || b.kind === 'tower') {
+          // Corner turret with a conical roof.
+          const tx = b.cx + b.bw / 2 - 1.2;
+          cyl(p, 2.2, 3, [tx, b.top, front - 1.2], '#a89f92', 12);
+          p.push({ shape: 'cone', size: [2.6, 3, 2.6], pos: [tx, b.top + 3, front - 1.2], color: s.roof, segments: 12 });
+        }
+      }
+      break;
+    }
+    case 'futuristic': {
+      glowBands(p, b, s.accent);
+      if (industrial) break;
+      if (b.kind !== 'house') {
+        p.push({ shape: 'dome', size: [Math.min(b.bw, b.bd) * 0.8, 2.2, Math.min(b.bw, b.bd) * 0.8], pos: [b.cx, b.top, b.cz], color: '#bfe8f0', segments: 16 });
+        // A ring around the crown and slanted solar fins.
+        cyl(p, Math.min(b.bw, b.bd) * 0.95, 0.25, [b.cx, b.top + 0.4, b.cz], s.accent, 18);
+        for (const sx of [-1, 1]) box(p, [0.15, 3, Math.min(4, b.bd * 0.5)], [b.cx + sx * b.bw * 0.42, b.top, b.cz], '#24344d', { rot: [0, 0, sx * 20] });
+      }
+      // Rounded glass canopy at the entrance.
+      p.push({ shape: 'dome', size: [3, 1.2, 1.6], pos: [b.cx, 2.6, front + 0.3], color: '#bfe8f0', segments: 12 });
       break;
     }
     default:

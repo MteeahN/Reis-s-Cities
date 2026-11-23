@@ -12,6 +12,11 @@ export interface DemandInputs {
   totalJobs: number;
   commercialUnlocked: boolean;
   industrialUnlocked: boolean;
+  /** Jobs in office buildings. */
+  officeJobs?: number;
+  /** Working-age residents with at least a high-school education. */
+  educatedLabor?: number;
+  officeUnlocked?: boolean;
   /** Tax rate minus the neutral rate, per zone (positive = taxed above neutral). */
   taxPressure?: { residential: number; commercial: number; industrial: number };
 }
@@ -20,11 +25,14 @@ export interface Demand {
   residential: number;
   commercial: number;
   industrial: number;
+  office: number;
 }
 
 /** Commercial jobs a healthy city needs per resident, and industrial jobs per worker. */
 export const COMMERCIAL_JOBS_PER_RESIDENT = 0.12;
 export const INDUSTRIAL_JOBS_PER_WORKER = 0.3;
+/** Office jobs a city needs per educated worker. */
+export const OFFICE_JOBS_PER_EDUCATED = 0.3;
 
 /**
  * Target RCI demand (0–100). Residents come when there are jobs and few
@@ -55,7 +63,14 @@ export function targetDemand(d: DemandInputs): Demand {
     ? clamp(50 + (100 * (targetI - d.industrialJobs)) / Math.max(20, targetI) - tp.industrial * TAX.demandPerPoint.industrial, 0, 100)
     : 0;
 
-  return { residential, commercial, industrial };
+  // Offices follow the educated labour force (they pay business tax at the commercial rate).
+  const targetO = (d.educatedLabor ?? 0) * OFFICE_JOBS_PER_EDUCATED;
+  const officeJobs = d.officeJobs ?? 0;
+  const office = d.officeUnlocked
+    ? clamp(50 + (100 * (targetO - officeJobs)) / Math.max(15, targetO) - tp.commercial * TAX.demandPerPoint.commercial, 0, 100)
+    : 0;
+
+  return { residential, commercial, industrial, office };
 }
 
 /** Exponential smoothing toward the target so demand bars move gradually. */
@@ -64,5 +79,6 @@ export function smoothDemand(current: Demand, target: Demand, k = 0.15): Demand 
     residential: current.residential + (target.residential - current.residential) * k,
     commercial: current.commercial + (target.commercial - current.commercial) * k,
     industrial: current.industrial + (target.industrial - current.industrial) * k,
+    office: (current.office ?? 0) + (target.office - (current.office ?? 0)) * k,
   };
 }

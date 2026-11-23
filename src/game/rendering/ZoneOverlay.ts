@@ -55,7 +55,7 @@ export class ZoneOverlay {
     const d = this.data;
     for (let k = 0; k < N * N; k++) {
       const o = k * 4;
-      d[o] = zones.zone[k] * 80;
+      d[o] = zones.zone[k] * 60;
       d[o + 1] = zones.zoneable[k] > 0 && occupancy.road[k] === 0 ? 255 : 0;
       d[o + 2] = occupancy.building[k] !== 0 ? 255 : 0;
     }

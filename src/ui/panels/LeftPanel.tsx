@@ -201,10 +201,10 @@ function PeopleTab() {
       <Row k="Taşınan / ayrılan" v={`+${Math.round(p.yesterday.moveIns)} / −${Math.round(p.yesterday.moveOuts)}`} />
       <Row k="Doğum / ölüm" v={`${Math.round(p.yesterday.births)} / ${Math.round(p.yesterday.deaths)}`} />
       <div className="section-title">Binalar</div>
-      <Row k="Konut / Ticaret / Sanayi" v={`${p.buildingsByZone.residential} / ${p.buildingsByZone.commercial} / ${p.buildingsByZone.industrial}`} />
+      <Row k="Konut / Ticaret / Sanayi / Ofis" v={`${p.buildingsByZone.residential} / ${p.buildingsByZone.commercial} / ${p.buildingsByZone.industrial} / ${p.buildingsByZone.office ?? 0}`} />
       <Row k="İnşaat hâlinde" v={formatNumber(p.underConstruction)} />
       {p.abandoned > 0 && <Row k="Terk edilmiş" v={formatNumber(p.abandoned)} />}
-      <Row k="Talep K / T / S" v={`${Math.round(demand.residential)} / ${Math.round(demand.commercial)} / ${Math.round(demand.industrial)}`} />
+      <Row k="Talep K / T / S / O" v={`${Math.round(demand.residential)} / ${Math.round(demand.commercial)} / ${Math.round(demand.industrial)} / ${Math.round(demand.office ?? 0)}`} />
     </div>
   );
 }

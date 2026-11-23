@@ -2,6 +2,7 @@ import { APP_VERSION, GRID_CELLS, TILES_PER_SIDE, type GameSpeed } from '../core
 import { ALL_BUILDINGS } from '../data/buildings';
 import { ROAD_TYPES } from '../data/roads';
 import { ARCH_STYLES } from '../data/styles';
+import { HEIGHT_LIMITS } from '../data/buildings';
 import { ZoneType } from '../data/zones';
 import type { PlacedBuilding } from '../entities/building/BuildingRegistry';
 import type { RoadGraphData } from '../entities/road/RoadGraph';
@@ -34,6 +35,10 @@ export interface CityState {
   sandbox?: boolean;
   /** District architecture per cell, run-length encoded [style, count, …]; absent = all modern. */
   styles?: number[];
+  /** District wealth per cell, run-length encoded; absent = mixed. */
+  wealth?: number[];
+  /** District height limit per cell, run-length encoded; absent = none. */
+  heights?: number[];
   roads: RoadGraphData;
   buildings: { nextId: number; items: SavedBuilding[] };
   /** Run-length encoded zone per cell: [value, count, …]. */
@@ -115,6 +120,8 @@ export function serializeCity(city: City, sim: CitySimulation): CityState {
     unlockTiles: [...city.world.unlock.tiles],
     sandbox: city.sandbox,
     styles: rle(city.districtStyle),
+    wealth: rle(city.districtWealth),
+    heights: rle(city.districtHeight),
   };
 }
 
@@ -137,6 +144,9 @@ export function restoreCity(city: City, sim: CitySimulation, s: CityState, tick:
   city.treasury.restore(s.treasury.balance, s.treasury.spent, s.treasury.refunded);
   if (s.sandbox === true) city.enableSandbox();
   if (Array.isArray(s.styles)) unrle(s.styles, city.districtStyle, ARCH_STYLES.length);
+  if (Array.isArray(s.wealth)) unrle(s.wealth, city.districtWealth, 4);
+  if (Array.isArray(s.heights)) unrle(s.heights, city.districtHeight, HEIGHT_LIMITS.length);
+  city.migrateGrowableZones();
   city.economy.restore(s.economy);
   city.population.restore(s.population, (id) => city.buildings.items.get(id)?.zone === ZoneType.Residential);
   sim.restore(s.simulation, tick, gameMinutes);

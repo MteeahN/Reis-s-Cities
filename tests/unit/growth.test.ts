@@ -124,7 +124,7 @@ describe('Demand', () => {
   });
 
   it('smooths toward the target', () => {
-    const s = smoothDemand({ residential: 0, commercial: 0, industrial: 0 }, { residential: 100, commercial: 50, industrial: 0 }, 0.5);
+    const s = smoothDemand({ residential: 0, commercial: 0, industrial: 0, office: 0 }, { residential: 100, commercial: 50, industrial: 0, office: 0 }, 0.5);
     expect(s.residential).toBe(50);
   });
 });

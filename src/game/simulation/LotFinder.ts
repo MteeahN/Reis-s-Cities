@@ -1,5 +1,5 @@
 import { GRID_CELLS } from '../core/config';
-import { zonedTemplates, type BuildingDef } from '../data/buildings';
+import { zonedTemplates, type BuildingDef, type DistrictRules } from '../data/buildings';
 import type { ZoneKind } from '../data/zones';
 import { footprintSize, type Rotation } from '../entities/building/BuildingPlacement';
 
@@ -10,6 +10,8 @@ export interface LotWorld {
   /** Dry, not too steep, owned. */
   isBuildable(i: number, j: number): boolean;
   vertexHeight(i: number, j: number): number;
+  /** District rules (wealth, height limit) at a cell; absent = none. */
+  rulesAt?(i: number, j: number): DistrictRules;
 }
 
 export interface Lot {
@@ -92,7 +94,7 @@ export function findLot(ci: number, cj: number, zone: ZoneKind, level: number, r
   if (world.zoneAt(ci, cj) !== zone) return null;
   const facings = roadFacings(ci, cj, world);
   if (facings.length === 0) return null;
-  const templates = shuffled(zonedTemplates(zone, level), rand).sort((a, b) => {
+  const templates = shuffled(zonedTemplates(zone, level, undefined, world.rulesAt?.(ci, cj)), rand).sort((a, b) => {
     // Mostly prefer bigger lots, with some randomness for variety.
     const area = (d: BuildingDef) => d.footprint[0] * d.footprint[1];
     return area(b) - area(a) + (rand() - 0.5) * 2.5;

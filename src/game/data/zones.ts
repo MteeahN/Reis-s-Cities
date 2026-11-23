@@ -1,11 +1,11 @@
 /** Zone catalogue (data-driven). Zone ids are stored per cell as small integers. */
-export const ZoneType = { None: 0, Residential: 1, Commercial: 2, Industrial: 3 } as const;
+export const ZoneType = { None: 0, Residential: 1, Commercial: 2, Industrial: 3, Office: 4 } as const;
 export type ZoneType = (typeof ZoneType)[keyof typeof ZoneType];
 export type ZoneKind = Exclude<ZoneType, 0>;
 
 export interface ZoneDef {
   type: ZoneKind;
-  id: 'residential' | 'commercial' | 'industrial';
+  id: 'residential' | 'commercial' | 'industrial' | 'office';
   name: string;
   short: string;
   description: string;
@@ -42,7 +42,19 @@ export const ZONES: readonly ZoneDef[] = [
     color: 0xfacc15,
     unlockPopulation: 250,
   },
+  {
+    type: ZoneType.Office,
+    id: 'office',
+    name: 'Ofis',
+    short: 'O',
+    description: 'Bürolar ve iş kuleleri. Eğitimli çalışanlara iş verir, kirlilik üretmez.',
+    color: 0xa78bfa,
+    unlockPopulation: 500,
+  },
 ];
+
+/** Zone ids run 1..ZONE_COUNT. */
+export const ZONE_COUNT = 4;
 
 export const getZone = (t: ZoneKind): ZoneDef => ZONES.find((z) => z.type === t)!;
 

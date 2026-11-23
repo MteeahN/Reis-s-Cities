@@ -1,9 +1,9 @@
 import { CELL_SIZE } from '../../core/config';
 import type { BuildingPart } from '../../data/buildings';
-import type { ArchStyle } from '../../data/styles';
+import { ARCH_STYLE_DEFS, type ArchStyle } from '../../data/styles';
 import { decorate, restyleSpec, styledHouseRoof, type Block } from './styleDecor';
 
-export type ProceduralStyle = 'house' | 'apartment' | 'tower' | 'shop' | 'office' | 'mall' | 'warehouse' | 'factory';
+export type ProceduralStyle = 'house' | 'rowhouse' | 'courtyard' | 'apartment' | 'tower' | 'shop' | 'office' | 'mall' | 'warehouse' | 'factory';
 
 /** Compact, data-file friendly description of a zoned building's look. */
 export interface ProceduralSpec {
@@ -33,6 +33,7 @@ const PATH = '#c9c1b0';
 const ASPHALT = '#55585c';
 const SOLAR = '#24344d';
 const TRUNK = '#5a4330';
+const IRON_RAIL = '#2b2e31';
 const CAR_COLORS = ['#c8ccd0', '#2b2f36', '#a83232', '#2f5d9b', '#e8e6e0', '#6b6f45', '#8c8f94', '#b8862f'];
 const CONTAINER_COLORS = ['#b5472f', '#2f6db5', '#3d8a4d', '#c79a2a', '#7a7f86', '#8a4f9e'];
 
@@ -375,6 +376,83 @@ export function proceduralParts(spec: ProceduralSpec, arch: ArchStyle = 'modern'
       block = { kind: 'office', cx: 0, cz, bw: v % 2 === 0 ? bw * 0.75 : bw, bd: v % 2 === 0 ? bd * 0.75 : bd, h, top: v % 2 === 0 ? h * 1.25 + 0.9 : h + 1.3, floors: s.floors, floorH: 3.4 };
       break;
     }
+    case 'rowhouse': {
+      // Terraced houses: narrow attached units, each with its own colour, door and roof.
+      const units = Math.max(2, Math.floor((W - 1) / 5.2));
+      const uw = (W - 1) / units;
+      const bd = Math.min(D - 4, 9);
+      const h = s.floors * 3;
+      const cz = front - 2.6 - bd / 2;
+      const walls = arch === 'modern' ? PALETTES.house.wall : ARCH_STYLE_DEFS[arch].walls;
+      for (let u = 0; u < units; u++) {
+        const ux = -W / 2 + 0.5 + uw * (u + 0.5);
+        const wall = u === 0 ? s.wall : walls[Math.floor(hash(v + u * 17, 90) * walls.length)];
+        const tall = h + (u % 2 === 1 && v % 2 === 0 ? 0.6 : 0);
+        parts.push({ shape: 'box', size: [uw - 0.05, tall, bd], pos: [ux, 0.1, cz], color: wall, facade: true });
+        box(parts, [uw, 0.4, bd + 0.1], [ux, 0.1, cz], s.accent);
+        const ublock: Block = { kind: 'house', cx: ux, cz, bw: uw - 0.05, bd, h: tall, top: tall + 0.1, floors: s.floors, floorH: 3 };
+        if (arch !== 'modern') styledHouseRoof(parts, arch, ublock, s, v + u);
+        else if (v % 3 === 2) box(parts, [uw, 0.5, bd + 0.2], [ux, tall + 0.1, cz], '#e6e3dc');
+        else parts.push({ shape: 'gable', size: [uw + 0.02, 2.2, bd + 0.6], pos: [ux, tall + 0.1, cz], color: s.roof });
+        // Door with a step, a bay window on alternate units, a small front garden.
+        const dx = ux + uw * 0.25 * (u % 2 ? 1 : -1);
+        box(parts, [1.0, 2.1, 0.2], [dx, 0.1, cz + bd / 2 + 0.05], DOOR);
+        box(parts, [1.4, 0.25, 0.8], [dx, 0.1, cz + bd / 2 + 0.4], CONCRETE);
+        if (u % 2 === 0 && s.floors >= 2) box(parts, [1.6, 2.4, 0.7], [ux - uw * 0.2 * (u % 2 ? 1 : -1), 0.5, cz + bd / 2 + 0.35], wall);
+        box(parts, [uw - 1.6, 0.5, 1.4], [ux - (dx - ux) * 0.6, 0.1, front - 1.1], GREEN);
+        if (arch === 'modern' && v % 3 !== 2) box(parts, [0.6, 1.4, 0.6], [ux + uw * 0.35, tall + 1.2, cz - bd * 0.15], '#7d6b5d');
+      }
+      frontFence(parts, W, front, 0, 0.1, v % 2 ? '#e8e4dc' : IRON_RAIL, 0.9);
+      if (D > 12) for (let u = 0; u < units; u += 2) tree(parts, -W / 2 + 0.5 + uw * (u + 0.5), -D / 2 + 2.2, 0.9);
+      block = { kind: 'house', cx: 0, cz, bw: W - 1, bd, h, top: h + 0.1, floors: s.floors, floorH: 3 };
+      break;
+    }
+    case 'courtyard': {
+      // Perimeter block: four wings around a green inner court, entered through an archway.
+      const bw = W - 1.6;
+      const bd = D - 2.4;
+      const wd = Math.min(5, bw * 0.3);
+      const fh = 3.2;
+      const h = s.floors * fh;
+      const cz = front - 1.6 - bd / 2;
+      const gate = 3.2;
+      const fz = cz + bd / 2 - wd / 2;
+      // Front wing in two halves with the gate between, a lintel above it.
+      const half = (bw - gate) / 2;
+      for (const sx of [-1, 1]) parts.push({ shape: 'box', size: [half, h, wd], pos: [sx * (gate / 2 + half / 2), 0.1, fz], color: s.wall, facade: true });
+      parts.push({ shape: 'box', size: [gate, h - 4.2, wd], pos: [0, 4.3, fz], color: s.wall, facade: true });
+      box(parts, [gate + 0.4, 0.5, 0.3], [0, 4.0, cz + bd / 2 + 0.1], s.accent);
+      // Back and side wings.
+      parts.push({ shape: 'box', size: [bw, h, wd], pos: [0, 0.1, cz - bd / 2 + wd / 2], color: s.wall, facade: true });
+      for (const sx of [-1, 1]) parts.push({ shape: 'box', size: [wd, h, bd - wd * 2], pos: [sx * (bw / 2 - wd / 2), 0.1, cz], color: s.wall, facade: true });
+      // Plinth and cornice all round.
+      box(parts, [bw + 0.15, 0.7, 0.2], [0, 0.1, cz + bd / 2 + 0.02], s.accent);
+      const roofY = h + 0.1;
+      if (arch === 'modern') {
+        for (const [w, d, x, z] of [
+          [bw + 0.3, wd + 0.3, 0, fz],
+          [bw + 0.3, wd + 0.3, 0, cz - bd / 2 + wd / 2],
+          [wd + 0.3, bd - wd * 2, -(bw / 2 - wd / 2), cz],
+          [wd + 0.3, bd - wd * 2, bw / 2 - wd / 2, cz],
+        ] as const) box(parts, [w, 0.6, d], [x, roofY, z], s.accent);
+        rooftopUnits(parts, 2, roofY + 0.6, 0, cz - bd / 2 + wd / 2, bw * 0.6, 1, v);
+      } else {
+        // Pitched roofs on every wing (ridge along the wing).
+        parts.push({ shape: 'gable', size: [bw + 0.4, 2.4, wd + 0.8], pos: [0, roofY, fz], color: s.roof });
+        parts.push({ shape: 'gable', size: [bw + 0.4, 2.4, wd + 0.8], pos: [0, roofY, cz - bd / 2 + wd / 2], color: s.roof });
+        for (const sx of [-1, 1]) parts.push({ shape: 'gable', size: [bd - wd * 2, 2.4, wd + 0.8], pos: [sx * (bw / 2 - wd / 2), roofY, cz], color: s.roof, rot: [0, 90, 0] });
+      }
+      // Inner court: lawn, a tree, benches, a play area on some variants.
+      box(parts, [bw - wd * 2 - 0.4, 0.06, bd - wd * 2 - 0.4], [0, 0.12, cz], '#7aa85a');
+      tree(parts, 0, cz - 0.5, 1.1);
+      if (v % 2 === 0) box(parts, [2.2, 0.3, 2.2], [-(bw / 2 - wd) + 1.6, 0.14, cz + 1.5], '#d9c38a');
+      for (const sx of [-1, 1]) box(parts, [1.4, 0.45, 0.45], [sx * 1.8, 0.14, cz + 1.8], '#7a5a3c');
+      // Street trees in front.
+      tree(parts, -W / 2 + 1, front - 0.6, 0.7);
+      tree(parts, W / 2 - 1, front - 0.6, 0.7);
+      block = { kind: 'house', cx: 0, cz: fz, bw, bd: wd, h, top: h + 0.1, floors: s.floors, floorH: fh };
+      break;
+    }
     case 'mall': {
       const bw = W - 1.4;
       const bd = D - 4;
@@ -492,6 +570,16 @@ const PALETTES: Record<ProceduralStyle, { wall: string[]; roof: string[]; accent
     wall: ['#efe3cf', '#e5d2bd', '#dbe5ea', '#f2eee6', '#e7cec3', '#d9d0b8', '#cfdcc8', '#e9dcc6', '#c9c3bb', '#f0d9b8'],
     roof: ['#9c4a3a', '#6b4f3f', '#5c6b7a', '#8a5a44', '#7a3b30', '#4f5a60', '#3f4448', '#a05a3c'],
     accent: ['#a89f92', '#9a8f80', '#b0a493', '#8c7b6b', '#c2b8a8'],
+  },
+  rowhouse: {
+    wall: ['#e3b49a', '#efe3c4', '#d9b38c', '#c98a6a', '#e8d8c8', '#b9704f', '#efe9dc'],
+    roof: ['#6b4f3f', '#5c6b7a', '#8a5a44', '#3f4448', '#9c4a3a'],
+    accent: ['#efe9dc', '#a89f92', '#8c7b6b'],
+  },
+  courtyard: {
+    wall: ['#e8d8c8', '#d8c3a8', '#c98a6a', '#e3e0d8', '#cfd6cf', '#b9704f'],
+    roof: ['#6b4f3f', '#5c6b7a', '#3f4448', '#8a5a44'],
+    accent: ['#b3aa9c', '#9c8574', '#7d8a7a', '#efe9dc'],
   },
   apartment: {
     wall: ['#efe3cf', '#e5d2bd', '#dbe5ea', '#f2eee6', '#e7cec3', '#cfd6cf', '#d8c3a8', '#c9cfd6', '#e8d8c8'],

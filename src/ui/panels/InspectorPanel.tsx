@@ -103,6 +103,8 @@ function GrowableDetails({ b }: { b: BuildingInfo }) {
       <KV k={home ? 'Sakinler' : 'Çalışanlar'} v={`${b.occupants} / ${b.capacity}`} testId="building-occupants" />
       <KV k="Kategori" v={b.category} />
       {b.styleName && <KV k="Stil" v={b.styleName} />}
+      {b.wealthName && <KV k="Refah" v={b.wealthName} />}
+      {b.heightLimit && <KV k="Kat sınırı" v={b.heightLimit} />}
       <KV k="Alan" v={`${b.w}×${b.d} hücre`} />
       <KV k="Arazi değeri" v={b.landValue} />
       {b.groundPollution > 0 && <KV k="Kirlilik (çevre)" v={b.groundPollution} cls="text-yellow" />}

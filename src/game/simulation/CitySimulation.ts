@@ -69,7 +69,7 @@ export interface PopulationStats {
   housingCapacity: number;
   vacantHomes: number;
   yesterday: { births: number; deaths: number; moveIns: number; moveOuts: number };
-  buildingsByZone: { residential: number; commercial: number; industrial: number };
+  buildingsByZone: { residential: number; commercial: number; industrial: number; office: number };
   underConstruction: number;
   abandoned: number;
   /** Workers by own education tier (uneducated / basic / higher). */
@@ -116,7 +116,7 @@ export interface SimCallbacks {
  *  - every 50 ticks: land value & pollution, levelling up, abandonment
  */
 export class CitySimulation {
-  demand: Demand = { residential: 70, commercial: 0, industrial: 0 };
+  demand: Demand = { residential: 70, commercial: 0, industrial: 0, office: 0 };
   /** Highest population reached — unlocks are never taken away. */
   maxPopulation = 0;
   private readonly rand: SeededRng;
@@ -205,6 +205,7 @@ export class CitySimulation {
       [ZoneType.Residential, this.demand.residential],
       [ZoneType.Commercial, this.demand.commercial],
       [ZoneType.Industrial, this.demand.industrial],
+      [ZoneType.Office, this.demand.office],
     ];
     for (const [zone, d] of zones) {
       if (d < 15 || !this.isZoneUnlocked(zone) || building >= maxBuilding) continue;
@@ -293,12 +294,14 @@ export class CitySimulation {
     const workplaces = this.workplaces();
     let commercialJobs = 0;
     let industrialJobs = 0;
+    let officeJobs = 0;
     const slots: WorkplaceJobs[] = [];
     for (const w of workplaces) {
       const def = getBuilding(w.defId);
       slots.push({ id: w.id, jobs: jobsByTier(def, w.level) });
       if (w.zone === ZoneType.Commercial) commercialJobs += def.workers;
       if (w.zone === ZoneType.Industrial) industrialJobs += def.workers;
+      if (w.zone === ZoneType.Office) officeJobs += def.workers;
     }
     const t0 = pop.totals();
     const eduTotal = t0.edu[0] + t0.edu[1] + t0.edu[2];
@@ -312,7 +315,7 @@ export class CitySimulation {
     for (const w of workplaces) {
       const def = getBuilding(w.defId);
       w.occupants = Math.round(wf.filled.get(w.id) ?? 0);
-      const sector = !w.zone ? 'civic' : w.zone === ZoneType.Industrial ? 'industrial' : def.category === 'office' ? 'office' : 'commercial';
+      const sector = !w.zone ? 'civic' : w.zone === ZoneType.Industrial ? 'industrial' : w.zone === ZoneType.Office || def.category === 'office' ? 'office' : 'commercial';
       bySector[sector] += w.occupants;
     }
     const unemploymentRate = labor > 0 ? (labor - employed) / labor : 0;
@@ -329,7 +332,12 @@ export class CitySimulation {
       if (!w.zone) continue;
       const def = getBuilding(w.defId);
       const lvl = Math.min(3, Math.max(1, w.level)) - 1;
-      if (w.zone === ZoneType.Commercial) {
+      if (w.zone === ZoneType.Office) {
+        // Offices sell services to the wider region: no local-customer factor.
+        const tax = (w.occupants * PROFIT_PER_WORKER.office[lvl] * eco.taxRates.commercial) / 100;
+        taxC += tax;
+        this.buildingTax.set(w.id, tax);
+      } else if (w.zone === ZoneType.Commercial) {
         const profit = w.occupants * PROFIT_PER_WORKER[def.category === 'office' ? 'office' : 'commercial'][lvl] * customers;
         const tax = (profit * eco.taxRates.commercial) / 100;
         taxC += tax;
@@ -459,6 +467,9 @@ export class CitySimulation {
         totalJobs: jobs,
         commercialUnlocked: this.isZoneUnlocked(ZoneType.Commercial),
         industrialUnlocked: this.isZoneUnlocked(ZoneType.Industrial),
+        officeJobs,
+        educatedLabor: laborByEdu[1] + laborByEdu[2],
+        officeUnlocked: this.isZoneUnlocked(ZoneType.Office),
         taxPressure: {
           residential: eco.taxPressure('residential'),
           commercial: eco.taxPressure('commercial'),
@@ -488,6 +499,7 @@ export class CitySimulation {
     let res = 0;
     let com = 0;
     let ind = 0;
+    let off = 0;
     let abandoned = 0;
     let construction = 0;
     for (const b of city.buildings.items.values()) {
@@ -496,6 +508,7 @@ export class CitySimulation {
       if (b.zone === ZoneType.Residential) res++;
       else if (b.zone === ZoneType.Commercial) com++;
       else if (b.zone === ZoneType.Industrial) ind++;
+      else if (b.zone === ZoneType.Office) off++;
     }
 
     const happinessFactors = [...factorSum].map(([label, v]) => ({ label, value: factorWeight > 0 ? v / factorWeight : 0 }));
@@ -515,7 +528,7 @@ export class CitySimulation {
       housingCapacity,
       vacantHomes: Math.max(0, housingCapacity - total),
       yesterday: { ...pop.yesterday },
-      buildingsByZone: { residential: res, commercial: com, industrial: ind },
+      buildingsByZone: { residential: res, commercial: com, industrial: ind, office: off },
       underConstruction: construction,
       abandoned,
       employedByEdu: wf.employedByEdu,
@@ -685,6 +698,7 @@ export class CitySimulation {
       const covered = (['police', 'fire', 'health', 'education'] as const).filter((k) => city.services.average(k, b.cells) >= 0.3).length;
       if (covered < 2) out.push(`Kamu hizmeti ${covered} / 2 (polis, itfaiye, sağlık, okul)`);
     }
+    if (this.nextTemplates(b).length === 0) out.push('Bu semtin kat sınırında daha büyük bina yok');
     const lv = city.landValue.averageOver(b.cells, city.landValue.value);
     if (lv < req.landValue) out.push(`Arazi değeri ${Math.round(lv)} / ${req.landValue}`);
     const cap = buildingCapacity(getBuilding(b.defId));
@@ -696,11 +710,16 @@ export class CitySimulation {
     return out;
   }
 
+  /** Templates a building may become at its next level, under its district's rules. */
+  private nextTemplates(b: PlacedBuilding): ReturnType<typeof zonedTemplates> {
+    const def = getBuilding(b.defId);
+    return zonedTemplates(b.zone as ZoneKind, b.level + 1, def.footprint, this.city.rulesAt(b.i, b.j));
+  }
+
   private tryLevelUp(b: PlacedBuilding, tick: number): void {
     if (b.level >= 3 || tick - b.sinceTick < MIN_TICKS_BETWEEN_LEVELS) return;
     if (this.levelBlockers(b).length > 0) return;
-    const def = getBuilding(b.defId);
-    const next = zonedTemplates(b.zone as ZoneKind, b.level + 1, def.footprint);
+    const next = this.nextTemplates(b);
     if (next.length === 0) return;
     const pick = next[Math.floor(this.rand() * next.length)];
     this.city.buildings.replace(b.id, { defId: pick.id, level: b.level + 1, sinceTick: tick });

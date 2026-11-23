@@ -38,7 +38,7 @@ export interface LinePlanView {
 }
 
 export interface ZoneToolState {
-  /** 0 = erase, 1–3 = residential / commercial / industrial. */
+  /** 0 = erase, 1–4 = residential / commercial / industrial / office. */
   zone: number;
   mode: 'brush' | 'fill';
   /** Brush radius in cells (1 → 1×1, 2 → 3×3, 3 → 5×5). */
@@ -47,6 +47,10 @@ export interface ZoneToolState {
   depth: number;
   /** Architecture painted with the zone (also used for hand-placed buildings). */
   style: ArchStyle;
+  /** Wealth homes are built for: 0 mixed, 1 modest, 2 middle, 3 wealthy. */
+  wealth: number;
+  /** Height limit: 0 none, 1 low (≤ 3 storeys), 2 mid-rise (≤ 7). */
+  height: number;
 }
 export type RoadMode = 'straight' | 'curve' | 'upgrade';
 
@@ -103,6 +107,10 @@ export interface BuildingInfo {
   category: string;
   /** Architectural style name (growables). */
   styleName?: string;
+  /** Who the home is built for (homes only). */
+  wealthName?: string;
+  /** District height limit at the building, when there is one. */
+  heightLimit?: string;
   w: number;
   d: number;
   cost: number;
