@@ -1803,3 +1803,13 @@ kbd {
   top: 24px !important;
   z-index: 30;
 }
+
+.traffic-target {
+  min-width: 220px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  padding: 0 6px;
+}

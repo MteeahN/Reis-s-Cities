@@ -12,7 +12,16 @@ import type { GameSpeed } from './config';
 import type { AchievementView } from '../systems/Achievements';
 import type { StatsSample } from '../systems/StatsHistory';
 
-export type ToolId = 'select' | 'road' | 'building' | 'demolish' | 'zone' | 'power' | 'water' | 'services' | 'powerline' | 'pipe';
+export type ToolId = 'select' | 'road' | 'building' | 'demolish' | 'zone' | 'power' | 'water' | 'services' | 'powerline' | 'pipe' | 'traffic';
+
+/** Traffic tool: what a click changes. */
+export type TrafficToolMode = 'oneway' | 'lights' | 'stop' | 'clear';
+
+export interface TrafficToolState {
+  mode: TrafficToolMode;
+  /** What is under the cursor and what a click would do. */
+  target: { kind: 'road' | 'junction'; name: string; detail: string; action: string; cost: number } | null;
+}
 
 export interface LinePlanView {
   kind: 'power' | 'pipe';
@@ -208,6 +217,7 @@ export type GameEvents = {
   buildingPlan: BuildingPlanView | null;
   demolishTarget: DemolishTarget | null;
   demolishFilter: DemolishFilter;
+  trafficTool: TrafficToolState;
   budget: number;
   cityStats: CityStats;
   tool: ToolId;

@@ -11,6 +11,8 @@ const PATHS = {
   services: 'M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z M9 12l2 2 4-4',
   tree: 'M12 2l5 7h-3l4 6H6l4-6H7zM12 15v7',
   demolish: 'M4 20h16M6 20l2-9h8l2 9M9 11V7a3 3 0 016 0v4M14 4l4-2',
+  traffic: 'M9 2h6a1 1 0 011 1v14a1 1 0 01-1 1H9a1 1 0 01-1-1V3a1 1 0 011-1zM12 6.5h0M12 10h0M12 13.5h0M12 18v4',
+  warning: 'M12 3l9 16H3zM12 9v4M12 16h0',
   pause: 'M8 5v14M16 5v14',
   play: 'M7 4l12 8-12 8z',
   fast: 'M4 5l8 7-8 7zM12 5l8 7-8 7z',

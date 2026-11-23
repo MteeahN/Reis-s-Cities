@@ -10,11 +10,15 @@ import {
   type QuadBezier,
 } from './curve';
 
+/** How a junction is controlled (absent: uncontrolled / right of way). */
+export type JunctionControl = 'lights' | 'stop';
+
 export interface RoadNode {
   id: number;
   x: number;
   z: number;
   edges: number[];
+  control?: JunctionControl;
 }
 
 export interface RoadEdge {
@@ -29,6 +33,8 @@ export interface RoadEdge {
   cost: number;
   /** Cached polyline (≈4 m spacing). */
   poly: Polyline;
+  /** Player-set travel direction: 1 = a → b only, −1 = b → a only (absent: the road type decides). */
+  oneWay?: 1 | -1;
 }
 
 export interface RoadChange {
@@ -38,8 +44,8 @@ export interface RoadChange {
 
 export interface RoadGraphData {
   version: 1;
-  nodes: { id: number; x: number; z: number }[];
-  edges: { id: number; a: number; b: number; typeId: string; cx: number; cz: number; cost: number }[];
+  nodes: { id: number; x: number; z: number; ctl?: JunctionControl }[];
+  edges: { id: number; a: number; b: number; typeId: string; cx: number; cz: number; cost: number; ow?: 1 | -1 }[];
   nextId: number;
 }
 
@@ -57,6 +63,9 @@ export class RoadGraph {
   private readonly buckets = new Map<number, Set<number>>();
   private readonly edgeBuckets = new Map<number, number[]>();
   private listeners = new Set<(c: RoadChange) => void>();
+  private controlListeners = new Set<() => void>();
+  /** Bumped when one-way settings or junction controls change. */
+  controlsVersion = 0;
   private batchDepth = 0;
   private pending: RoadChange = { added: [], removed: [] };
 
@@ -65,6 +74,43 @@ export class RoadGraph {
   onChange(fn: (c: RoadChange) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
+  }
+
+  /** One-way settings or junction controls changed (geometry did not). */
+  onControlsChange(fn: () => void): () => void {
+    this.controlListeners.add(fn);
+    return () => this.controlListeners.delete(fn);
+  }
+
+  private controlsChanged(): void {
+    this.controlsVersion++;
+    this.controlListeners.forEach((l) => l());
+  }
+
+  /** Allowed travel: 0 both ways, 1 a → b only, −1 b → a only. */
+  direction(e: RoadEdge): 0 | 1 | -1 {
+    if (e.oneWay) return e.oneWay;
+    return getRoadType(e.typeId).oneWay ? 1 : 0;
+  }
+
+  setOneWay(id: number, dir: 0 | 1 | -1): void {
+    const e = this.edges.get(id);
+    if (!e) return;
+    const native = getRoadType(e.typeId).oneWay;
+    // One-way road types can be flipped but not made two-way.
+    const next: 1 | -1 | undefined = native ? (dir === -1 ? -1 : undefined) : dir === 0 ? undefined : dir;
+    if (e.oneWay === next) return;
+    if (next === undefined) delete e.oneWay;
+    else e.oneWay = next;
+    this.controlsChanged();
+  }
+
+  setControl(nodeId: number, control: JunctionControl | null): void {
+    const n = this.nodes.get(nodeId);
+    if (!n || (n.control ?? null) === control) return;
+    if (control) n.control = control;
+    else delete n.control;
+    this.controlsChanged();
   }
 
   batch<T>(fn: () => T): T {
@@ -188,10 +234,12 @@ export class RoadGraph {
       const lenL = bezierLength(L);
       const lenR = bezierLength(R);
       const share = lenL / Math.max(1e-6, lenL + lenR);
-      const { a, b, typeId, cost } = e;
+      const { a, b, typeId, cost, oneWay } = e;
       this.removeEdge(id, true);
       const left = this.addEdge(a, node.id, typeId, L.p1, cost * share);
       const right = this.addEdge(node.id, b, typeId, R.p1, cost * (1 - share));
+      // Both halves keep the a → b orientation, so a one-way setting carries over.
+      if (oneWay) left.oneWay = right.oneWay = oneWay;
       return { node, left, right };
     });
   }
@@ -298,8 +346,8 @@ export class RoadGraph {
   serialize(): RoadGraphData {
     return {
       version: 1,
-      nodes: [...this.nodes.values()].map((n) => ({ id: n.id, x: n.x, z: n.z })),
-      edges: [...this.edges.values()].map((e) => ({ id: e.id, a: e.a, b: e.b, typeId: e.typeId, cx: e.c.x, cz: e.c.z, cost: e.cost })),
+      nodes: [...this.nodes.values()].map((n) => ({ id: n.id, x: n.x, z: n.z, ...(n.control ? { ctl: n.control } : {}) })),
+      edges: [...this.edges.values()].map((e) => ({ id: e.id, a: e.a, b: e.b, typeId: e.typeId, cx: e.c.x, cz: e.c.z, cost: e.cost, ...(e.oneWay ? { ow: e.oneWay } : {}) })),
       nextId: this.nextId,
     };
   }
@@ -314,8 +362,11 @@ export class RoadGraph {
   load(data: RoadGraphData): void {
     if (this.edges.size || this.nodes.size) throw new Error('RoadGraph.load: graph is not empty');
     this.batch(() => {
-      for (const n of data.nodes) this.nodes.set(n.id, { id: n.id, x: n.x, z: n.z, edges: [] });
-      for (const e of data.edges) this.addEdge(e.a, e.b, e.typeId, { x: e.cx, z: e.cz }, e.cost, e.id);
+      for (const n of data.nodes) this.nodes.set(n.id, { id: n.id, x: n.x, z: n.z, edges: [], ...(n.ctl === 'lights' || n.ctl === 'stop' ? { control: n.ctl } : {}) });
+      for (const e of data.edges) {
+        const edge = this.addEdge(e.a, e.b, e.typeId, { x: e.cx, z: e.cz }, e.cost, e.id);
+        if (e.ow === 1 || e.ow === -1) edge.oneWay = e.ow;
+      }
       for (const n of data.nodes) this.nextId = Math.max(this.nextId, n.id + 1);
       this.nextId = Math.max(this.nextId, data.nextId);
       // Nodes without edges are never kept by the editor.

@@ -9,6 +9,7 @@ import type { Occupancy } from '../world/Occupancy';
 import { rasterizePolyline } from '../world/Occupancy';
 import { CURB_HEIGHT } from './roads/roadGeometry';
 import { sampleProfile, type RoadRenderer, type SurfacePoint } from './roads/RoadRenderer';
+import type { TrafficSignals } from '../simulation/traffic/Signals';
 
 /**
  * Share of the people who live or work along a street that are out walking at
@@ -132,7 +133,29 @@ interface Walker {
   bottom: RGB;
   skin: RGB;
   hair: RGB;
+  /** Junction manoeuvre in progress (corner arc, waiting at the kerb, crossing); empty while walking a street. */
+  steps: Step[];
+  /** Metres covered in the current step. */
+  stepT: number;
+  /** Seconds waited at the kerb. */
+  waitT: number;
+  /** Street to continue on once the steps are done. */
+  after: { edge: number; s: number; dir: number; side: number } | null;
 }
+
+interface Pt {
+  x: number;
+  y: number;
+  z: number;
+  /** Direction away from the junction along the street. */
+  tx: number;
+  tz: number;
+}
+
+type Step =
+  | { kind: 'arc'; a: Pt; b: Pt; cx: number; cz: number; len: number }
+  | { kind: 'wait'; node: number; edge: number; at: Pt }
+  | { kind: 'cross'; a: Pt; b: Pt; node: number; edge: number; len: number };
 
 const COLOR_ATTRS = ['aTop', 'aBottom', 'aSkin', 'aHair'] as const;
 
@@ -162,12 +185,16 @@ export class PedestrianRenderer {
   private readonly pos = new Vector3();
   private readonly scale = new Vector3(1, 1, 1);
   private readonly up = new Vector3(0, 1, 0);
+  private readonly crossing = new Set<number>();
+  /** Vehicles about to pass a crosswalk (set by the game from the vehicle simulation). */
+  vehiclesNear: (nodeId: number, edgeId: number, within: number) => boolean = () => false;
 
   constructor(
     private readonly roads: RoadGraph,
     private readonly buildings: BuildingRegistry,
     private readonly occupancy: Occupancy,
     private readonly roadRenderer: RoadRenderer,
+    private readonly signals: TrafficSignals,
     capacity = 600,
   ) {
     this.group.name = 'pedestrians';
@@ -292,6 +319,10 @@ export class PedestrianRenderer {
       bottom: pick(BOTTOMS),
       skin: pick(SKINS),
       hair: elder ? pick(GREY_HAIR) : pick(HAIR),
+      steps: [],
+      stepT: 0,
+      waitT: 0,
+      after: null,
     };
   }
 
@@ -321,49 +352,241 @@ export class PedestrianRenderer {
     }
   }
 
+  /** A point on a sidewalk `d` metres from `nodeId` along `edgeId`; `side` is relative to the direction away from the node. */
+  private sidewalkPoint(nodeId: number, edgeId: number, d: number, side: number, lane: number, curb = true): Pt | null {
+    const e = this.roads.edges.get(edgeId);
+    const prof = this.roadRenderer.edgeProfile(edgeId);
+    if (!e || !prof) return null;
+    const type = getRoadType(e.typeId);
+    const atA = e.a === nodeId;
+    sampleProfile(prof, atA ? Math.min(d, prof.length) : Math.max(0, prof.length - d), this.pt);
+    const tx = atA ? this.pt.tx : -this.pt.tx;
+    const tz = atA ? this.pt.tz : -this.pt.tz;
+    const sw = Math.min(type.sidewalk, type.width * 0.225);
+    const off = (type.width / 2 - sw / 2 + lane * sw * 0.6) * side;
+    return { x: this.pt.x - tz * off, y: this.pt.y + (curb && sw > 0 ? CURB_HEIGHT : 0), z: this.pt.z + tx * off, tx, tz };
+  }
+
+  /** Curve from a to b bending where their (backward) directions meet — like the kerb corners. */
+  private arc(a: Pt, b: Pt): Step {
+    let cx = (a.x + b.x) / 2;
+    let cz = (a.z + b.z) / 2;
+    // Lines a − k·ta and b − m·tb (both heading into the junction).
+    const dax = -a.tx;
+    const daz = -a.tz;
+    const dbx = -b.tx;
+    const dbz = -b.tz;
+    const den = dax * dbz - daz * dbx;
+    const chord = Math.hypot(b.x - a.x, b.z - a.z);
+    if (Math.abs(den) > 1e-3) {
+      const k = ((b.x - a.x) * dbz - (b.z - a.z) * dbx) / den;
+      if (k > 0 && k < chord * 1.5 + 2) {
+        cx = a.x + dax * k;
+        cz = a.z + daz * k;
+      }
+    }
+    const len = (chord + Math.hypot(cx - a.x, cz - a.z) + Math.hypot(b.x - cx, b.z - cz)) / 2;
+    return { kind: 'arc', a, b, cx, cz, len: Math.max(0.01, len) };
+  }
+
+  /** Incident edges of a node in angular order (as the junction surface is built). */
+  private around(nodeId: number): number[] {
+    const n = this.roads.nodes.get(nodeId);
+    if (!n) return [];
+    return n.edges
+      .map((id) => {
+        const d = this.roads.directionFrom(this.roads.edges.get(id)!, nodeId);
+        return { id, a: Math.atan2(d.z, d.x) };
+      })
+      .sort((x, y) => x.a - y.a)
+      .map((x) => x.id);
+  }
+
+  /**
+   * A walker reached the end of their street at `nodeId`: walk round the
+   * corner onto the neighbouring street, or wait and cross that street on its
+   * crosswalk and carry on along the next one. Dead ends: cross back.
+   */
+  private planJunction(p: Walker, nodeId: number): void {
+    const e = this.roads.edges.get(p.edge);
+    if (!e) return;
+    const atA = e.a === nodeId;
+    const away = atA ? p.side : -p.side;
+    const ends = this.around(nodeId);
+    const m = ends.length;
+    const i = ends.indexOf(p.edge);
+    const here = this.sidewalkPoint(nodeId, p.edge, this.roadRenderer.setbackAt(nodeId, p.edge), away, p.lane);
+    if (!here) return;
+    const sidewalk = (id: number) => getRoadType(this.roads.edges.get(id)!.typeId).sidewalk > 0;
+    const step = away > 0 ? 1 : -1;
+    const F = m > 1 ? ends[(i + step + m) % m] : p.edge;
+    if (m === 1 || F === p.edge || !sidewalk(F)) {
+      // Turn back: cross this street where it ends and walk the other way.
+      const other = this.sidewalkPoint(nodeId, p.edge, this.roadRenderer.setbackAt(nodeId, p.edge), -away, p.lane);
+      if (!other) return;
+      p.steps = [{ kind: 'cross', a: { ...here, y: here.y }, b: other, node: nodeId, edge: p.edge, len: Math.hypot(other.x - here.x, other.z - here.z) }];
+      p.after = { edge: p.edge, dir: -p.dir, side: -p.side, s: p.s };
+      return;
+    }
+    const toWalk = (edgeId: number, side: number) => {
+      const ed = this.roads.edges.get(edgeId)!;
+      const from = ed.a === nodeId;
+      const prof = this.roadRenderer.edgeProfile(edgeId);
+      const d = this.roadRenderer.setbackAt(nodeId, edgeId);
+      return { edge: edgeId, dir: from ? 1 : -1, side: from ? side : -side, s: from ? d : (prof?.length ?? 0) - d };
+    };
+    const G = ends[(i + 2 * step + 2 * m) % m];
+    const canCross = m >= 3 && G !== p.edge && sidewalk(G) && this.rand() < 0.45;
+    if (!canCross) {
+      const target = this.sidewalkPoint(nodeId, F, this.roadRenderer.setbackAt(nodeId, F), -away, p.lane);
+      if (!target) return;
+      p.steps = [this.arc(here, target)];
+      p.after = toWalk(F, -away);
+      return;
+    }
+    // Cross F on its crosswalk (just inside the junction), then round the next corner onto G.
+    const cw = Math.max(0.6, this.roadRenderer.setbackAt(nodeId, F) - 1.9);
+    const start = this.sidewalkPoint(nodeId, F, cw, -away, p.lane);
+    const end = this.sidewalkPoint(nodeId, F, cw, away, -p.lane);
+    const onG = this.sidewalkPoint(nodeId, G, this.roadRenderer.setbackAt(nodeId, G), -away, p.lane);
+    if (!start || !end || !onG) return;
+    // Arc ends face along F (towards the node from the crosswalk's kerb).
+    p.steps = [
+      this.arc(here, start),
+      { kind: 'wait', node: nodeId, edge: F, at: start },
+      { kind: 'cross', a: start, b: end, node: nodeId, edge: F, len: Math.hypot(end.x - start.x, end.z - start.z) },
+      this.arc(end, onG),
+    ];
+    p.after = toWalk(G, -away);
+  }
+
+  /** May a waiting walker step onto the crosswalk of `edgeId` at `nodeId`? */
+  private mayCross(p: Walker, nodeId: number, edgeId: number): boolean {
+    const n = this.roads.nodes.get(nodeId);
+    if (n?.control === 'lights') return this.signals.pedestriansMayCross(nodeId, edgeId);
+    // No signal: cross when no vehicle is about to pass, or after waiting a while (drivers then yield).
+    return !this.vehiclesNear(nodeId, edgeId, 16) || p.waitT > 7;
+  }
+
   private move(dt: number): void {
     if (dt <= 0) return;
     for (const p of this.walkers) {
-      p.phase += (dt * p.speed * 1.6) / p.scale;
-      const prof = this.roadRenderer.edgeProfile(p.edge);
-      if (!prof) continue;
-      p.s += p.dir * p.speed * dt;
-      if (p.s >= 0 && p.s <= prof.length) continue;
-      // Reached a junction: carry on along another street's sidewalk, or turn back.
-      const e = this.roads.edges.get(p.edge)!;
-      const node = p.s > prof.length ? e.b : e.a;
-      const options = (this.roads.nodes.get(node)?.edges ?? []).filter((id) => id !== p.edge && getRoadType(this.roads.edges.get(id)!.typeId).sidewalk > 0 && this.targets.has(id));
-      if (options.length === 0) {
-        p.dir = -p.dir;
-        p.s = Math.max(0, Math.min(prof.length, p.s));
-        p.side = -p.side;
+      const step = p.steps[0];
+      if (step) {
+        if (step.kind === 'wait') {
+          p.waitT += dt;
+          if (this.mayCross(p, step.node, step.edge)) {
+            p.steps.shift();
+            p.waitT = 0;
+          }
+          continue;
+        }
+        p.phase += (dt * p.speed * 1.6) / p.scale;
+        p.stepT += p.speed * dt;
+        if (p.stepT >= step.len) {
+          p.steps.shift();
+          p.stepT = 0;
+          if (p.steps.length === 0 && p.after) {
+            if (!this.roads.edges.has(p.after.edge)) p.edge = -1;
+            else Object.assign(p, p.after);
+            p.after = null;
+          }
+        }
         continue;
       }
-      // Pairs choose the same street: the choice depends only on where and when they arrive.
-      const next = this.roads.edges.get(options[(node + Math.floor(p.phase / 7)) % options.length])!;
-      const nprof = this.roadRenderer.edgeProfile(next.id);
-      p.edge = next.id;
-      p.dir = next.a === node ? 1 : -1;
-      p.s = p.dir === 1 ? 0 : (nprof?.length ?? 0);
+      p.phase += (dt * p.speed * 1.6) / p.scale;
+      const prof = this.roadRenderer.edgeProfile(p.edge);
+      const e = this.roads.edges.get(p.edge);
+      if (!prof || !e) continue;
+      p.s += p.dir * p.speed * dt;
+      const sMin = this.roadRenderer.setbackAt(e.a, e.id);
+      const sMax = prof.length - this.roadRenderer.setbackAt(e.b, e.id);
+      if (p.dir > 0 && p.s >= sMax) {
+        p.s = sMax;
+        this.planJunction(p, e.b);
+      } else if (p.dir < 0 && p.s <= sMin) {
+        p.s = sMin;
+        this.planJunction(p, e.a);
+      }
     }
+    // Who is on a crosswalk right now (vehicles yield to them).
+    this.crossing.clear();
+    for (const p of this.walkers) {
+      const st = p.steps[0];
+      if (st && st.kind === 'cross') this.crossing.add(st.node * 100003 + st.edge);
+    }
+  }
+
+  /** Pedestrians are on the crosswalk of `edgeId` at `nodeId`. */
+  isCrossing(nodeId: number, edgeId: number): boolean {
+    return this.crossing.has(nodeId * 100003 + edgeId);
   }
 
   private draw(): void {
     const counts = this.meshes.map(() => 0);
     for (const p of this.walkers) {
-      const prof = this.roadRenderer.edgeProfile(p.edge);
-      const e = this.roads.edges.get(p.edge);
-      if (!prof || !e) continue;
-      const type = getRoadType(e.typeId);
-      sampleProfile(prof, p.s, this.pt);
-      const sw = Math.min(type.sidewalk, type.width * 0.225);
-      const off = (type.width / 2 - sw / 2 + p.lane * sw * 0.6) * p.side;
-      this.pos.set(this.pt.x - this.pt.tz * off, this.pt.y + CURB_HEIGHT, this.pt.z + this.pt.tx * off);
-      this.q.setFromAxisAngle(this.up, Math.atan2(this.pt.tx * p.dir, this.pt.tz * p.dir));
+      const st = p.steps[0];
+      let x: number;
+      let y: number;
+      let z: number;
+      let hx: number;
+      let hz: number;
+      if (st) {
+        if (st.kind === 'wait') {
+          x = st.at.x;
+          y = st.at.y;
+          z = st.at.z;
+          // Face the road they are about to cross.
+          hx = -st.at.tz;
+          hz = st.at.tx;
+          const next = p.steps[1];
+          if (next && next.kind === 'cross') {
+            hx = next.b.x - next.a.x;
+            hz = next.b.z - next.a.z;
+          }
+        } else if (st.kind === 'cross') {
+          const u = Math.min(1, p.stepT / st.len);
+          x = st.a.x + (st.b.x - st.a.x) * u;
+          z = st.a.z + (st.b.z - st.a.z) * u;
+          // Step down from the kerb, cross at road level, step up again.
+          const edgeT = Math.min(u, 1 - u) * st.len;
+          y = st.a.y + (st.b.y - st.a.y) * u - Math.min(1, edgeT / 0.6) * CURB_HEIGHT;
+          hx = st.b.x - st.a.x;
+          hz = st.b.z - st.a.z;
+        } else {
+          const u = Math.min(1, p.stepT / st.len);
+          const iu = 1 - u;
+          x = iu * iu * st.a.x + 2 * iu * u * st.cx + u * u * st.b.x;
+          z = iu * iu * st.a.z + 2 * iu * u * st.cz + u * u * st.b.z;
+          y = st.a.y + (st.b.y - st.a.y) * u;
+          hx = 2 * iu * (st.cx - st.a.x) + 2 * u * (st.b.x - st.cx);
+          hz = 2 * iu * (st.cz - st.a.z) + 2 * u * (st.b.z - st.cz);
+          if (Math.abs(hx) + Math.abs(hz) < 1e-4) {
+            hx = st.b.x - st.a.x;
+            hz = st.b.z - st.a.z;
+          }
+        }
+      } else {
+        const prof = this.roadRenderer.edgeProfile(p.edge);
+        const e = this.roads.edges.get(p.edge);
+        if (!prof || !e) continue;
+        const type = getRoadType(e.typeId);
+        sampleProfile(prof, p.s, this.pt);
+        const sw = Math.min(type.sidewalk, type.width * 0.225);
+        const off = (type.width / 2 - sw / 2 + p.lane * sw * 0.6) * p.side;
+        x = this.pt.x - this.pt.tz * off;
+        y = this.pt.y + (sw > 0 ? CURB_HEIGHT : 0);
+        z = this.pt.z + this.pt.tx * off;
+        hx = this.pt.tx * p.dir;
+        hz = this.pt.tz * p.dir;
+      }
+      this.pos.set(x, y, z);
+      this.q.setFromAxisAngle(this.up, Math.atan2(hx, hz));
       this.scale.setScalar(p.scale);
       this.m.compose(this.pos, this.q, this.scale);
-      const pose = Math.floor(p.phase) % 4;
-      const k = p.body * 3 + (pose === 0 ? 0 : pose === 2 ? 2 : 1);
+      const standing = st?.kind === 'wait';
+      const pose = standing ? 1 : Math.floor(p.phase) % 4;
+      const k = p.body * 3 + (standing ? 1 : pose === 0 ? 0 : pose === 2 ? 2 : 1);
       const im = this.meshes[k];
       const i = counts[k];
       if (i >= im.instanceMatrix.count) continue;

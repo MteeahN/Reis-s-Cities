@@ -5,6 +5,7 @@ import type { RoadGraph } from '../entities/road/RoadGraph';
 import type { TrafficModel, VehiclePath } from '../simulation/traffic/TrafficModel';
 import { mulberry32 } from '../world/generation/rng';
 import { sampleProfile, type RoadRenderer, type SurfacePoint } from './roads/RoadRenderer';
+import type { TrafficSignals } from '../simulation/traffic/Signals';
 
 /** Vehicles shown per vehicle actually on the road (Little's law) near the camera — game time runs
  *  hundreds of times faster than the cars drive, so the visible stream is thickened accordingly. */
@@ -23,6 +24,20 @@ interface Vehicle {
   color: number;
   /** Index into the car or truck model list. */
   model: number;
+  /** Lane on the previous link (for the curve through a junction). */
+  prevLane: number;
+  /** Seconds halted at a stop sign. */
+  stopWait: number;
+  /** Junction this vehicle may now enter (stop sign served). */
+  cleared: number;
+}
+
+interface LanePoint {
+  x: number;
+  y: number;
+  z: number;
+  dx: number;
+  dz: number;
 }
 
 /**
@@ -43,6 +58,11 @@ export class VehicleRenderer {
   private targetTimer = 0;
   private max = 400;
   private readonly pt: SurfacePoint = { x: 0, y: 0, z: 0, tx: 1, tz: 0 };
+  private readonly p0: LanePoint = { x: 0, y: 0, z: 0, dx: 0, dz: 1 };
+  private readonly p2: LanePoint = { x: 0, y: 0, z: 0, dx: 0, dz: 1 };
+  private readonly lp: LanePoint = { x: 0, y: 0, z: 0, dx: 0, dz: 1 };
+  /** Pedestrians on a crosswalk (set by the game): vehicles yield to them. */
+  crosswalkBusy: (nodeId: number, edgeId: number) => boolean = () => false;
   private readonly m = new Matrix4();
   private readonly q = new Quaternion();
   private readonly pos = new Vector3();
@@ -58,6 +78,7 @@ export class VehicleRenderer {
     private readonly traffic: TrafficModel,
     private readonly roads: RoadGraph,
     private readonly roadRenderer: RoadRenderer,
+    private readonly signals: TrafficSignals,
     capacity = 600,
   ) {
     this.group.name = 'vehicles';
@@ -148,8 +169,7 @@ export class VehicleRenderer {
       const to = last ? path.endFrac * len : len;
       if (to - from < 1) continue;
       const s = initialFill ? from + this.rand() * (to - from) : from;
-      const type = getRoadType(this.roads.edges.get(t.linkEdge[path.links[idx]])!.typeId);
-      const lanesPerDir = type.oneWay ? type.lanes : Math.max(1, type.lanes / 2);
+      const lanesPerDir = this.lanesPerDir(t.linkEdge[path.links[idx]]);
       const truck = path.freight;
       const lane = truck ? 0 : Math.floor(this.rand() * lanesPerDir);
       if (this.blocked(path.links[idx], lane, s, truck ? TRUCK_GAP : CAR_GAP)) continue;
@@ -162,6 +182,9 @@ export class VehicleRenderer {
         truck,
         color: truck ? TRUCK_COLORS[Math.floor(this.rand() * TRUCK_COLORS.length)] : CAR_COLORS[Math.floor(this.rand() * CAR_COLORS.length)],
         model: truck ? Math.floor(this.rand() * this.trucks.length) : pickWeighted(CAR_MIX, this.rand()),
+        prevLane: lane,
+        stopWait: 0,
+        cleared: -1,
       });
     }
   }
@@ -171,6 +194,44 @@ export class VehicleRenderer {
       if (v.path.links[v.idx] === link && v.lane === lane && Math.abs(v.s - s) < gap) return true;
     }
     return false;
+  }
+
+  /** Lanes per travel direction on an edge (a one-way road uses all of them). */
+  private lanesPerDir(edgeId: number): number {
+    const e = this.roads.edges.get(edgeId);
+    if (!e) return 1;
+    const type = getRoadType(e.typeId);
+    return this.roads.direction(e) !== 0 ? type.lanes : Math.max(1, type.lanes / 2);
+  }
+
+  /**
+   * Does a vehicle on `link` (at `s`) have to hold at the stop line ahead?
+   * Red / amber signals, stop signs (halt, then go) and pedestrians on the
+   * crosswalks it is about to cross.
+   */
+  private holdLine(v: Vehicle, dt: number): number {
+    const t = this.traffic;
+    if (v.idx >= v.path.links.length - 1) return Infinity;
+    const l = v.path.links[v.idx];
+    const node = t.linkToNode(l);
+    if (v.cleared === node) return Infinity;
+    const edge = t.linkEdge[l];
+    const nextEdge = t.linkEdge[v.path.links[v.idx + 1]];
+    const stopLine = t.linkLen[l] - this.roadRenderer.setbackAt(node, edge) - 1.5;
+    if (v.s > stopLine + 0.4) return Infinity; // already in the junction
+    const st = this.signals.state(node, edge);
+    let hold = false;
+    if (st === 'red') hold = true;
+    else if (st === 'amber') hold = stopLine - v.s > 8;
+    else if (st === 'stop') {
+      if (stopLine - v.s < 0.6 && v.speed < 0.4) {
+        v.stopWait += dt;
+        if (v.stopWait > 1.5) v.cleared = node;
+        else hold = true;
+      } else hold = true;
+    }
+    if (!hold && (this.crosswalkBusy(node, edge) || this.crosswalkBusy(node, nextEdge))) hold = true;
+    return hold ? stopLine : Infinity;
   }
 
   private move(dt: number): void {
@@ -191,15 +252,17 @@ export class VehicleRenderer {
       for (let i = 0; i < list.length; i++) {
         const v = list[i];
         const link = v.path.links[v.idx];
-        const want = t.linkSpeed(link);
-        v.speed += (want - v.speed) * Math.min(1, dt * 1.5);
-        let s = v.s + v.speed * dt;
+        let limit = this.holdLine(v, dt);
         if (i > 0) {
           const lead = list[i - 1];
-          const gap = lead.truck || v.truck ? TRUCK_GAP : CAR_GAP;
-          s = Math.min(s, lead.s - gap);
+          limit = Math.min(limit, lead.s - (lead.truck || v.truck ? TRUCK_GAP : CAR_GAP));
         }
-        v.s = Math.max(v.s, s);
+        // Brake smoothly towards the limit (≈3 m/s²), accelerate gently towards the link speed.
+        let want = t.linkSpeed(link);
+        if (Number.isFinite(limit)) want = Math.min(want, Math.sqrt(Math.max(0, 2 * 3 * (limit - v.s))));
+        v.speed += (want - v.speed) * Math.min(1, dt * (want < v.speed ? 4 : 1.2));
+        if (v.speed < 0.05 && want < 0.05) v.speed = 0;
+        v.s = Math.max(v.s, Math.min(v.s + v.speed * dt, limit));
         // Advance through links (the route chooses the turn at each junction).
         for (;;) {
           const l = v.path.links[v.idx];
@@ -213,9 +276,9 @@ export class VehicleRenderer {
           }
           v.s -= len;
           v.idx++;
-          const next = v.path.links[v.idx];
-          const type = getRoadType(this.roads.edges.get(t.linkEdge[next])?.typeId ?? 'street');
-          const lanes = type.oneWay ? type.lanes : Math.max(1, type.lanes / 2);
+          v.prevLane = v.lane;
+          v.stopWait = 0;
+          const lanes = this.lanesPerDir(t.linkEdge[v.path.links[v.idx]]);
           if (v.lane >= lanes) v.lane = lanes - 1;
         }
         // Left the area around the camera.
@@ -229,29 +292,116 @@ export class VehicleRenderer {
     }
   }
 
-  private draw(): void {
+  /** Lane centre and travel direction at `s` metres along a link. */
+  private lanePoint(l: number, s: number, lane: number, out: LanePoint): LanePoint | null {
     const t = this.traffic;
+    const edgeId = t.linkEdge[l];
+    const prof = this.roadRenderer.edgeProfile(edgeId);
+    const e = this.roads.edges.get(edgeId);
+    if (!prof || !e) return null;
+    const type = getRoadType(e.typeId);
+    const len = t.linkLen[l];
+    const rev = t.linkReverse[l] === 1;
+    const f = Math.max(0, Math.min(1, s / len));
+    sampleProfile(prof, (rev ? 1 - f : f) * prof.length, this.pt);
+    const dx = rev ? -this.pt.tx : this.pt.tx;
+    const dz = rev ? -this.pt.tz : this.pt.tz;
+    // Drive on the right.
+    const oneWay = this.roads.direction(e) !== 0;
+    const lanes = type.lanes;
+    const laneW = Math.max(2.6, (type.width - 2 * type.sidewalk - type.median) / lanes);
+    const offset = oneWay ? (lane + 0.5 - lanes / 2) * laneW : type.median / 2 + (lane + 0.5) * laneW;
+    out.x = this.pt.x - dz * offset;
+    out.y = this.pt.y;
+    out.z = this.pt.z + dx * offset;
+    out.dx = dx;
+    out.dz = dz;
+    return out;
+  }
+
+  /**
+   * Where a vehicle is drawn: on its lane, or — inside a junction — on a
+   * smooth curve from the lane it arrives in to the lane it leaves by.
+   */
+  private placement(v: Vehicle, out: LanePoint): LanePoint | null {
+    const t = this.traffic;
+    const links = v.path.links;
+    const l = links[v.idx];
+    const len = t.linkLen[l];
+    let from: { l: number; s: number; lane: number } | null = null;
+    let to: { l: number; s: number; lane: number } | null = null;
+    let u = 0;
+    if (v.idx < links.length - 1) {
+      const node = t.linkToNode(l);
+      const inLen = this.roadRenderer.setbackAt(node, t.linkEdge[l]);
+      if (inLen > 0.5 && v.s > len - inLen) {
+        const next = links[v.idx + 1];
+        const outLen = this.roadRenderer.setbackAt(node, t.linkEdge[next]);
+        from = { l, s: len - inLen, lane: v.lane };
+        to = { l: next, s: outLen, lane: Math.min(v.lane, this.lanesPerDir(t.linkEdge[next]) - 1) };
+        u = (v.s - (len - inLen)) / (inLen + outLen);
+      }
+    }
+    if (!from && v.idx > 0) {
+      const node = t.linkFromNode(l);
+      const outLen = this.roadRenderer.setbackAt(node, t.linkEdge[l]);
+      if (outLen > 0.5 && v.s < outLen) {
+        const prev = links[v.idx - 1];
+        const inLen = this.roadRenderer.setbackAt(node, t.linkEdge[prev]);
+        from = { l: prev, s: t.linkLen[prev] - inLen, lane: v.prevLane };
+        to = { l, s: outLen, lane: v.lane };
+        u = (inLen + v.s) / (inLen + outLen);
+      }
+    }
+    if (!from || !to) return this.lanePoint(l, v.s, v.lane, out);
+    const a = this.lanePoint(from.l, from.s, from.lane, this.p0);
+    const b = this.lanePoint(to.l, to.s, to.lane, this.p2);
+    if (!a || !b) return this.lanePoint(l, v.s, v.lane, out);
+    // Control point: where the arriving and leaving lane lines meet (straight through: the midpoint).
+    let cx = (a.x + b.x) / 2;
+    let cz = (a.z + b.z) / 2;
+    const den = a.dx * b.dz - a.dz * b.dx;
+    if (Math.abs(den) > 1e-3) {
+      const k = ((b.x - a.x) * b.dz - (b.z - a.z) * b.dx) / den;
+      const gap = Math.hypot(b.x - a.x, b.z - a.z);
+      if (k > 0 && k < gap * 1.5) {
+        cx = a.x + a.dx * k;
+        cz = a.z + a.dz * k;
+      }
+    }
+    const w = Math.max(0, Math.min(1, u));
+    const iw = 1 - w;
+    out.x = iw * iw * a.x + 2 * iw * w * cx + w * w * b.x;
+    out.z = iw * iw * a.z + 2 * iw * w * cz + w * w * b.z;
+    out.y = a.y + (b.y - a.y) * w;
+    const tx = 2 * iw * (cx - a.x) + 2 * w * (b.x - cx);
+    const tz = 2 * iw * (cz - a.z) + 2 * w * (b.z - cz);
+    const tl = Math.hypot(tx, tz) || 1;
+    out.dx = tx / tl;
+    out.dz = tz / tl;
+    return out;
+  }
+
+  /** Vehicles near a junction on one of its roads (approaching it, or just leaving into that road). */
+  approaching(nodeId: number, edgeId: number, within: number): boolean {
+    const t = this.traffic;
+    for (const v of this.vehicles) {
+      const l = v.path.links[v.idx];
+      if (t.linkEdge[l] !== edgeId) continue;
+      if (t.linkToNode(l) === nodeId && t.linkLen[l] - v.s < within && v.speed > 0.5) return true;
+      if (t.linkFromNode(l) === nodeId && v.s < 5) return true;
+    }
+    return false;
+  }
+
+  private draw(): void {
     const nCar = this.cars.map(() => 0);
     const nTruck = this.trucks.map(() => 0);
     for (const v of this.vehicles) {
-      const l = v.path.links[v.idx];
-      const edgeId = t.linkEdge[l];
-      const prof = this.roadRenderer.edgeProfile(edgeId);
-      const e = this.roads.edges.get(edgeId);
-      if (!prof || !e) continue;
-      const type = getRoadType(e.typeId);
-      const len = t.linkLen[l];
-      const rev = t.linkReverse[l] === 1;
-      const f = Math.max(0, Math.min(1, v.s / len));
-      sampleProfile(prof, (rev ? 1 - f : f) * prof.length, this.pt);
-      const dx = rev ? -this.pt.tx : this.pt.tx;
-      const dz = rev ? -this.pt.tz : this.pt.tz;
-      // Drive on the right.
-      const lanes = type.lanes;
-      const laneW = Math.max(2.6, (type.width - 2 * type.sidewalk - type.median) / lanes);
-      const offset = type.oneWay ? (v.lane + 0.5 - lanes / 2) * laneW : type.median / 2 + (v.lane + 0.5) * laneW;
-      this.pos.set(this.pt.x - dz * offset, this.pt.y, this.pt.z + dx * offset);
-      this.q.setFromAxisAngle(this.up, Math.atan2(dx, dz));
+      const p = this.placement(v, this.lp);
+      if (!p) continue;
+      this.pos.set(p.x, p.y, p.z);
+      this.q.setFromAxisAngle(this.up, Math.atan2(p.dx, p.dz));
       this.m.compose(this.pos, this.q, this.scale);
       this.color.setHex(v.color);
       const list = v.truck ? this.trucks : this.cars;

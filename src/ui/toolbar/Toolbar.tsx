@@ -1,4 +1,5 @@
-import type { DemolishFilter, RoadMode, ToolId, ZoneToolState } from '../../game/core/events';
+import type { DemolishFilter, RoadMode, ToolId, TrafficToolMode, ZoneToolState } from '../../game/core/events';
+import { LIGHTS_COST, STOP_COST } from '../../game/tools/TrafficTool';
 import { ZONES } from '../../game/data/zones';
 import { buildingsInGroup, type BuildingDef } from '../../game/data/buildings';
 import { LINE_TYPES } from '../../game/data/infrastructure';
@@ -28,6 +29,7 @@ const TOOLS: ToolEntry[] = [
   { id: 'water', label: 'Su', icon: 'water', tool: 'water', hotkey: 'U' },
   { id: 'services', label: 'Hizmetler', icon: 'services', tool: 'services', hotkey: 'J' },
   { id: 'landscape', label: 'Peyzaj', icon: 'tree', phase: 7 },
+  { id: 'traffic', label: 'Trafik', icon: 'traffic', tool: 'traffic', hotkey: 'K' },
   { id: 'demolish', label: 'Yıkım', icon: 'demolish', tool: 'demolish', hotkey: 'X' },
 ];
 
@@ -114,6 +116,42 @@ function DemolishPicker() {
         ))}
       </div>
       <span className="muted small">Tab: değiştir</span>
+    </div>
+  );
+}
+
+const TRAFFIC_MODES: { id: TrafficToolMode; name: string; hint: string; icon: IconName }[] = [
+  { id: 'oneway', name: 'Tek yön', hint: 'Bir yol parçasına tıklayın: tek yön → ters yön → çift yön', icon: 'road' },
+  { id: 'lights', name: 'Trafik lambası', hint: `Kavşağa sinyal kurun (${formatMoney(LIGHTS_COST)}). Yoğun kavşakları akıcı tutar; yayalar kırmızıda geçer.`, icon: 'traffic' },
+  { id: 'stop', name: 'Dur levhası', hint: `Kavşağın tüm girişlerine dur levhası (${formatMoney(STOP_COST)}). Sakin kavşaklar için.`, icon: 'warning' },
+  { id: 'clear', name: 'Kaldır', hint: 'Kavşak kontrolünü kaldırın', icon: 'demolish' },
+];
+
+function TrafficPicker() {
+  const st = useGameStore((s) => s.trafficTool);
+  const t = st.target;
+  return (
+    <div className="subtoolbar panel" data-testid="traffic-picker">
+      <div className="mode-group row" role="group" aria-label="Trafik düzenleme">
+        {TRAFFIC_MODES.map((m) => (
+          <button key={m.id} className={`mode-btn ${st.mode === m.id ? 'active' : ''}`} onClick={() => getGame()?.setTrafficMode(m.id)} title={m.hint} data-testid={`traffic-mode-${m.id}`}>
+            <Icon name={m.icon} size={14} /> <span>{m.name}</span>
+          </button>
+        ))}
+      </div>
+      <div className="traffic-target" data-testid="traffic-target">
+        {t ? (
+          <>
+            <strong>{t.name}</strong> <span className="muted small">{t.detail}</span>
+            <div className="small">
+              {t.action}
+              {t.cost > 0 ? ` · ${formatMoney(t.cost)}` : ''}
+            </div>
+          </>
+        ) : (
+          <span className="muted small">{TRAFFIC_MODES.find((m) => m.id === st.mode)!.hint} · Tab: mod değiştir</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -309,6 +347,7 @@ export function Toolbar() {
       {tool === 'building' && <BuildingPicker />}
       {tool === 'zone' && <ZonePicker />}
       {tool === 'demolish' && <DemolishPicker />}
+      {tool === 'traffic' && <TrafficPicker />}
       {(tool === 'power' || tool === 'powerline') && <InfraPicker group="power" lineKind="power" />}
       {(tool === 'water' || tool === 'pipe') && <InfraPicker group="water" lineKind="pipe" />}
       {tool === 'services' && <InfraPicker group="service" />}

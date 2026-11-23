@@ -25,6 +25,18 @@ import { residentsOf, type Population } from '../Population';
 
 /** Delay for passing through a junction of three or more roads (s). */
 export const JUNCTION_DELAY = 5;
+/**
+ * Mean wait at a junction (s) by control and load x (busiest approach's
+ * volume / capacity): uncontrolled junctions are quick when quiet but jam
+ * when busy; signals cost a steady share of the cycle but keep busy junctions
+ * moving; stop signs make every driver halt.
+ */
+export function junctionDelay(control: 'lights' | 'stop' | null, x: number): number {
+  const r = Math.min(2, x);
+  if (control === 'lights') return 9 + 3 * r * r;
+  if (control === 'stop') return 7 + 6 * r * r;
+  return JUNCTION_DELAY * (1 + 5 * r * r);
+}
 export const BPR_ALPHA = 0.15;
 export const BPR_BETA = 4;
 /** Share of each new assignment blended into the running flows per step. */
@@ -245,6 +257,8 @@ export class TrafficModel {
       this.dirty = true;
       this.attachCache.clear();
     });
+    // One-way changes renumber links; junction controls only change delays.
+    roads.onControlsChange(() => (this.dirty = true));
   }
 
   /** Buildings changed (placed, removed, re-rotated): forget their road attachments. */
@@ -266,7 +280,6 @@ export class TrafficModel {
     this.outLinks = Array.from({ length: n }, () => []);
     this.inLinks = Array.from({ length: n }, () => []);
     this.nodeDelay = new Float64Array(n);
-    for (let i = 0; i < n; i++) this.nodeDelay[i] = this.roads.nodes.get(this.nodeIds[i])!.edges.length >= 3 ? JUNCTION_DELAY : 0;
 
     const links: { edge: number; from: number; to: number; len: number; t0: number; cap: number; rev: number }[] = [];
     this.edgeLinks.clear();
@@ -275,11 +288,15 @@ export class TrafficModel {
       const v = t.speedKmh / 3.6;
       const a = this.nodeIndex.get(e.a)!;
       const b = this.nodeIndex.get(e.b)!;
-      const cap = t.oneWay ? t.capacity : t.capacity / 2;
+      // A one-way road carries all its lanes in one direction.
+      const dir = this.roads.direction(e);
+      const cap = dir !== 0 ? t.capacity : t.capacity / 2;
       const pair: [number, number] = [-1, -1];
-      pair[0] = links.length;
-      links.push({ edge: e.id, from: a, to: b, len: e.length, t0: e.length / v, cap, rev: 0 });
-      if (!t.oneWay) {
+      if (dir >= 0) {
+        pair[0] = links.length;
+        links.push({ edge: e.id, from: a, to: b, len: e.length, t0: e.length / v, cap, rev: 0 });
+      }
+      if (dir <= 0) {
         pair[1] = links.length;
         links.push({ edge: e.id, from: b, to: a, len: e.length, t0: e.length / v, cap, rev: 1 });
       }
@@ -320,6 +337,35 @@ export class TrafficModel {
       const x = this.linkFlow[l] / this.linkCap[l];
       this.linkTime[l] = this.linkT0[l] * (1 + BPR_ALPHA * x ** BPR_BETA);
     }
+    // Junction waits follow the control and how loaded the busiest approach is.
+    for (let i = 0; i < this.nodeIds.length; i++) {
+      const node = this.roads.nodes.get(this.nodeIds[i]);
+      if (!node) continue;
+      const control = node.control ?? null;
+      if (!control && node.edges.length < 3) {
+        this.nodeDelay[i] = 0;
+        continue;
+      }
+      let x = 0;
+      for (const l of this.inLinks[i]) x = Math.max(x, this.linkFlow[l] / this.linkCap[l]);
+      this.nodeDelay[i] = junctionDelay(control, x);
+    }
+  }
+
+  /** Graph node id at the end of a link. */
+  linkToNode(l: number): number {
+    return this.nodeIds[this.linkTo[l]];
+  }
+
+  /** Graph node id at the start of a link. */
+  linkFromNode(l: number): number {
+    return this.nodeIds[this.linkFrom[l]];
+  }
+
+  /** Mean wait (s) currently modelled at a junction. */
+  delayAt(nodeId: number): number {
+    const i = this.nodeIndex.get(nodeId);
+    return i === undefined ? 0 : this.nodeDelay[i];
   }
 
   /** Road segment (and parameter) a building's traffic enters and leaves by. */

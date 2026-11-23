@@ -39,6 +39,7 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
     rows: [
       ['Space', 'Duraklat / devam et'],
       ['1 / 2 / 3', 'Normal / 2x / 3x hız'],
+      ['K', 'Trafik düzenleme (tek yön, lamba, dur levhası; Tab: mod)'],
       ['Ctrl+S', 'Şehri kaydet'],
       ['H / F1', 'Bu pencere'],
     ],

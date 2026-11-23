@@ -50,6 +50,7 @@ export async function startGame(container: HTMLElement): Promise<void> {
   ev.on('buildingPlan', (buildingPlan) => set({ buildingPlan }));
   ev.on('demolishTarget', (demolishTarget) => set({ demolishTarget }));
   ev.on('demolishFilter', (demolishFilter) => set({ demolishFilter }));
+  ev.on('trafficTool', (trafficTool) => set({ trafficTool }));
   ev.on('budget', (budget) => set({ budget }));
   ev.on('cityStats', (cityStats) => set({ cityStats }));
   ev.on('zoneTool', (zoneTool) => set({ zoneTool }));

@@ -66,6 +66,7 @@ export function sampleProfile(p: EdgeProfile, u: number, out: SurfacePoint): Sur
 }
 
 const JUNCTION = '_junction';
+const ONE_WAY_SUFFIX = ':oneway';
 
 interface EdgeRecord {
   chunk: number;
@@ -101,6 +102,7 @@ export class RoadRenderer {
   private readonly pillarGeo = new CylinderGeometry(0.8, 1.05, 1, 10).translate(0, 0.5, 0);
   private readonly pillarMat = new MeshStandardMaterial({ color: 0x9a968c, roughness: 0.85 });
   private readonly unsub: () => void;
+  private readonly unsubControls: () => void;
 
   constructor(
     private readonly graph: RoadGraph,
@@ -110,6 +112,27 @@ export class RoadRenderer {
     for (const t of ROAD_TYPES) this.materials.set(t.id, createRoadMaterial(t));
     this.materials.set(JUNCTION, createRoadMaterial(null));
     this.unsub = graph.onChange((c) => this.handleChange(c));
+    // A road made one-way by the player gets one-way markings (no centre line, lane lines only).
+    this.unsubControls = graph.onControlsChange(() => {
+      for (const [id, rec] of this.edges) {
+        const e = this.graph.edges.get(id);
+        if (!e) continue;
+        const key = this.materialKey(e);
+        if (key !== rec.typeId) {
+          rec.typeId = key;
+          this.dirty.add(rec.chunk);
+        }
+      }
+    });
+  }
+
+  /** Material group of an edge: its type, or the type's one-way variant. */
+  private materialKey(e: { typeId: string; oneWay?: 1 | -1 }): string {
+    const type = getRoadType(e.typeId);
+    if (!e.oneWay || type.oneWay) return type.id;
+    const key = type.id + ONE_WAY_SUFFIX;
+    if (!this.materials.has(key)) this.materials.set(key, createRoadMaterial({ ...type, oneWay: true, centerLine: 'none' }));
+    return key;
   }
 
   /** Lift per type so wider roads draw over narrower ones where they overlap. */
@@ -181,7 +204,8 @@ export class RoadRenderer {
     return out;
   }
 
-  private setbackAt(nodeId: number, edgeId: number): number {
+  /** Metres a road stops short of a junction (where the junction surface and its crosswalks begin). */
+  setbackAt(nodeId: number, edgeId: number): number {
     return this.setbacks(nodeId).get(edgeId) ?? 0;
   }
 
@@ -264,7 +288,7 @@ export class RoadRenderer {
         wallA: degA === 1,
         wallB: degB === 1,
       });
-      this.edges.set(eid, { chunk, typeId: e.typeId, a: e.a, b: e.b, data });
+      this.edges.set(eid, { chunk, typeId: this.materialKey(e), a: e.a, b: e.b, data });
       this.dirty.add(chunk);
       this.pillarsDirty = true;
     }
@@ -315,7 +339,7 @@ export class RoadRenderer {
       if (!list) groups.set(JUNCTION, (list = []));
       list.push(rec.data);
     }
-    for (const key of [...ROAD_TYPES.map((t) => t.id), JUNCTION]) {
+    for (const key of this.materials.keys()) {
       const meshKey = `${chunk}:${key}`;
       const existing = this.chunkMeshes.get(meshKey);
       const parts = groups.get(key);
@@ -377,6 +401,7 @@ export class RoadRenderer {
 
   dispose(): void {
     this.unsub();
+    this.unsubControls();
     for (const m of this.chunkMeshes.values()) m.geometry.dispose();
     this.materials.forEach((m) => m.dispose());
     this.pillarGeo.dispose();

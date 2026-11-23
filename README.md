@@ -14,6 +14,14 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   girişlerinde yaya geçidi var; çıkmaz uçlar düz biter.
 - **Yol kenarı bölgeleme:** imleç yolun yanındaki boş alana gelince yolun yalnızca o tarafı seçilir (yolun üzerinde iki
   taraf); tıklayın veya sürükleyerek birden çok sokağı bölgeleyin.
+- **Trafik düzenleme (K):** yol parçalarını tek yön yapma / yönünü çevirme, kavşaklara trafik lambası (₺600) veya dur
+  levhası (₺60). Tek yönlü yol tüm şeritleri tek yöne verir (kapasite iki katı), oklarla ve orta çizgisiz çizilir.
+  Kavşak beklemesi trafik modelinde kontrole ve yoğunluğa bağlıdır: kontrolsüz kavşak sakinken hızlı, yoğunken tıkanır;
+  lamba sabit ama yoğunlukta daha iyi; dur levhası herkesi durdurur. Rotalar buna göre yeniden hesaplanır.
+- **Trafik kuralları:** araçlar kırmızıda ve sarıda (durabiliyorsa) stop çizgisinde durur, dur levhasında tam durup
+  geçer, yaya geçidindeki yayalara yol verir; kavşaklarda geldikleri şeritten çıkacakları şeride eğriyle döner,
+  yumuşak fren ve hızlanma yapar. Yayalar köşeleri kavisle döner, kavşakta karşıya geçmek için kaldırımda bekler
+  (lambalı kavşakta kendi yeşilinde, lambasızda araç yokken ya da bir süre bekledikten sonra) ve yaya geçidinden geçer.
 - **Yayalar:** kaldırımlarda yürüyen insanlar. Bir sokakta kaç kişinin yürüdüğü, o sokağın kenarındaki binalarda
   gerçekten yaşayan/çalışan insan sayısına ve günün saatine bağlıdır (gece neredeyse boş, işe gidiş-dönüş saatlerinde
   kalabalık); her figür birkaç kişiyi temsil eder. Kavşaklarda başka sokağa geçerler. Sayıları "En fazla araç / yaya"
@@ -205,6 +213,7 @@ Gereksinim: Node.js 20+ ve WebGL 2 destekli masaüstü tarayıcı.
 | C / Home | Şehir merkezine dön |
 | F | Seçime odaklan |
 | H / F1 | Kontroller penceresi |
+| K | Trafik düzenleme (Tab: mod değiştir) |
 | Ctrl+S | Şehri kaydet |
 
 ## Mimari

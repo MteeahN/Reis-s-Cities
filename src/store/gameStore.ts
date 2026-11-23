@@ -16,6 +16,7 @@ import type {
   WorldSummary,
   ZoneToolState,
   DemolishFilter,
+  TrafficToolState,
 } from '../game/core/events';
 import type { PopulationStats } from '../game/simulation/CitySimulation';
 import type { Demand } from '../game/simulation/Demand';
@@ -61,6 +62,7 @@ export interface GameUIState {
   buildingPlan: BuildingPlanView | null;
   demolishTarget: DemolishTarget | null;
   demolishFilter: DemolishFilter;
+  trafficTool: TrafficToolState;
   cityStats: CityStats | null;
   zoneTool: ZoneToolState;
   demand: Demand;
@@ -123,6 +125,7 @@ export const INITIAL_GAME_STATE = {
   buildingPlan: null,
   demolishTarget: null,
   demolishFilter: 'all' as DemolishFilter,
+  trafficTool: { mode: 'oneway', target: null } as TrafficToolState,
   cityStats: null,
   zoneTool: { zone: 1, mode: 'fill', brush: 1, depth: 4 } as ZoneToolState,
   demand: { residential: 70, commercial: 0, industrial: 0 } as Demand,
