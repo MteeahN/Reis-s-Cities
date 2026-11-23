@@ -128,8 +128,8 @@ function ZonePicker() {
       </button>
       <div className="divider vertical" />
       <div className="mode-group">
-        <button className={`mode-btn ${zt.mode === 'fill' ? 'active' : ''}`} onClick={() => set({ mode: 'fill' })} data-testid="zone-mode-fill" title="Bir yola tıklayarak iki yanını doldur">
-          <Icon name="road" size={14} /> <span>Yol boyunca</span>
+        <button className={`mode-btn ${zt.mode === 'fill' ? 'active' : ''}`} onClick={() => set({ mode: 'fill' })} data-testid="zone-mode-fill" title="İmleci yolun yanındaki boş alana getirin: yolun o tarafı seçilir (yolun üzerinde iki taraf). Tıklayın veya sürükleyin.">
+          <Icon name="road" size={14} /> <span>Yol kenarı</span>
         </button>
         <button className={`mode-btn ${zt.mode === 'brush' ? 'active' : ''}`} onClick={() => set({ mode: 'brush' })} data-testid="zone-mode-brush" title="Sürükleyerek boya">
           <Icon name="zone" size={14} /> <span>Fırça</span>

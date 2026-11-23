@@ -67,6 +67,20 @@ const BODY = /* glsl */ `
   float grain = rdNoise(wp * 2.3) * 0.5 + rdNoise(wp * 0.35) * 0.5;
   vec3 asphalt = vec3(0.052, 0.054, 0.058) * (0.85 + 0.3 * grain);
   vec3 col = asphalt;
+  if (uJunction > 0.5 && vRoadUv.y < -2.5) {
+    // Zebra crossing: white bars across the carriageway.
+    float u = vRoadUv.x;
+    float bar = step(0.5, fract(u / 1.1 + 0.25));
+    float wear = 0.75 + 0.25 * rdNoise(wp * 1.3);
+    col = mix(asphalt, vec3(0.74, 0.74, 0.72), bar * wear);
+  } else if (uJunction > 0.5 && vRoadUv.y < -0.5) {
+    // Junction corners: raised sidewalk (v = −1) and kerb faces / skirts (v = −2).
+    col = vec3(0.30, 0.295, 0.28) * (0.9 + 0.15 * grain);
+    vec2 jg = fract(wp);
+    float joint = max(rdLine(jg.x, 0.0, 0.05, fwidth(wp.x)), rdLine(jg.y, 0.0, 0.05, fwidth(wp.y)));
+    col *= 1.0 - joint * 0.25;
+    if (vRoadUv.y < -1.5) col = vec3(0.42, 0.41, 0.39) * (0.9 + 0.1 * grain);
+  }
   if (uJunction < 0.5) {
     float x = clamp(vRoadUv.x, 0.0, 1.0) * uWidth;
     float y = vRoadUv.y;

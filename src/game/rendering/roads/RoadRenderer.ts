@@ -15,7 +15,7 @@ import { getRoadType, ROAD_TYPES } from '../../data/roads';
 import { directedAngle } from '../../entities/road/curve';
 import type { RoadChange, RoadGraph } from '../../entities/road/RoadGraph';
 import { createRoadMaterial } from './RoadMaterial';
-import { buildEdgeMesh, buildNodeMesh, nodeSurfaceHeight, ROAD_LIFT, roadProfile, type EdgeMeshData, type MeshArrays } from './roadGeometry';
+import { buildEdgeMesh, buildJunctionMesh, nodeSurfaceHeight, ROAD_LIFT, roadProfile, type EdgeMeshData, type JunctionEnd, type MeshArrays } from './roadGeometry';
 import type { P2 } from '../../entities/road/curve';
 
 /** Road surface along an edge (a → b): points, cumulative length, surface height. */
@@ -145,6 +145,67 @@ export class RoadRenderer {
     return ang < (170 * Math.PI) / 180;
   }
 
+  /**
+   * How far each road at a junction stops short of the node so the roads do
+   * not overlap; the junction surface fills the space with curved kerbs.
+   * Zero at dead ends and on straight continuations of the same road type.
+   */
+  private setbacks(nodeId: number): Map<number, number> {
+    const out = new Map<number, number>();
+    const n = this.graph.nodes.get(nodeId);
+    if (!n || n.edges.length < 2 || !this.needsCap(nodeId)) return out;
+    const ends = n.edges.map((eid) => {
+      const e = this.graph.edges.get(eid)!;
+      const d = this.graph.directionFrom(e, nodeId);
+      const type = getRoadType(e.typeId);
+      return { eid, ang: Math.atan2(d.z, d.x), half: type.width / 2, sw: type.sidewalk, len: this.edgeProfile(eid)?.length ?? 0 };
+    });
+    ends.sort((a, b) => a.ang - b.ang);
+    const m = ends.length;
+    const minA = (25 * Math.PI) / 180;
+    const maxA = (150 * Math.PI) / 180;
+    for (let i = 0; i < m; i++) {
+      const me = ends[i];
+      let need = 0;
+      for (const j of [(i + 1) % m, (i - 1 + m) % m]) {
+        if (j === i) continue;
+        const o = ends[j];
+        let gap = Math.abs(o.ang - me.ang);
+        if (gap > Math.PI) gap = Math.PI * 2 - gap;
+        const a = Math.min(maxA, Math.max(minA, gap));
+        need = Math.max(need, (o.half + me.half * Math.cos(a)) / Math.sin(a));
+      }
+      const corner = Math.max(me.sw, ...ends.map((e) => e.sw)) + 1.5;
+      out.set(me.eid, Math.min(Math.max(0, need) + corner, me.len * 0.45));
+    }
+    return out;
+  }
+
+  private setbackAt(nodeId: number, edgeId: number): number {
+    return this.setbacks(nodeId).get(edgeId) ?? 0;
+  }
+
+  private junctionMesh(nodeId: number): MeshArrays | null {
+    const n = this.graph.nodes.get(nodeId);
+    if (!n || n.edges.length < 2 || !this.needsCap(nodeId)) return null;
+    const backs = this.setbacks(nodeId);
+    const ends: JunctionEnd[] = [];
+    const sp = { x: 0, y: 0, z: 0, tx: 0, tz: 0 };
+    let lift = ROAD_LIFT;
+    for (const eid of n.edges) {
+      const e = this.graph.edges.get(eid)!;
+      const prof = this.edgeProfile(eid);
+      if (!prof) continue;
+      const type = getRoadType(e.typeId);
+      lift = Math.max(lift, RoadRenderer.liftFor(e.typeId));
+      const d = backs.get(eid) ?? 0;
+      const atA = e.a === nodeId;
+      sampleProfile(prof, atA ? d : prof.length - d, sp);
+      ends.push({ frame: { x: sp.x, z: sp.z, y: sp.y, tx: atA ? sp.tx : -sp.tx, tz: atA ? sp.tz : -sp.tz }, width: type.width, sidewalk: type.sidewalk });
+    }
+    return buildJunctionMesh(n, this.nodeHeight(nodeId) + lift + 0.01, ends, this.heightAt);
+  }
+
   private handleChange(change: RoadChange): void {
     const affectedNodes = new Set<number>();
     for (const id of change.removed) {
@@ -180,7 +241,7 @@ export class RoadRenderer {
         continue;
       }
       const chunk = chunkOf(n.x, n.z);
-      const data = this.needsCap(nid) ? buildNodeMesh(n, this.nodeRadius(nid), this.nodeHeight(nid), this.heightAt) : null;
+      const data = this.junctionMesh(nid);
       this.nodes.set(nid, { chunk, data });
       this.dirty.add(chunk);
     }
@@ -194,7 +255,15 @@ export class RoadRenderer {
       const curve = this.graph.curveOf(e);
       const mid = e.poly.points[Math.floor(e.poly.points.length / 2)];
       const chunk = chunkOf(mid.x, mid.z);
-      const data = buildEdgeMesh(curve, type.width, this.nodeHeight(e.a), this.nodeHeight(e.b), this.heightAt, RoadRenderer.liftFor(e.typeId));
+      const degA = this.graph.nodes.get(e.a)?.edges.length ?? 0;
+      const degB = this.graph.nodes.get(e.b)?.edges.length ?? 0;
+      const data = buildEdgeMesh(curve, type.width, this.nodeHeight(e.a), this.nodeHeight(e.b), this.heightAt, RoadRenderer.liftFor(e.typeId), {
+        sidewalk: type.sidewalk,
+        trimA: this.setbackAt(e.a, eid),
+        trimB: this.setbackAt(e.b, eid),
+        wallA: degA === 1,
+        wallB: degB === 1,
+      });
       this.edges.set(eid, { chunk, typeId: e.typeId, a: e.a, b: e.b, data });
       this.dirty.add(chunk);
       this.pillarsDirty = true;

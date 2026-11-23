@@ -9,6 +9,11 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
 - **Görünür borular:** su ve kanalizasyon görünümünde borular 3D tüp olarak çizilir; su kaynağına bağlı ağ mavi,
   bağlı olmayan kırmızı, uçlarda vana. Yeni boru (veya elektrik hattı) mevcut bir hattın ucuna ya da ortasına
   başlatılıp bitirilebilir (T bağlantısı); kesişen hatlar da birleşir. Plan kartı kaç bağlantı yapılacağını gösterir.
+- **Daha detaylı yollar:** kavşaklarda yuvarlak disk yok; yollar kavşak girişinde kesilir ve aradaki yüzey kavisli
+  bordür köşeleriyle doldurulur. Kaldırımlar yükseltilmiş ve bordürlü, köşelerde kesintisiz devam eder; kavşak
+  girişlerinde yaya geçidi var; çıkmaz uçlar düz biter.
+- **Yol kenarı bölgeleme:** imleç yolun yanındaki boş alana gelince yolun yalnızca o tarafı seçilir (yolun üzerinde iki
+  taraf); tıklayın veya sürükleyerek birden çok sokağı bölgeleyin.
 - **Daha detaylı binalar:** her büyüyen bina şablonunun 6 görünümü var; renk yanında yapı da değişir (kırma / beşik /
   düz teras çatı, çatı penceresi, veranda, garaj ve araba, çit, bahçe havuzu, kademeli kuleler, köşe kanatları,
   balkonlar, çatı su depoları ve klima üniteleri, tabela ve tenteler, testere dişi çatılar, silolar, kamyonlar).
@@ -115,7 +120,7 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
 
 ### Aşama 3'te neler var
 - **Bölgeleme (Z):** Konut (yeşil), Ticaret (mavi, 100 nüfusta açılır), Sanayi (sarı, 250 nüfusta açılır).
-  "Yol boyunca" doldurma (parsel derinliği 1–4 hücre) veya fırça (1×1 / 3×3 / 5×5), "Kaldır" ile silme.
+  "Yol kenarı" seçimi (imlecin olduğu taraf, parsel derinliği 1–4 hücre; sürükleyerek birden çok sokak) veya fırça (1×1 / 3×3 / 5×5), "Kaldır" ile silme.
   Yalnızca yoldan 4 hücre içindeki, sahip olunan, kuru ve düz araziler bölgelenebilir; otoyol kenarı bölgelenemez.
   Farklı bölgeyle üzerine boyanan arsadaki bina yıkılır.
 - **Otomatik gelişim:** talep olan bölgede yola bakan uygun arsa bulunur, şablon seçilir, inşaat alanı kurulur ve bina tamamlanır.

@@ -40,3 +40,14 @@ describe('Pipe joining', () => {
     expect(components(l)).toBe(1);
   });
 });
+
+import { sideOf } from '../../src/game/tools/ZoneTool';
+
+describe('Roadside zoning', () => {
+  it('tells the two sides of a road apart, also around a bend', () => {
+    const road = [{ x: 0, z: 0 }, { x: 100, z: 0 }, { x: 100, z: 100 }];
+    expect(sideOf(road, 50, 10)).not.toBe(sideOf(road, 50, -10));
+    expect(sideOf(road, 50, 10)).toBe(sideOf(road, 90, 50));
+    expect(sideOf(road, 110, 50)).toBe(sideOf(road, 50, -10));
+  });
+});

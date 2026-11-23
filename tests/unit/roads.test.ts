@@ -11,7 +11,7 @@ import {
   type QuadBezier,
 } from '../../src/game/entities/road/curve';
 import { RoadGraph } from '../../src/game/entities/road/RoadGraph';
-import { buildEdgeMesh, nodeSurfaceHeight, roadProfile, BRIDGE_DECK } from '../../src/game/rendering/roads/roadGeometry';
+import { buildEdgeMesh, EDGE_ROW, nodeSurfaceHeight, roadProfile, BRIDGE_DECK } from '../../src/game/rendering/roads/roadGeometry';
 import { Occupancy, rasterizePolyline } from '../../src/game/world/Occupancy';
 
 const arc: QuadBezier = { p0: { x: 0, z: 0 }, p1: { x: 50, z: 100 }, p2: { x: 100, z: 0 } };
@@ -130,7 +130,7 @@ describe('road geometry', () => {
   it('builds a ribbon mesh with pillars for long bridges', () => {
     const heightAt = (x: number) => (x > 60 && x < 200 ? -4 : 6);
     const mesh = buildEdgeMesh(straightBezier({ x: 0, z: 0 }, { x: 260, z: 0 }), 12, 6, 6, heightAt);
-    expect(mesh.positions.length % 18).toBe(0);
+    expect(mesh.positions.length % (EDGE_ROW * 3)).toBe(0);
     expect(mesh.indices.length).toBeGreaterThan(0);
     expect(mesh.pillars.length).toBeGreaterThan(1);
   });

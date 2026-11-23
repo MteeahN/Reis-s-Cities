@@ -12,7 +12,9 @@ const ERASE_COLOR = 0xff6b6b;
 /**
  * Zoning.
  *  - Brush: press and drag to paint square brushes of 1/3/5 cells.
- *  - Fill: click a road to zone both sides up to the chosen parcel depth.
+ *  - Roadside: point at the empty land beside a road — that side of the road
+ *    is selected up to the chosen parcel depth (both sides when pointing at
+ *    the road itself). Click, or press and drag along several streets.
  * Zone "None" erases. Zoning is free; repainting a lot with a different zone
  * replaces the growable building on it.
  */
@@ -66,10 +68,17 @@ export class ZoneTool implements Tool {
       }
       return out;
     }
-    const hit = city.roads.nearestEdge(ground.x, ground.z, 3, true);
+    const reach = this.state.depth * CELL_SIZE;
+    const hit = city.roads.nearestEdge(ground.x, ground.z, reach + 8, true);
     if (!hit) return [];
-    const width = getRoadType(hit.edge.typeId).width;
-    return rasterizePolyline(hit.edge.poly.points, width / 2 + this.state.depth * CELL_SIZE).filter(keep);
+    const half = getRoadType(hit.edge.typeId).width / 2;
+    if (hit.dist > half + reach) return [];
+    const pts = hit.edge.poly.points;
+    const cells = rasterizePolyline(pts, half + reach).filter(keep);
+    if (hit.dist <= half) return cells;
+    // Only the side of the road the cursor is on.
+    const side = sideOf(pts, ground.x, ground.z);
+    return cells.filter((k) => sideOf(pts, ((k % GRID_CELLS) + 0.5) * CELL_SIZE, (Math.floor(k / GRID_CELLS) + 0.5) * CELL_SIZE) === side);
   }
 
   private refresh(): void {
@@ -107,14 +116,14 @@ export class ZoneTool implements Tool {
   onPointerMove(_p: PointerInfo, ground: Vector3 | null): void {
     this.lastGround = ground ? ground.clone() : null;
     this.refresh();
-    if (this.painting && this.state.mode === 'brush') this.apply();
+    if (this.painting) this.apply();
   }
 
   onPointerDown(p: PointerInfo, ground: Vector3 | null): void {
     if (p.button !== MouseButton.Left || !ground) return;
     this.lastGround = ground.clone();
     this.refresh();
-    if (this.state.mode === 'brush') this.painting = true;
+    this.painting = true;
     this.apply();
   }
 
@@ -135,4 +144,25 @@ export class ZoneTool implements Tool {
   }
 
   update(): void {}
+}
+
+/** Which side (+1 / −1) of a polyline the point lies on, measured at its closest segment. */
+export function sideOf(points: { x: number; z: number }[], x: number, z: number): number {
+  let best = Infinity;
+  let sign = 1;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+    const px = a.x + dx * t;
+    const pz = a.z + dz * t;
+    const d = (x - px) ** 2 + (z - pz) ** 2;
+    if (d < best) {
+      best = d;
+      sign = dx * (z - a.z) - dz * (x - a.x) >= 0 ? 1 : -1;
+    }
+  }
+  return sign;
 }
