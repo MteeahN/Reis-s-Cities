@@ -1,4 +1,4 @@
-import type { RoadMode, ToolId, ZoneToolState } from '../../game/core/events';
+import type { DemolishFilter, RoadMode, ToolId, ZoneToolState } from '../../game/core/events';
 import { ZONES } from '../../game/data/zones';
 import { buildingsInGroup, type BuildingDef } from '../../game/data/buildings';
 import { LINE_TYPES } from '../../game/data/infrastructure';
@@ -90,6 +90,30 @@ function RoadPicker() {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+const DEMOLISH_FILTERS: { id: DemolishFilter; name: string; hint: string; icon: IconName }[] = [
+  { id: 'all', name: 'Hepsi', hint: 'İmlecin altındaki her şey (hattın üzerinde: hat)', icon: 'demolish' },
+  { id: 'road', name: 'Yollar', hint: 'Yalnızca yol parçaları', icon: 'road' },
+  { id: 'building', name: 'Binalar', hint: 'Yalnızca binalar', icon: 'building' },
+  { id: 'powerline', name: 'Elektrik hatları', hint: 'Yalnızca elektrik hatları (yolun üzerindekiler dahil)', icon: 'power' },
+  { id: 'pipe', name: 'Borular', hint: 'Yalnızca su boruları (su görünümü açılır)', icon: 'water' },
+];
+
+function DemolishPicker() {
+  const filter = useGameStore((s) => s.demolishFilter);
+  return (
+    <div className="subtoolbar panel" data-testid="demolish-picker">
+      <div className="mode-group row" role="group" aria-label="Yıkılacak">
+        {DEMOLISH_FILTERS.map((f) => (
+          <button key={f.id} className={`mode-btn ${filter === f.id ? 'active' : ''}`} onClick={() => getGame()?.setDemolishFilter(f.id)} title={f.hint} data-testid={`demolish-filter-${f.id}`}>
+            <Icon name={f.icon} size={14} /> <span>{f.name}</span>
+          </button>
+        ))}
+      </div>
+      <span className="muted small">Tab: değiştir</span>
     </div>
   );
 }
@@ -284,6 +308,7 @@ export function Toolbar() {
       {tool === 'road' && <RoadPicker />}
       {tool === 'building' && <BuildingPicker />}
       {tool === 'zone' && <ZonePicker />}
+      {tool === 'demolish' && <DemolishPicker />}
       {(tool === 'power' || tool === 'powerline') && <InfraPicker group="power" lineKind="power" />}
       {(tool === 'water' || tool === 'pipe') && <InfraPicker group="water" lineKind="pipe" />}
       {tool === 'services' && <InfraPicker group="service" />}

@@ -101,6 +101,8 @@ export class Input {
   private handleKeyDown = (e: KeyboardEvent) => {
     if (isTyping(e.target)) return;
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+    // Tab is a game key only while the map has focus (HUD buttons keep keyboard navigation).
+    if (e.code === 'Tab' && (e.target === document.body || (e.target as HTMLElement | null)?.tagName === 'CANVAS')) e.preventDefault();
     const repeat = e.repeat;
     this.keys.add(e.code);
     if (repeat) return;

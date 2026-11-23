@@ -81,7 +81,7 @@ function GraphicsTab({ g }: { g: GraphicsSettings }) {
       <Slider id="gfx-resolution" label="Çözünürlük ölçeği" value={g.resolution} min={0.5} max={2} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setG({ resolution: v })} />
       <Slider id="gfx-vegetation" label="Ağaç detay mesafesi" value={g.vegetationDistance} min={150} max={1000} step={10} format={(v) => `${v} m`} onChange={(v) => setG({ vegetationDistance: v })} />
       <Slider id="gfx-detail" label="Bina detay mesafesi" value={g.buildingDetail} min={200} max={1600} step={20} format={(v) => `${v} m`} onChange={(v) => setG({ buildingDetail: v })} />
-      <Slider id="gfx-vehicles" label="En fazla araç" value={g.vehicles} min={0} max={600} step={10} format={(v) => `${v}`} onChange={(v) => setG({ vehicles: v })} />
+      <Slider id="gfx-vehicles" label="En fazla araç / yaya" value={g.vehicles} min={0} max={600} step={10} format={(v) => `${v}`} onChange={(v) => setG({ vehicles: v })} />
       <label className="toggle">
         <input type="checkbox" checked={g.bloom} onChange={() => setG({ bloom: !g.bloom })} data-testid="gfx-bloom" />
         <span>Işık parlaması (bloom)</span>

@@ -23,6 +23,7 @@ import { City } from '../systems/City';
 import { ZoneOverlay } from '../rendering/ZoneOverlay';
 import { PowerLineRenderer } from '../rendering/PowerLineRenderer';
 import { PipeRenderer } from '../rendering/PipeRenderer';
+import { PedestrianRenderer } from '../rendering/PedestrianRenderer';
 import { ProblemIcons } from '../rendering/ProblemIcons';
 import { InfoLayerView } from '../rendering/InfoLayerView';
 import { TrafficOverlay } from '../rendering/TrafficOverlay';
@@ -30,7 +31,7 @@ import { VehicleRenderer } from '../rendering/VehicleRenderer';
 import type { InfoLayerId } from '../rendering/InfoLayers';
 import { SERVICE_KINDS } from '../simulation/Services';
 import { CitySimulation } from '../simulation/CitySimulation';
-import type { ZoneToolState } from './events';
+import type { ZoneToolState, DemolishFilter } from './events';
 import { buildingCapacity } from '../data/buildings';
 import { ZoneType } from '../data/zones';
 import type { TaxKind } from '../data/economy';
@@ -93,6 +94,7 @@ export class Game {
   private citySim!: CitySimulation;
   private powerLineRenderer!: PowerLineRenderer;
   private pipeRenderer!: PipeRenderer;
+  private pedestrians!: PedestrianRenderer;
   private problemIcons!: ProblemIcons;
   private infoView!: InfoLayerView;
   private trafficOverlay!: TrafficOverlay;
@@ -197,7 +199,8 @@ export class Game {
     this.infoView = new InfoLayerView(this.city, this.world.terrainMaterial, this.buildingRenderer);
     this.trafficOverlay = new TrafficOverlay(this.city.traffic, this.city.roads, this.roadRenderer);
     this.vehicles = new VehicleRenderer(this.city.traffic, this.city.roads, this.roadRenderer);
-    this.scene.add(this.powerLineRenderer.group, this.problemIcons.group, this.trafficOverlay.mesh, this.vehicles.group);
+    this.pedestrians = new PedestrianRenderer(this.city.roads, this.city.buildings, this.city.occupancy, this.roadRenderer);
+    this.scene.add(this.powerLineRenderer.group, this.problemIcons.group, this.trafficOverlay.mesh, this.vehicles.group, this.pedestrians.group);
     this.city.onUtilities((u) => {
       this.pipeRenderer.setSupply(u.pipeSupplied);
       this.refreshOverlays();
@@ -244,6 +247,7 @@ export class Game {
         this.toolLayer = layer;
         this.applyLayer();
       },
+      pipesVisible: () => this.pipeRenderer.visible,
       roadInfo: (id) => this.roadInfo(id),
       buildingInfo: (id) => this.buildingInfo(id),
     });
@@ -471,7 +475,8 @@ export class Game {
     this.raf = requestAnimationFrame(this.frame);
     const rawDt = (now - this.lastFrame) / 1000;
     this.lastFrame = now;
-    const dt = Math.min(rawDt, 0.1);
+    // Clamped both ways: long stalls (hidden tab) and out-of-order timestamps must not explode the smoothing.
+    const dt = Math.max(0, Math.min(rawDt, 0.1));
     this.renderer.info.reset();
 
     // Simulation (fixed step, speed-scaled, independent of rendering)
@@ -499,6 +504,7 @@ export class Game {
     this.tools.update(dt);
     this.roadRenderer.update();
     this.vehicles.update(dt, this.sim.speed, this.cameraCtl.target.x, this.cameraCtl.target.z, this.cameraCtl.distance);
+    this.pedestrians.update(dt, this.sim.speed, this.minuteOfDay() / 60, this.cameraCtl.target.x, this.cameraCtl.target.z, this.cameraCtl.distance);
     this.zoneOverlay.update();
     this.city.refreshUtilities();
     // Keep the inspector's live numbers (residents, construction…) fresh.
@@ -756,6 +762,7 @@ export class Game {
     this.furniture.setShadows(shadows);
     this.world.vegetation.lodDistance = g.vegetationDistance;
     this.vehicles.setMax(g.vehicles);
+    this.pedestrians.setMax(g.vehicles);
     this.post.setEnabled(g.bloom);
     this.dayNight.mode = g.dayNight;
     if (!initial) this.resize();
@@ -844,6 +851,10 @@ export class Game {
     if (sel.kind === 'cell') this.cameraCtl.focusOn(sel.cell.worldX, sel.cell.worldZ, 160);
     else if (sel.kind === 'road') this.cameraCtl.focusOn(sel.road.centerX, sel.road.centerZ, Math.max(160, sel.road.length * 1.2));
     else this.cameraCtl.focusOn(sel.building.centerX, sel.building.centerZ, 140);
+  }
+
+  setDemolishFilter(filter: DemolishFilter): void {
+    this.tools.demolish.setFilter(filter);
   }
 
   setRoadMode(mode: RoadMode): void {
@@ -1064,6 +1075,7 @@ export class Game {
     this.roadRenderer?.dispose();
     this.powerLineRenderer?.dispose();
     this.pipeRenderer?.dispose();
+    this.pedestrians?.dispose();
     this.buildingRenderer?.dispose();
     this.zoneOverlay?.dispose();
     this.trafficOverlay?.dispose();

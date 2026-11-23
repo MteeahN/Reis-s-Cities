@@ -14,6 +14,21 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   girişlerinde yaya geçidi var; çıkmaz uçlar düz biter.
 - **Yol kenarı bölgeleme:** imleç yolun yanındaki boş alana gelince yolun yalnızca o tarafı seçilir (yolun üzerinde iki
   taraf); tıklayın veya sürükleyerek birden çok sokağı bölgeleyin.
+- **Yayalar:** kaldırımlarda yürüyen insanlar. Bir sokakta kaç kişinin yürüdüğü, o sokağın kenarındaki binalarda
+  gerçekten yaşayan/çalışan insan sayısına ve günün saatine bağlıdır (gece neredeyse boş, işe gidiş-dönüş saatlerinde
+  kalabalık); her figür birkaç kişiyi temsil eder. Kavşaklarda başka sokağa geçerler. Sayıları "En fazla araç / yaya"
+  ayarıyla sınırlanır.
+- **Daha detaylı araçlar:** yan profilden şekillendirilmiş gövdeler (eğimli kaput ve ön cam, tavan, bagaj), jantlı
+  tekerlekler, aynalar, ızgara, plakalar, sinyal lambaları; kamyonlarda kabin, yakıt deposu, nervürlü kasa, yuvarlak tank.
+- **Yıkım filtresi:** Hepsi / Yollar / Binalar / Elektrik hatları / Borular (Tab ile değiştirilir). "Hepsi"de imleç
+  hattın üzerindeyse yolun üstündeki elektrik hattı seçilir; borular su görünümü açıkken seçilir.
+- **Detaylı simge ve hizmet binaları:** saat kulesi (pilastırlar, dört kadran ve akrep-yelkovan, açık çan katı ve çan,
+  bakır külah), belediye binası (sütunlu giriş, alınlık, kubbe kasnağı, fener, bayraklar, havuzlar), meydan, anıt;
+  polis, itfaiye (araç kapıları, hortum kulesi, itfaiye araçları), hastane (helikopter pisti, acil girişi, ambulanslar),
+  okullar (oyun alanı, saha, spor salonu), çöp tesisi, parklar, santral (soğutma kulesi, bacalar), rüzgâr türbini,
+  su kulesi, arıtma tesisi. Modeller `src/game/data/models/` içinde.
+- **Yaya çeşitliliği:** pantolonlu, elbiseli, sırt çantalı, el çantalı figürler; çocuklar ve yaşlılar (daha yavaş,
+  gri saçlı); ten, saç ve kıyafet renkleri kişi başına; bazıları çift yürür, çocuklar hep bir yetişkinle.
 - **Daha detaylı binalar:** her büyüyen bina şablonunun 6 görünümü var; renk yanında yapı da değişir (kırma / beşik /
   düz teras çatı, çatı penceresi, veranda, garaj ve araba, çit, bahçe havuzu, kademeli kuleler, köşe kanatları,
   balkonlar, çatı su depoları ve klima üniteleri, tabela ve tenteler, testere dişi çatılar, silolar, kamyonlar).

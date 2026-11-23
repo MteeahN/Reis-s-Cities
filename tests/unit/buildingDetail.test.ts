@@ -39,3 +39,23 @@ describe('Growable building detail', () => {
     }
   });
 });
+
+describe('Authored building models', () => {
+  const authored = ALL_BUILDINGS.filter((d) => !d.spec && d.model.length > 0);
+  it('stay inside their lot and are richly detailed', () => {
+    const bad: string[] = [];
+    for (const def of authored) {
+      const W = def.footprint[0] * CELL_SIZE;
+      const D = def.footprint[1] * CELL_SIZE;
+      expect(def.model.length, def.id).toBeGreaterThanOrEqual(12);
+      for (const p of def.model) {
+        if (p.rot && (Math.abs(p.rot[0]) > 0 || Math.abs(p.rot[2]) > 0)) continue;
+        const turned = p.rot && Math.abs(p.rot[1]) === 90;
+        const hx = (turned ? p.size[2] : p.size[0]) / 2;
+        const hz = (turned ? p.size[0] : p.size[2]) / 2;
+        if (Math.abs(p.pos[0]) + hx > W / 2 + 0.4 || Math.abs(p.pos[2]) + hz > D / 2 + 0.4) bad.push(`${def.id} ${p.shape} @${p.pos.map((n) => n.toFixed(1))}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});

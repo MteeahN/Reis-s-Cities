@@ -49,6 +49,7 @@ export async function startGame(container: HTMLElement): Promise<void> {
   ev.on('buildingType', (buildingType) => set({ buildingType }));
   ev.on('buildingPlan', (buildingPlan) => set({ buildingPlan }));
   ev.on('demolishTarget', (demolishTarget) => set({ demolishTarget }));
+  ev.on('demolishFilter', (demolishFilter) => set({ demolishFilter }));
   ev.on('budget', (budget) => set({ budget }));
   ev.on('cityStats', (cityStats) => set({ cityStats }));
   ev.on('zoneTool', (zoneTool) => set({ zoneTool }));

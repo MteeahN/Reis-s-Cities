@@ -1,6 +1,6 @@
 import type { Vector3 } from 'three';
 import { CELL_SIZE } from '../core/config';
-import type { DemolishTarget } from '../core/events';
+import type { DemolishFilter, DemolishTarget } from '../core/events';
 import { MouseButton, type PointerInfo } from '../core/Input';
 import { getBuilding } from '../data/buildings';
 import { getRoadType } from '../data/roads';
@@ -9,22 +9,43 @@ import { sampleBezier } from '../entities/road/curve';
 import { RoadPreview } from './placement/RoadPreview';
 import type { Tool, ToolContext } from './Tool';
 
-/** Bulldozer: hover highlights a road segment or building in red, click removes it (50% refund). */
+/**
+ * Bulldozer: hover highlights a road segment, building, power line or pipe in
+ * red, click removes it (refund). A filter limits picking to one kind. With
+ * "all", a power line wins over the road under it when the cursor is on the
+ * line, and pipes are picked only while they are visible (water view).
+ */
 export class DemolishTool implements Tool {
   readonly id = 'demolish' as const;
   private readonly preview = new RoadPreview();
   private target: DemolishTarget | null = null;
   private downX = 0;
   private downY = 0;
+  filter: DemolishFilter = 'all';
 
   constructor(private readonly ctx: ToolContext) {
     ctx.overlay.add(this.preview.group);
   }
 
-  activate(): void {}
+  activate(): void {
+    this.applyLayer();
+  }
+
+  setFilter(f: DemolishFilter): void {
+    this.filter = f;
+    this.ctx.events.emit('demolishFilter', f);
+    this.applyLayer();
+    this.setTarget(null);
+  }
+
+  /** Pipes are underground: show the water view while pipes may be picked. */
+  private applyLayer(): void {
+    this.ctx.showLayer(this.filter === 'pipe' ? 'water' : this.filter === 'powerline' ? 'power' : null);
+  }
 
   deactivate(): void {
     this.setTarget(null);
+    this.ctx.showLayer(null);
   }
 
   private setTarget(t: DemolishTarget | null): void {
@@ -39,20 +60,40 @@ export class DemolishTool implements Tool {
   private find(ground: Vector3 | null): DemolishTarget | null {
     if (!ground) return null;
     const city = this.ctx.city;
+    const f = this.filter;
+    const allow = (k: DemolishFilter) => f === 'all' || f === k;
+    const powerTarget = (radius: number): DemolishTarget | null => {
+      const line = city.powerLines.nearest(ground.x, ground.z, radius);
+      return line ? { kind: 'powerline', id: line.id, name: LINE_TYPES.power.name, refund: city.lineRefund('power', line.id) } : null;
+    };
+    const pipeTarget = (radius: number): DemolishTarget | null => {
+      const pipe = city.pipes.nearest(ground.x, ground.z, radius);
+      return pipe ? { kind: 'pipe', id: pipe.id, name: LINE_TYPES.pipe.name, refund: city.lineRefund('pipe', pipe.id) } : null;
+    };
+    if (f === 'powerline') return powerTarget(8);
+    if (f === 'pipe') return pipeTarget(8);
+    // A power line hangs above roads and lots: right on the line, the line is the target.
+    if (f === 'all') {
+      const onLine = powerTarget(2.5);
+      if (onLine) return onLine;
+      if (this.ctx.pipesVisible()) {
+        const onPipe = pipeTarget(2.5);
+        if (onPipe) return onPipe;
+      }
+    }
     const i = Math.floor(ground.x / CELL_SIZE);
     const j = Math.floor(ground.z / CELL_SIZE);
-    const bid = city.occupancy.buildingAt(i, j);
+    const bid = allow('building') ? city.occupancy.buildingAt(i, j) : 0;
     if (bid) {
       const b = city.buildings.items.get(bid)!;
       return { kind: 'building', id: bid, name: getBuilding(b.defId).name, refund: city.buildingRefund(bid) };
     }
-    const hit = city.roads.nearestEdge(ground.x, ground.z, 1, true);
-    if (hit) return { kind: 'road', id: hit.edge.id, name: getRoadType(hit.edge.typeId).name, refund: city.roadRefund(hit.edge.id) };
-    const line = city.powerLines.nearest(ground.x, ground.z, 4);
-    if (line) return { kind: 'powerline', id: line.id, name: LINE_TYPES.power.name, refund: city.lineRefund('power', line.id) };
-    const pipe = city.pipes.nearest(ground.x, ground.z, 4);
-    if (pipe) return { kind: 'pipe', id: pipe.id, name: LINE_TYPES.pipe.name, refund: city.lineRefund('pipe', pipe.id) };
-    return null;
+    if (allow('road')) {
+      const hit = city.roads.nearestEdge(ground.x, ground.z, f === 'road' ? 4 : 1, true);
+      if (hit) return { kind: 'road', id: hit.edge.id, name: getRoadType(hit.edge.typeId).name, refund: city.roadRefund(hit.edge.id) };
+    }
+    if (f !== 'all') return null;
+    return powerTarget(4) ?? (this.ctx.pipesVisible() ? pipeTarget(4) : null);
   }
 
   private highlight(t: DemolishTarget): void {
@@ -102,7 +143,13 @@ export class DemolishTool implements Tool {
     this.onPointerMove(p, ground);
   }
 
-  onKey(): boolean {
+  onKey(code: string): boolean {
+    // Tab cycles the filter.
+    if (code === 'Tab') {
+      const order: DemolishFilter[] = ['all', 'road', 'building', 'powerline', 'pipe'];
+      this.setFilter(order[(order.indexOf(this.filter) + 1) % order.length]);
+      return true;
+    }
     return false;
   }
 

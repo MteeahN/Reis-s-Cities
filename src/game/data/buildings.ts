@@ -10,6 +10,7 @@
 import { proceduralParts, type ProceduralSpec } from '../entities/building/ProceduralBuildings';
 import { ZoneType, type ZoneKind } from './zones';
 import { INFRA_BUILDINGS } from './infrastructure';
+import { cityHallModel, clockTowerModel, monumentModel, plazaModel } from './models/landmarks';
 
 export type BuildingCategory = 'residential' | 'commercial' | 'industrial' | 'office' | 'civic' | 'landmark';
 
@@ -96,14 +97,6 @@ export interface ServiceSpec {
   capacity: number;
 }
 
-const STONE = '#e7dfcf';
-const STONE_DARK = '#b9b09d';
-const ROOF = '#5f6e7d';
-const COPPER = '#7fae9c';
-const GOLD = '#c9a35a';
-const PAVING = '#cbc2ae';
-const GREEN = '#5f8f3a';
-const WATER = '#4d8fb0';
 
 export const BUILDINGS: readonly BuildingDef[] = [
   {
@@ -125,24 +118,7 @@ export const BUILDINGS: readonly BuildingDef[] = [
     maxLevel: 1,
     unlockPopulation: 0,
     landValueEffect: { amount: 20, radius: 8 },
-    model: [
-      { shape: 'box', size: [22, 1.2, 21], pos: [0, 0, 0], color: STONE_DARK },
-      { shape: 'box', size: [19, 9.5, 12], pos: [0, 1.2, -2.5], color: STONE, facade: true },
-      { shape: 'box', size: [19.4, 0.8, 12.4], pos: [0, 10.7, -2.5], color: STONE_DARK },
-      { shape: 'box', size: [6, 7, 6], pos: [0, 11.5, -2.5], color: STONE, facade: true },
-      { shape: 'dome', size: [6.4, 4.2, 6.4], pos: [0, 18.5, -2.5], color: COPPER, segments: 20 },
-      { shape: 'cylinder', size: [0.25, 3, 0.25], pos: [0, 22.6, -2.5], color: GOLD },
-      { shape: 'box', size: [12, 0.6, 5], pos: [0, 1.2, 6], color: STONE_DARK },
-      { shape: 'cylinder', size: [0.9, 7.4, 0.9], pos: [-5, 1.8, 7.6], color: STONE, segments: 10 },
-      { shape: 'cylinder', size: [0.9, 7.4, 0.9], pos: [-2.5, 1.8, 7.6], color: STONE, segments: 10 },
-      { shape: 'cylinder', size: [0.9, 7.4, 0.9], pos: [0, 1.8, 7.6], color: STONE, segments: 10 },
-      { shape: 'cylinder', size: [0.9, 7.4, 0.9], pos: [2.5, 1.8, 7.6], color: STONE, segments: 10 },
-      { shape: 'cylinder', size: [0.9, 7.4, 0.9], pos: [5, 1.8, 7.6], color: STONE, segments: 10 },
-      { shape: 'box', size: [12.6, 0.9, 5.2], pos: [0, 9.2, 5.9], color: STONE_DARK },
-      { shape: 'gable', size: [5.2, 2.4, 12.6], pos: [0, 10.1, 5.9], color: STONE, rot: [0, 90, 0] },
-      { shape: 'gable', size: [19.4, 2.2, 12.4], pos: [0, 11.5, -2.5], color: ROOF },
-      { shape: 'box', size: [8, 0.3, 3], pos: [0, 1.2, 9.5], color: STONE_DARK },
-    ],
+    model: cityHallModel(),
   },
   {
     id: 'plaza',
@@ -163,24 +139,7 @@ export const BUILDINGS: readonly BuildingDef[] = [
     maxLevel: 1,
     unlockPopulation: 0,
     landValueEffect: { amount: 25, radius: 6 },
-    model: [
-      { shape: 'box', size: [15.6, 0.35, 15.6], pos: [0, 0, 0], color: PAVING },
-      { shape: 'cylinder', size: [6.4, 0.7, 6.4], pos: [0, 0.35, 0], color: STONE_DARK, segments: 24 },
-      { shape: 'cylinder', size: [5.6, 0.72, 5.6], pos: [0, 0.36, 0], color: WATER, segments: 24 },
-      { shape: 'cylinder', size: [0.8, 2.4, 0.8], pos: [0, 0.35, 0], color: STONE, segments: 10 },
-      { shape: 'cylinder', size: [2, 0.3, 2], pos: [0, 2.75, 0], color: STONE, segments: 16 },
-      { shape: 'box', size: [2, 0.8, 2], pos: [-6, 0.35, -6], color: STONE_DARK },
-      { shape: 'dome', size: [1.9, 1.3, 1.9], pos: [-6, 1.15, -6], color: GREEN },
-      { shape: 'box', size: [2, 0.8, 2], pos: [6, 0.35, -6], color: STONE_DARK },
-      { shape: 'dome', size: [1.9, 1.3, 1.9], pos: [6, 1.15, -6], color: GREEN },
-      { shape: 'box', size: [2, 0.8, 2], pos: [-6, 0.35, 6], color: STONE_DARK },
-      { shape: 'dome', size: [1.9, 1.3, 1.9], pos: [-6, 1.15, 6], color: GREEN },
-      { shape: 'box', size: [2, 0.8, 2], pos: [6, 0.35, 6], color: STONE_DARK },
-      { shape: 'dome', size: [1.9, 1.3, 1.9], pos: [6, 1.15, 6], color: GREEN },
-      { shape: 'box', size: [3, 0.45, 0.7], pos: [0, 0.35, -5.6], color: '#7a5a3c' },
-      { shape: 'box', size: [3, 0.45, 0.7], pos: [-5.6, 0.35, 0], color: '#7a5a3c', rot: [0, 90, 0] },
-      { shape: 'box', size: [3, 0.45, 0.7], pos: [5.6, 0.35, 0], color: '#7a5a3c', rot: [0, 90, 0] },
-    ],
+    model: plazaModel(),
   },
   {
     id: 'clock_tower',
@@ -201,19 +160,7 @@ export const BUILDINGS: readonly BuildingDef[] = [
     maxLevel: 1,
     unlockPopulation: 0,
     landValueEffect: { amount: 15, radius: 5 },
-    model: [
-      { shape: 'box', size: [6, 1, 6], pos: [0, 0, 0], color: STONE_DARK },
-      { shape: 'box', size: [3.8, 15, 3.8], pos: [0, 1, 0], color: '#d9c7a8' },
-      { shape: 'box', size: [4.4, 0.6, 4.4], pos: [0, 16, 0], color: STONE_DARK },
-      { shape: 'box', size: [4.2, 3.4, 4.2], pos: [0, 16.6, 0], color: '#efe6d2' },
-      { shape: 'cylinder', size: [2.6, 0.2, 2.6], pos: [0, 16.9, 2.1], color: '#fbf7ec', rot: [90, 0, 0], segments: 20 },
-      { shape: 'cylinder', size: [2.6, 0.2, 2.6], pos: [0, 16.9, -2.1], color: '#fbf7ec', rot: [90, 0, 0], segments: 20 },
-      { shape: 'cylinder', size: [2.6, 0.2, 2.6], pos: [2.1, 16.9, 0], color: '#fbf7ec', rot: [0, 0, 90], segments: 20 },
-      { shape: 'cylinder', size: [2.6, 0.2, 2.6], pos: [-2.1, 16.9, 0], color: '#fbf7ec', rot: [0, 0, 90], segments: 20 },
-      { shape: 'box', size: [4.6, 0.5, 4.6], pos: [0, 20, 0], color: STONE_DARK },
-      { shape: 'pyramid', size: [4.4, 5, 4.4], pos: [0, 20.5, 0], color: ROOF },
-      { shape: 'cylinder', size: [0.18, 1.6, 0.18], pos: [0, 25.5, 0], color: GOLD },
-    ],
+    model: clockTowerModel(),
   },
   {
     id: 'monument',
@@ -234,13 +181,7 @@ export const BUILDINGS: readonly BuildingDef[] = [
     maxLevel: 1,
     unlockPopulation: 0,
     landValueEffect: { amount: 12, radius: 4 },
-    model: [
-      { shape: 'box', size: [7, 0.5, 7], pos: [0, 0, 0], color: PAVING },
-      { shape: 'box', size: [5, 0.6, 5], pos: [0, 0.5, 0], color: STONE_DARK },
-      { shape: 'box', size: [3.4, 0.7, 3.4], pos: [0, 1.1, 0], color: STONE },
-      { shape: 'box', size: [1.6, 9, 1.6], pos: [0, 1.8, 0], color: '#d8d2c4' },
-      { shape: 'pyramid', size: [1.6, 1.4, 1.6], pos: [0, 10.8, 0], color: GOLD },
-    ],
+    model: monumentModel(),
   },
 ];
 

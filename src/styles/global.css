@@ -686,6 +686,10 @@ kbd {
   flex-direction: column;
   gap: 3px;
 }
+.mode-group.row {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
 .mode-btn {
   display: flex;
   align-items: center;

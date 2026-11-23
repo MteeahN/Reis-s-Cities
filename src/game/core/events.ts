@@ -175,6 +175,9 @@ export interface BuildingPlanView {
   d: number;
 }
 
+/** What the bulldozer may pick: everything, or one kind only. */
+export type DemolishFilter = 'all' | 'road' | 'building' | 'powerline' | 'pipe';
+
 export interface DemolishTarget {
   kind: 'road' | 'building' | 'powerline' | 'pipe';
   id: number;
@@ -204,6 +207,7 @@ export type GameEvents = {
   buildingType: string;
   buildingPlan: BuildingPlanView | null;
   demolishTarget: DemolishTarget | null;
+  demolishFilter: DemolishFilter;
   budget: number;
   cityStats: CityStats;
   tool: ToolId;

@@ -210,3 +210,28 @@ describe('Ambience', () => {
     expect(channelGain({ ...a, muted: true }, 'effects')).toBe(0);
   });
 });
+
+import { walkingShare } from '../../src/game/rendering/PedestrianRenderer';
+
+describe('Pedestrians', () => {
+  it('almost nobody walks at night; commute hours are busiest', () => {
+    expect(walkingShare(3)).toBeLessThan(0.03);
+    expect(walkingShare(8)).toBeGreaterThan(walkingShare(14));
+    expect(walkingShare(18)).toBeGreaterThan(walkingShare(23));
+    for (let h = 0; h < 24; h += 0.5) expect(walkingShare(h)).toBeLessThan(0.3);
+  });
+});
+
+import { BODIES, figure } from '../../src/game/rendering/PedestrianRenderer';
+
+describe('Pedestrian figures', () => {
+  it('every build and pose has coloured body parts', () => {
+    for (const b of BODIES) {
+      for (const s of [-1, 0, 1]) {
+        const g = figure(b, s);
+        const parts = new Set(Array.from(g.getAttribute('aPart').array as Float32Array));
+        for (const id of [1, 2, 3, 4]) expect(parts.has(id), `${b} part ${id}`).toBe(true);
+      }
+    }
+  });
+});
