@@ -15,6 +15,8 @@ export interface GraphicsSettings {
   buildingDetail: number;
   bloom: boolean;
   dayNight: DayNightMode;
+  /** Street lamp brightness at night, 0–1 (independent of presets). */
+  streetLights: number;
 }
 
 export interface AudioSettings {
@@ -38,7 +40,7 @@ export interface Settings {
   gameplay: GameplaySettings;
 }
 
-export function presetValues(level: QualityLevel): Omit<GraphicsSettings, 'preset' | 'dayNight'> {
+export function presetValues(level: QualityLevel): Omit<GraphicsSettings, 'preset' | 'dayNight' | 'streetLights'> {
   const p = QUALITY_PRESETS[level];
   return {
     shadows: p.shadows,
@@ -59,12 +61,12 @@ export function presetValues(level: QualityLevel): Omit<GraphicsSettings, 'prese
 export function nextGraphics(cur: GraphicsSettings, patch: Partial<GraphicsSettings>, autoLevel: QualityLevel): GraphicsSettings {
   const next: GraphicsSettings = { ...cur, ...patch };
   if (patch.preset && patch.preset !== 'custom') return { ...next, ...presetValues(patch.preset === 'auto' ? autoLevel : patch.preset) };
-  if (Object.keys(patch).some((k) => k !== 'preset' && k !== 'dayNight')) next.preset = 'custom';
+  if (Object.keys(patch).some((k) => k !== 'preset' && k !== 'dayNight' && k !== 'streetLights')) next.preset = 'custom';
   return next;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  graphics: { preset: 'auto', ...presetValues('high'), dayNight: 'cycle' },
+  graphics: { preset: 'auto', ...presetValues('high'), dayNight: 'cycle', streetLights: 0.45 },
   audio: { master: 0.8, ambience: 0.7, effects: 0.8, muted: false },
   gameplay: { autosave: true, autosaveMinutes: 3 },
 };
@@ -92,6 +94,7 @@ export function sanitizeSettings(raw: unknown): Settings {
       buildingDetail: clamp(g.buildingDetail, 200, 1600, dg.buildingDetail),
       bloom: typeof g.bloom === 'boolean' ? g.bloom : dg.bloom,
       dayNight: oneOf(g.dayNight, ['cycle', 'day', 'night'] as const, dg.dayNight),
+      streetLights: clamp(g.streetLights, 0, 1, dg.streetLights),
     },
     audio: {
       master: clamp(a.master, 0, 1, da.master),

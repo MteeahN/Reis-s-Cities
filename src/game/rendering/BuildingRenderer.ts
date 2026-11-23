@@ -1,6 +1,6 @@
 import { BoxGeometry, Color, Group, InstancedBufferAttribute, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Vector3, type BufferGeometry, type Material } from 'three';
 import { CELL_SIZE } from '../core/config';
-import { ALL_BUILDINGS, getBuilding, type BuildingDef, type BuildingPart } from '../data/buildings';
+import { getBuilding, type BuildingDef, type BuildingPart } from '../data/buildings';
 import { buildingGeometry, buildingMaterials, variantCount } from '../entities/building/BuildingModels';
 import type { BuildingChange, BuildingRegistry, PlacedBuilding } from '../entities/building/BuildingRegistry';
 
@@ -160,6 +160,7 @@ export class BuildingRenderer {
   readonly group = new Group();
   /** Pools per "defId#variant". */
   private readonly pools = new Map<string, PoolSet>();
+  private readonly mats: { plain: MeshStandardMaterial; facade: MeshStandardMaterial };
   private readonly detailPools: InstancePool[] = [];
   private detailVisible = true;
   private litFn: ((b: PlacedBuilding) => number) | null = null;
@@ -174,19 +175,7 @@ export class BuildingRenderer {
   constructor(private readonly registry: BuildingRegistry) {
     this.group.name = 'buildings';
     const mats = buildingMaterials();
-    for (const def of ALL_BUILDINGS) {
-      for (let v = 0; v < variantCount(def); v++) {
-        const g = buildingGeometry(def, v);
-        const set: PoolSet = { all: [], facade: null, detail: null };
-        if (g.plain) set.all.push(new InstancePool(g.plain, mats.plain, this.group));
-        if (g.facade) set.all.push((set.facade = new InstancePool(g.facade, mats.facade, this.group, 8, true)));
-        if (g.detail) {
-          set.all.push((set.detail = new InstancePool(g.detail, mats.plain, this.group)));
-          this.detailPools.push(set.detail);
-        }
-        this.pools.set(`${def.id}#${v}`, set);
-      }
-    }
+    this.mats = mats;
     this.site = new InstancePool(buildingGeometry(SITE_DEF, 0, false).plain!, mats.plain, this.group, 16);
     this.foundation = new InstancePool(this.foundationGeo, this.foundationMat, this.group, 32);
     // Render what already exists, then follow changes.
@@ -205,8 +194,26 @@ export class BuildingRenderer {
     return n > 1 ? Math.floor(b.tint * 7919) % n : 0;
   }
 
+  /** Instance pools for a building's look (template × variant × style), created on first use. */
   private poolsOf(b: PlacedBuilding): PoolSet | undefined {
-    return this.pools.get(`${b.defId}#${BuildingRenderer.variantOf(b)}`);
+    const def = getBuilding(b.defId);
+    const style = def.spec ? (b.style ?? 'modern') : 'modern';
+    const v = BuildingRenderer.variantOf(b);
+    const key = `${def.id}#${v}#${style}`;
+    let set = this.pools.get(key);
+    if (set) return set;
+    const g = buildingGeometry(def, v, true, style);
+    const mats = this.mats;
+    set = { all: [], facade: null, detail: null };
+    if (g.plain) set.all.push(new InstancePool(g.plain, mats.plain, this.group));
+    if (g.facade) set.all.push((set.facade = new InstancePool(g.facade, mats.facade, this.group, 8, true)));
+    if (g.detail) {
+      set.all.push((set.detail = new InstancePool(g.detail, mats.plain, this.group)));
+      set.detail.setHidden(!this.detailVisible);
+      this.detailPools.push(set.detail);
+    }
+    this.pools.set(key, set);
+    return set;
   }
 
   private colorFor(b: PlacedBuilding): Color {

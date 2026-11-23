@@ -21,6 +21,8 @@ export interface ToolContext {
   isZoneUnlocked(z: ZoneKind): boolean;
   /** Show an info layer while this tool is active (null = back to the user's choice). */
   showLayer(layer: InfoLayerId | null): void;
+  /** Current simulation tick (for buildings the player founds). */
+  tick(): number;
   /** Whether underground pipes are currently drawn (water / sewage view). */
   pipesVisible(): boolean;
   roadInfo(edgeId: number): RoadInfo | null;

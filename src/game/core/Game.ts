@@ -1,3 +1,4 @@
+import { ARCH_STYLE_DEFS } from '../data/styles';
 import {
   ACESFilmicToneMapping,
   Group,
@@ -257,6 +258,7 @@ export class Game {
         this.applyLayer();
       },
       pipesVisible: () => this.pipeRenderer.visible,
+      tick: () => this.sim.tick,
       roadInfo: (id) => this.roadInfo(id),
       buildingInfo: (id) => this.buildingInfo(id),
     });
@@ -776,6 +778,7 @@ export class Game {
     this.furniture.setShadows(shadows);
     this.world.vegetation.lodDistance = g.vegetationDistance;
     this.vehicles.setMax(g.vehicles);
+    this.furniture.setBrightness(g.streetLights);
     this.pedestrians.setMax(g.vehicles);
     this.post.setEnabled(g.bloom);
     this.dayNight.mode = g.dayNight;
@@ -950,6 +953,7 @@ export class Game {
       defId: def.id,
       name: def.name,
       category: BUILDING_CATEGORY_LABEL[def.category],
+      styleName: def.spec ? ARCH_STYLE_DEFS[b.style ?? 'modern'].name : undefined,
       w: b.w,
       d: b.d,
       cost: b.cost,
@@ -1051,6 +1055,7 @@ export class Game {
 
   setZoneTool(patch: Partial<ZoneToolState>): void {
     this.tools.zone.setState(patch);
+    if (patch.style) this.tools.building.setStyle(patch.style);
   }
 
   private emitCityStats(): void {

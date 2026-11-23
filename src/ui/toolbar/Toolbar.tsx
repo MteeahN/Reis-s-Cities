@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import type { DemolishFilter, RoadMode, ToolId, TrafficToolMode, ZoneToolState } from '../../game/core/events';
 import { LIGHTS_COST, STOP_COST } from '../../game/tools/TrafficTool';
 import { ZONES } from '../../game/data/zones';
-import { buildingsInGroup, type BuildingDef } from '../../game/data/buildings';
+import { buildingsInGroup, growablePrice, ZONED_BUILDINGS, type BuildingDef } from '../../game/data/buildings';
+import { ARCH_STYLE_DEFS, ARCH_STYLES, type ArchStyle } from '../../game/data/styles';
 import { LINE_TYPES } from '../../game/data/infrastructure';
 import { INFO_LAYERS } from '../../game/rendering/InfoLayers';
 import { ROAD_TYPES, isRoadTypeUnlocked } from '../../game/data/roads';
@@ -197,6 +199,8 @@ function ZonePicker() {
           <Icon name="zone" size={14} /> <span>Fırça</span>
         </button>
       </div>
+      <div className="divider vertical" />
+      <StylePicker />
       <div className="stepper" title={zt.mode === 'fill' ? 'Parsel derinliği (hücre)' : 'Fırça boyutu'}>
         <span className="stepper-label">{zt.mode === 'fill' ? 'Derinlik' : 'Fırça'}</span>
         <div className="stepper-row">
@@ -204,6 +208,32 @@ function ZonePicker() {
           <strong data-testid="zone-size">{zt.mode === 'fill' ? `${zt.depth} hücre` : `${zt.brush * 2 - 1}×${zt.brush * 2 - 1}`}</strong>
           <button onClick={() => set(zt.mode === 'fill' ? { depth: Math.min(4, zt.depth + 1) } : { brush: Math.min(3, zt.brush + 1) })} aria-label="Artır">+</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Architecture for zoning and hand-placed buildings (shared by both tools). */
+function StylePicker() {
+  const style = useGameStore((s) => s.zoneTool.style);
+  const pick = (id: ArchStyle) => getGame()?.setZoneTool({ style: id });
+  return (
+    <div className="style-picker" role="group" aria-label="Mimari stil" data-testid="style-picker">
+      <span className="stepper-label">Stil</span>
+      <div className="style-row">
+        {ARCH_STYLES.map((id) => {
+          const d = ARCH_STYLE_DEFS[id];
+          return (
+            <button key={id} className={`style-btn ${style === id ? 'active' : ''}`} onClick={() => pick(id)} title={`${d.name}: ${d.description}`} data-testid={`style-${id}`}>
+              <span className="style-swatch" aria-hidden>
+                {d.swatch.map((c) => (
+                  <i key={c} style={{ background: c }} />
+                ))}
+              </span>
+              <span>{d.name}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -293,10 +323,69 @@ function LayersPopover() {
   );
 }
 
+const BUILD_TABS = [
+  { id: 'landmark', name: 'Simgeler', zone: 0 },
+  { id: 'res', name: 'Konut', zone: 1 },
+  { id: 'com', name: 'Ticaret', zone: 2 },
+  { id: 'ind', name: 'Sanayi', zone: 3 },
+] as const;
+
 function BuildingPicker() {
   const buildingType = useGameStore((s) => s.buildingType);
+  const maxPop = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
+  const current = ZONED_BUILDINGS.find((b) => b.id === buildingType);
+  const [tab, setTab] = useState<(typeof BUILD_TABS)[number]['id']>(current ? BUILD_TABS.find((t) => t.zone === current.zone)!.id : 'landmark');
+  const zone = BUILD_TABS.find((t) => t.id === tab)!.zone;
+  const choose = (id: (typeof BUILD_TABS)[number]['id']) => {
+    setTab(id);
+    const z = BUILD_TABS.find((t) => t.id === id)!.zone;
+    const first = z ? ZONED_BUILDINGS.find((b) => b.zone === z) : buildingsInGroup('landmark')[0];
+    if (first) getGame()?.setBuildingType(first.id);
+  };
   return (
-    <div className="subtoolbar panel" data-testid="building-types">
+    <div className="subtoolbar panel building-picker" data-testid="building-types">
+      <div className="tabs build-tabs" role="tablist">
+        {BUILD_TABS.map((t) => (
+          <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'active' : ''} onClick={() => choose(t.id)} data-testid={`build-tab-${t.id}`}>
+            {t.name}
+          </button>
+        ))}
+      </div>
+      {zone === 0 ? (
+        <LandmarkCards buildingType={buildingType} />
+      ) : (
+        <>
+          <div className="growable-cards">
+            {ZONED_BUILDINGS.filter((b) => b.zone === zone).map((b) => {
+              const locked = maxPop < (ZONES.find((z) => z.type === zone)?.unlockPopulation ?? 0);
+              const people = b.residents ? `${b.residents} kişi` : `${b.workers} iş`;
+              return (
+                <button
+                  key={b.id}
+                  className={`road-type building-card ${b.id === buildingType ? 'active' : ''} ${locked ? 'locked' : ''}`}
+                  disabled={locked}
+                  onClick={() => getGame()?.setBuildingType(b.id)}
+                  title={`${b.name} — ${b.level}. seviye, ${people}. Elle yerleştirilir, bölgesi kendiliğinden atanır.`}
+                  data-testid={`building-type-${b.id}`}
+                >
+                  <span className="road-name">{b.name}</span>
+                  <span className="road-meta">
+                    Sv {b.level} · {b.footprint[0]}×{b.footprint[1]} · {people} · {formatMoney(growablePrice(b))}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <StylePicker />
+        </>
+      )}
+    </div>
+  );
+}
+
+function LandmarkCards({ buildingType }: { buildingType: string }) {
+  return (
+    <>
       {buildingsInGroup('landmark').map((b) => (
         <button
           key={b.id}
@@ -312,10 +401,8 @@ function BuildingPicker() {
           {b.unique && <span className="badge">Tek</span>}
         </button>
       ))}
-      <div className="subtoolbar-note">
-        Konut, ticaret ve sanayi binaları bölgeleme aracıyla (Z) kendiliğinden gelişir.
-      </div>
-    </div>
+      <div className="subtoolbar-note">Konut, ticaret ve sanayi binaları bölgelemeyle (Z) kendiliğinden gelişir ya da yandaki sekmelerden tek tek yerleştirilir.</div>
+    </>
   );
 }
 

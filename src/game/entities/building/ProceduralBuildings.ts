@@ -1,5 +1,7 @@
 import { CELL_SIZE } from '../../core/config';
 import type { BuildingPart } from '../../data/buildings';
+import type { ArchStyle } from '../../data/styles';
+import { decorate, restyleSpec, styledHouseRoof, type Block } from './styleDecor';
 
 export type ProceduralStyle = 'house' | 'apartment' | 'tower' | 'shop' | 'office' | 'mall' | 'warehouse' | 'factory';
 
@@ -106,13 +108,15 @@ function solarPanels(parts: Parts, x: number, y: number, z: number, w: number, d
  * The variant drives structure too (roof shapes, setbacks, balconies, porches,
  * rooftop equipment, yards), not only colours.
  */
-export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
+export function proceduralParts(spec: ProceduralSpec, arch: ArchStyle = 'modern'): BuildingPart[] {
+  const s = restyleSpec(spec, arch);
   const W = s.footprint[0] * CELL_SIZE;
   const D = s.footprint[1] * CELL_SIZE;
   const v = s.variant ?? 0;
   const parts: Parts = [{ shape: 'box', size: [W - 0.3, 0.12, D - 0.3], pos: [0, 0, 0], color: GROUND[s.ground] }];
   const front = D / 2;
   const r = (k: number) => hash(v, k);
+  let block: Block | null = null;
 
   switch (s.style) {
     case 'house': {
@@ -123,11 +127,14 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       const h = s.floors * 3;
       const cz = front - 2.2 - bd / 2;
       const cx = wide ? -1.5 : 0;
-      const modern = v % 6 === 5;
+      const modern = arch === 'modern' && v % 6 === 5;
       parts.push({ shape: 'box', size: [bw, h, bd], pos: [cx, 0.1, cz], color: s.wall, facade: true });
       // Plinth course.
       box(parts, [bw + 0.15, 0.45, bd + 0.15], [cx, 0.1, cz], s.accent);
-      if (modern) {
+      if (arch !== 'modern') {
+        block = { kind: 'house', cx, cz, bw, bd, h, top: h + 0.1, floors: s.floors, floorH: 3 };
+        styledHouseRoof(parts, arch, block, s, v);
+      } else if (modern) {
         // Flat roof with parapet and a roof terrace.
         box(parts, [bw + 0.3, 0.5, bd + 0.3], [cx, h + 0.1, cz], '#e6e3dc');
         box(parts, [bw * 0.45, 0.9, bd * 0.4], [cx - bw * 0.2, h + 0.6, cz - bd * 0.2], s.wall);
@@ -161,9 +168,9 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       const pathLen = front - (cz + bd / 2) - 0.2;
       if (pathLen > 0.4) box(parts, [1.1, 0.06, pathLen], [doorX, 0.12, front - pathLen / 2 - 0.15], PATH);
       // Chimney.
-      if (!modern) box(parts, [0.7, 1.8, 0.7], [cx - bw * 0.3, h + 1, cz - bd * 0.2], v % 4 === 1 ? '#8a5a44' : '#7d6b5d');
+      if (!modern && arch === 'modern') box(parts, [0.7, 1.8, 0.7], [cx - bw * 0.3, h + 1, cz - bd * 0.2], v % 4 === 1 ? '#8a5a44' : '#7d6b5d');
       // Solar panels on some pitched roofs.
-      if (!modern && v % 4 === 3) solarPanels(parts, cx + bw * 0.1, h + 0.9, cz - bd * 0.22, Math.min(2.6, bw * 0.45), 1.6, -26);
+      if (!modern && arch === 'modern' && v % 4 === 3) solarPanels(parts, cx + bw * 0.1, h + 0.9, cz - bd * 0.22, Math.min(2.6, bw * 0.45), 1.6, -26);
       // Front fence or hedge.
       if (r(1) < 0.5) frontFence(parts, W, front, doorX, 1.4, '#e8e4dc', 0.8);
       else frontFence(parts, W, front, doorX, 1.4, GREEN_DARK, 1.0);
@@ -235,6 +242,7 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       // Side yard: trees, bikes, parking.
       tree(parts, -W / 2 + 1, front - 1, 0.8);
       if (W > 8) tree(parts, W / 2 - 1, front - 1, 0.8, r(8) < 0.3);
+      block = { kind: 'apartment', cx: 0, cz, bw, bd, h, top: h + 0.7, floors: s.floors, floorH: fh };
       break;
     }
     case 'tower': {
@@ -287,6 +295,7 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       box(parts, [Math.min(6, pw * 0.5), 0.3, 1.8], [0, 3.6, cz + pd / 2 + 0.9], GLASS_DARK);
       tree(parts, -W / 2 + 1, front - 0.9, 0.7);
       tree(parts, W / 2 - 1, front - 0.9, 0.7);
+      block = { kind: 'tower', cx: 0, cz, bw: tw / 0.82, bd: td / 0.82, h: y, top: y + 3.75, floors: s.floors, floorH: 3.2 };
       break;
     }
     case 'shop': {
@@ -332,6 +341,7 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       }
       // Waste bins at the side.
       box(parts, [0.8, 1.1, 0.7], [-W / 2 + 0.6, 0.1, front - 2.2], '#3c6b45');
+      block = { kind: 'shop', cx: 0, cz, bw, bd, h, top: h + 0.6, floors: s.floors, floorH: 3.6 };
       break;
     }
     case 'office': {
@@ -362,6 +372,7 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       box(parts, [W - 1.2, 0.06, front - (cz + bd / 2) - 0.3], [0, 0.12, (front + cz + bd / 2) / 2 + 0.1], PATH);
       if (v % 3 !== 1) for (let k = 0; k < 3; k++) cyl(parts, 0.1, 6, [-bw / 2 + 1 + k * 0.9, 0.1, front - 0.6], '#d8d8d8', 4);
       tree(parts, bw / 2 - 0.4, front - 0.9, 0.75);
+      block = { kind: 'office', cx: 0, cz, bw: v % 2 === 0 ? bw * 0.75 : bw, bd: v % 2 === 0 ? bd * 0.75 : bd, h, top: v % 2 === 0 ? h * 1.25 + 0.9 : h + 1.3, floors: s.floors, floorH: 3.4 };
       break;
     }
     case 'mall': {
@@ -388,6 +399,7 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       rooftopUnits(parts, 3, h + 0.9, 0, cz - bd * 0.3, bw * 0.6, bd * 0.2, v);
       // Front plaza: trees and lamp posts.
       for (const sx of [-0.4, -0.15, 0.15, 0.4]) tree(parts, bw * sx, front - 1, 0.7);
+      block = { kind: 'mall', cx: 0, cz, bw, bd, h, top: h + 0.9, floors: s.floors, floorH: 4.5 };
       break;
     }
     case 'warehouse': {
@@ -422,6 +434,7 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       // Chain-link fence along the sides.
       box(parts, [0.08, 1.8, D - 1], [-W / 2 + 0.3, 0.1, 0], '#8a9096');
       box(parts, [0.08, 1.8, D - 1], [W / 2 - 0.3, 0.1, 0], '#8a9096');
+      block = { kind: 'warehouse', cx: 0, cz, bw, bd, h, top: h + 1.7, floors: 1, floorH: h };
       break;
     }
     case 'factory': {
@@ -465,9 +478,11 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       // Perimeter fence.
       box(parts, [W - 0.6, 2, 0.08], [0, 0.1, -D / 2 + 0.3], '#8a9096');
       box(parts, [0.08, 2, D - 1], [-W / 2 + 0.3, 0.1, 0], '#8a9096');
+      block = { kind: 'factory', cx: -bw * 0.15, cz, bw: bw * 0.7, bd, h, top: h + 0.7, floors: 1, floorH: h };
       break;
     }
   }
+  if (block) decorate(parts, arch, block, s, v);
   return parts;
 }
 

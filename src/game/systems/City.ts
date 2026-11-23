@@ -1,3 +1,5 @@
+import { archStyleAt, archStyleIndex, type ArchStyle } from '../data/styles';
+import { growablePrice } from '../data/buildings';
 import { CELL_SIZE, GRID_CELLS, WORLD_SIZE, TILES_PER_SIDE } from '../core/config';
 import { LINE_TYPES, type LineKind } from '../data/infrastructure';
 import { UtilityLines } from '../entities/infra/UtilityLines';
@@ -6,7 +8,7 @@ import { ServiceCoverage } from '../simulation/Services';
 import { computeUtilities, type UtilityResult } from '../simulation/Utilities';
 import { getBuilding } from '../data/buildings';
 import { getRoadType, type RoadTypeDef } from '../data/roads';
-import { ZoneType } from '../data/zones';
+import { getZone, ZoneType, type ZoneKind } from '../data/zones';
 import { planBuilding, type BuildingPlan, type PlacementWorld, type Rotation } from '../entities/building/BuildingPlacement';
 import { BuildingRegistry, type PlacedBuilding } from '../entities/building/BuildingRegistry';
 import { RoadGraph, type RoadEdge } from '../entities/road/RoadGraph';
@@ -60,6 +62,8 @@ export class City {
   maxPopulation = 0;
   /** Sandbox (creative) mode: unlimited money, every tool and all land unlocked. */
   sandbox = false;
+  /** Architectural style painted on each cell (index into ARCH_STYLES; 0 = modern). */
+  readonly districtStyle = new Uint8Array(GRID_CELLS * GRID_CELLS);
   private utilityListeners = new Set<(u: UtilityResult) => void>();
   readonly plannerWorld: PlannerWorld;
   readonly placementWorld: PlacementWorld;
@@ -278,12 +282,22 @@ export class City {
    * different zone standing on changed cells are bulldozed (no refund — they
    * were privately built). Returns the number of cells changed.
    */
-  setZone(cells: Iterable<number>, type: ZoneType): number {
+  /**
+   * Zones cells; with a style, also paints the district's architecture
+   * (re-zoning cells to their current zone only changes the style, and
+   * buildings already standing there take the new style).
+   */
+  setZone(cells: Iterable<number>, type: ZoneType, style?: ArchStyle): number {
     const valid: number[] = [];
+    const restyle: number[] = [];
     const bulldoze = new Set<number>();
+    const sIdx = style && type !== ZoneType.None ? archStyleIndex(style) : -1;
     for (const k of cells) {
       if (type !== ZoneType.None && !this.canZone(k)) continue;
-      if (this.zones.zone[k] === type) continue;
+      if (this.zones.zone[k] === type) {
+        if (sIdx >= 0 && this.districtStyle[k] !== sIdx) restyle.push(k);
+        continue;
+      }
       const bid = this.occupancy.building[k];
       const b = bid ? this.buildings.items.get(bid) : undefined;
       if (b && !b.zone) continue; // never touch player buildings
@@ -291,7 +305,38 @@ export class City {
       valid.push(k);
     }
     for (const id of bulldoze) this.removeGrowable(id);
-    return this.zones.set(valid, type, (k) => this.isCellFree(k)).length;
+    const changed = this.zones.set(valid, type, (k) => this.isCellFree(k)).length;
+    if (sIdx >= 0) this.paintStyle([...valid, ...restyle], style!);
+    return changed + restyle.length;
+  }
+
+  /** Sets the district style of cells and restyles the growables standing on them. */
+  paintStyle(cells: number[], style: ArchStyle): void {
+    const sIdx = archStyleIndex(style);
+    const touched = new Set<number>();
+    for (const k of cells) {
+      this.districtStyle[k] = sIdx;
+      const bid = this.occupancy.building[k];
+      if (bid) touched.add(bid);
+    }
+    for (const id of touched) {
+      const b = this.buildings.items.get(id);
+      if (b && b.zone && (b.style ?? 'modern') !== style) this.buildings.replace(id, { style });
+    }
+    this.zones.touch(cells);
+  }
+
+  /** Style most of a lot's cells are painted with. */
+  styleOfLot(i: number, j: number, w: number, d: number): ArchStyle {
+    const count = new Map<number, number>();
+    for (let y = j; y < j + d; y++) for (let x = i; x < i + w; x++) {
+      const s = this.districtStyle[y * GRID_CELLS + x];
+      count.set(s, (count.get(s) ?? 0) + 1);
+    }
+    let best = 0;
+    let n = -1;
+    for (const [s, c] of count) if (c > n) [best, n] = [s, c];
+    return archStyleAt(best);
   }
 
   // ---------------------------------------------------------------- growables
@@ -312,6 +357,7 @@ export class City {
       state: 'construction',
       tint,
       sinceTick: tick,
+      style: this.styleOfLot(lot.i, lot.j, lot.w, lot.d),
     });
     this.occupancy.setBuilding(b.id, b.cells);
     for (const k of b.cells) this.zones.refresh(k, false);
@@ -356,11 +402,55 @@ export class City {
   planBuilding(defId: string, i: number, j: number, rot: Rotation): BuildingPlan {
     const def = getBuilding(defId);
     const plan = planBuilding(def, i, j, rot, this.placementWorld, this.treasury.balance, this.buildings.countOf(defId));
+    if (def.zone) {
+      // Hand-placed growable: the developer's price, and its zone must be open.
+      plan.cost = growablePrice(def);
+      plan.errors = plan.errors.filter((e) => e !== 'Yetersiz bütçe');
+      if (!this.treasury.canAfford(plan.cost)) plan.errors.push('Yetersiz bütçe');
+      const zoneDef = getZone(def.zone as ZoneKind);
+      if (zoneDef.unlockPopulation > this.unlockLevel) plan.errors.unshift(`Kilitli: ${zoneDef.name} ${zoneDef.unlockPopulation.toLocaleString('tr-TR')} nüfusta açılır`);
+      plan.valid = plan.errors.length === 0;
+    }
     if (def.unlockPopulation > this.unlockLevel) {
       plan.errors.unshift(`Kilitli: ${def.unlockPopulation.toLocaleString('tr-TR')} nüfusta açılır`);
       plan.valid = false;
     }
     return plan;
+  }
+
+  /**
+   * Places a zoned (growable) building by hand: the player pays the developer
+   * price, the lot is zoned to match, and from then on the building lives like
+   * any growable (construction, residents or jobs, levelling up).
+   */
+  placeGrowable(plan: BuildingPlan, style: ArchStyle, tint: number, tick: number): PlacedBuilding | null {
+    const def = getBuilding(plan.defId);
+    if (!def.zone) return null;
+    const fresh = this.planBuilding(plan.defId, plan.i, plan.j, plan.rot);
+    if (!fresh.valid || !this.treasury.spend(fresh.cost, 'buildings')) return null;
+    const b = this.buildings.create({
+      defId: def.id,
+      i: fresh.i,
+      j: fresh.j,
+      rot: fresh.rot,
+      w: fresh.w,
+      d: fresh.d,
+      baseY: fresh.baseY,
+      minY: fresh.minY,
+      cost: fresh.cost,
+      zone: def.zone,
+      level: def.level ?? 1,
+      state: 'construction',
+      tint,
+      sinceTick: tick,
+      style,
+    });
+    this.zones.set(b.cells, def.zone, () => false);
+    for (const k of b.cells) this.districtStyle[k] = archStyleIndex(style);
+    this.occupancy.setBuilding(b.id, b.cells);
+    for (const k of b.cells) this.zones.refresh(k, false);
+    this.clearVegetationRect(b.i, b.j, b.w, b.d);
+    return b;
   }
 
   placeBuilding(plan: BuildingPlan): PlacedBuilding | null {
@@ -386,8 +476,11 @@ export class City {
     const b = this.buildings.items.get(id);
     if (!b) return 0;
     if (b.zone) {
+      // Hand-placed growables refund half their price; grown ones nothing.
+      const refund = this.buildingRefund(id);
       this.removeGrowable(id);
-      return 0;
+      if (refund > 0) this.treasury.refund(refund, 'buildings');
+      return refund;
     }
     const refund = this.buildingRefund(id);
     this.buildings.remove(id);

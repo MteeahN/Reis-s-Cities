@@ -14,6 +14,17 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   girişlerinde yaya geçidi var; çıkmaz uçlar düz biter.
 - **Yol kenarı bölgeleme:** imleç yolun yanındaki boş alana gelince yolun yalnızca o tarafı seçilir (yolun üzerinde iki
   taraf); tıklayın veya sürükleyerek birden çok sokağı bölgeleyin.
+- **Mimari stiller:** Modern, Avrupa, Asya, Akdeniz, Osmanlı. Bölgeleme aracında stil seçilir; boyanan hücreler o
+  stili alır ve orada büyüyen binalar o stilde çıkar. Aynı bölgeyi başka stille boyamak mevcut binaları da çevirir.
+  Stiller yalnızca renk değil yapı da değiştirir: kiremit ve mansart çatılar, panjurlar, ferforje balkonlar, çizgili
+  tenteler (Avrupa); geniş saçaklı uçları kalkık çatılar, pagoda tepeler, fenerler, neon tabelalar (Asya); beyaz
+  badana, teras çatılar, pergolalar, kemerler, begonviller (Akdeniz); cumbalar, geniş saçaklar, kubbeli çarşılar
+  (Osmanlı). Stil kayıtta saklanır.
+- **Binaları tek tek yerleştirme:** Binalar aracında Konut / Ticaret / Sanayi sekmeleri. Seçilen bina seçilen stilde
+  elle kurulur: hazır bina bedeli ödenir (hücre sayısı ve seviyeye göre), parselin bölgesi kendiliğinden atanır, bina
+  inşaattan sonra diğerleri gibi yaşar ve gelişir; yıkılırsa bedelin yarısı iade edilir.
+- **Yumuşak sokak lambaları:** gece lamba başlıkları ve yoldaki ışık halkası çok daha hafif ve yayvan; gece parlaması
+  (bloom) azaltıldı. Ayarlar → Grafik → "Sokak lambası parlaklığı" ile ayarlanır.
 - **Trafik düzenleme (K):** yol parçalarını tek yön yapma / yönünü çevirme, kavşaklara trafik lambası (₺600) veya dur
   levhası (₺60). Tek yönlü yol tüm şeritleri tek yöne verir (kapasite iki katı), oklarla ve orta çizgisiz çizilir.
   Kavşak beklemesi trafik modelinde kontrole ve yoğunluğa bağlıdır: kontrolsüz kavşak sakinken hızlı, yoğunken tıkanır;

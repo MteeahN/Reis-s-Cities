@@ -5,6 +5,7 @@ import { MouseButton, type PointerInfo } from '../core/Input';
 import { getRoadType } from '../data/roads';
 import { getZone, ZoneType, type ZoneKind } from '../data/zones';
 import { rasterizePolyline } from '../world/Occupancy';
+import { archStyleIndex } from '../data/styles';
 import type { Tool, ToolContext } from './Tool';
 
 const ERASE_COLOR = 0xff6b6b;
@@ -20,7 +21,7 @@ const ERASE_COLOR = 0xff6b6b;
  */
 export class ZoneTool implements Tool {
   readonly id = 'zone' as const;
-  state: ZoneToolState = { zone: ZoneType.Residential, mode: 'fill', brush: 1, depth: 4 };
+  state: ZoneToolState = { zone: ZoneType.Residential, mode: 'fill', brush: 1, depth: 4, style: 'modern' };
   private painting = false;
   private preview: number[] = [];
   private lastGround: Vector3 | null = null;
@@ -53,7 +54,10 @@ export class ZoneTool implements Tool {
   private cellsAt(ground: Vector3): number[] {
     const city = this.ctx.city;
     const erase = this.state.zone === ZoneType.None;
-    const keep = (k: number) => (erase ? city.zones.zone[k] !== ZoneType.None : city.canZone(k) && city.zones.zone[k] !== this.state.zone);
+    const sIdx = archStyleIndex(this.state.style);
+    // Zone cells of another zone, or re-paint the style of cells already in this zone.
+    const keep = (k: number) =>
+      erase ? city.zones.zone[k] !== ZoneType.None : city.canZone(k) && (city.zones.zone[k] !== this.state.zone || city.districtStyle[k] !== sIdx);
     if (this.state.mode === 'brush') {
       const r = this.state.brush - 1;
       const ci = Math.floor(ground.x / CELL_SIZE);
@@ -108,7 +112,7 @@ export class ZoneTool implements Tool {
       return;
     }
     if (this.preview.length === 0) return;
-    this.ctx.city.setZone(this.preview, zone as ZoneType);
+    this.ctx.city.setZone(this.preview, zone as ZoneType, this.state.style);
     this.ctx.events.emit('sfx', 'zone');
     this.refresh();
   }

@@ -21,6 +21,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { BuildingDef, BuildingPart, FacadeStyle } from '../../data/buildings';
 import { HASH_GLSL, nightUniform } from '../../rendering/nightUniform';
 import { PROCEDURAL_VARIANTS, proceduralParts, variantSpec } from './ProceduralBuildings';
+import type { ArchStyle } from '../../data/styles';
 
 const BAY_WIDTH = 3.2;
 const FLOOR_HEIGHT = 3.4;
@@ -169,8 +170,10 @@ export function variantCount(def: BuildingDef): number {
 }
 
 /** Parts of a variant: growables re-generate theirs from the spec; authored models have one look. */
-export function variantParts(def: BuildingDef, variant: number): BuildingPart[] {
-  return variant > 0 && def.spec ? proceduralParts(variantSpec(def.spec, variant)) : def.model;
+export function variantParts(def: BuildingDef, variant: number, arch: ArchStyle = 'modern'): BuildingPart[] {
+  if (!def.spec) return def.model;
+  if (variant === 0 && arch === 'modern') return def.model;
+  return proceduralParts(variant > 0 ? variantSpec(def.spec, variant) : def.spec, arch);
 }
 
 /**
@@ -178,15 +181,15 @@ export function variantParts(def: BuildingDef, variant: number): BuildingPart[] 
  * @param variant look variant (0 = as authored)
  * @param splitDetail put small parts into `detail` (off for construction sites)
  */
-export function buildingGeometry(def: BuildingDef, variant = 0, splitDetail = true): BuildingGeometry {
-  const key = `${def.id}#${variant}#${splitDetail ? 1 : 0}`;
+export function buildingGeometry(def: BuildingDef, variant = 0, splitDetail = true, arch: ArchStyle = 'modern'): BuildingGeometry {
+  const key = `${def.id}#${variant}#${splitDetail ? 1 : 0}#${def.spec ? arch : 'modern'}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const plain: BufferGeometry[] = [];
   const facade: BufferGeometry[] = [];
   const detail: BufferGeometry[] = [];
   let height = 0;
-  for (const part of variantParts(def, variant)) {
+  for (const part of variantParts(def, variant, arch)) {
     const g = colorize(partGeometry(part), part.color);
     if (part.facade && part.shape === 'box') {
       facade.push(withTile(g, FACADE_TILE[part.facade === true ? 'residential' : part.facade]));

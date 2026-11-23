@@ -1,3 +1,4 @@
+import type { ArchStyle } from '../../data/styles';
 import type { ZoneType } from '../../data/zones';
 import type { BuildingPlan, Rotation } from './BuildingPlacement';
 import { footprintCells } from './BuildingPlacement';
@@ -36,6 +37,8 @@ export interface PlacedBuilding {
   noUtilityTicks: number;
   /** Ticks the current fire has been burning. */
   burnTicks: number;
+  /** Architectural style of a growable (absent: modern). */
+  style?: ArchStyle;
 }
 
 export interface BuildingChange {
@@ -58,6 +61,7 @@ export interface NewBuilding {
   state: BuildingState;
   tint: number;
   sinceTick: number;
+  style?: ArchStyle;
 }
 
 /**
@@ -107,7 +111,7 @@ export class BuildingRegistry {
   }
 
   /** Applies a change that alters how the building looks (state, level, model). */
-  replace(id: number, patch: Partial<Pick<PlacedBuilding, 'defId' | 'level' | 'state' | 'progress' | 'sinceTick'>>): void {
+  replace(id: number, patch: Partial<Pick<PlacedBuilding, 'defId' | 'level' | 'state' | 'progress' | 'sinceTick' | 'style'>>): void {
     const b = this.items.get(id);
     if (!b) return;
     const before = { ...b };

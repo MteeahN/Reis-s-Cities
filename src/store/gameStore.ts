@@ -127,7 +127,7 @@ export const INITIAL_GAME_STATE = {
   demolishFilter: 'all' as DemolishFilter,
   trafficTool: { mode: 'oneway', target: null } as TrafficToolState,
   cityStats: null,
-  zoneTool: { zone: 1, mode: 'fill', brush: 1, depth: 4 } as ZoneToolState,
+  zoneTool: { zone: 1, mode: 'fill', brush: 1, depth: 4, style: 'modern' } as ZoneToolState,
   demand: { residential: 70, commercial: 0, industrial: 0 } as Demand,
   population: null as PopulationStats | null,
   maxPopulation: 0,

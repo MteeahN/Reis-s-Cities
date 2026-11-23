@@ -1813,3 +1813,54 @@ kbd {
   font-size: 12px;
   padding: 0 6px;
 }
+
+.style-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.style-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.style-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.style-btn.active {
+  border-color: var(--accent, #3b82f6);
+  background: rgba(59, 130, 246, 0.16);
+}
+.style-swatch {
+  display: inline-flex;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.style-swatch i {
+  display: block;
+  width: 7px;
+  height: 14px;
+}
+.building-picker {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.build-tabs {
+  width: 100%;
+}
+.growable-cards {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  max-width: 100%;
+  padding-bottom: 2px;
+}

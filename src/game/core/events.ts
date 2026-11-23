@@ -1,3 +1,4 @@
+import type { ArchStyle } from '../data/styles';
 import type { QualityLevel, QualitySetting } from '../rendering/QualityManager';
 import type { SfxId } from '../audio/AudioEngine';
 import type { Settings } from './settings';
@@ -44,6 +45,8 @@ export interface ZoneToolState {
   brush: number;
   /** Parcel depth in cells for road fill. */
   depth: number;
+  /** Architecture painted with the zone (also used for hand-placed buildings). */
+  style: ArchStyle;
 }
 export type RoadMode = 'straight' | 'curve' | 'upgrade';
 
@@ -98,6 +101,8 @@ export interface BuildingInfo {
   defId: string;
   name: string;
   category: string;
+  /** Architectural style name (growables). */
+  styleName?: string;
   w: number;
   d: number;
   cost: number;

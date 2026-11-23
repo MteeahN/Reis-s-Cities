@@ -1,6 +1,7 @@
 import { APP_VERSION, GRID_CELLS, TILES_PER_SIDE, type GameSpeed } from '../core/config';
 import { ALL_BUILDINGS } from '../data/buildings';
 import { ROAD_TYPES } from '../data/roads';
+import { ARCH_STYLES } from '../data/styles';
 import { ZoneType } from '../data/zones';
 import type { PlacedBuilding } from '../entities/building/BuildingRegistry';
 import type { RoadGraphData } from '../entities/road/RoadGraph';
@@ -31,6 +32,8 @@ export interface SavedLine {
 export interface CityState {
   /** Sandbox (creative) mode; absent in older saves = normal game. */
   sandbox?: boolean;
+  /** District architecture per cell, run-length encoded [style, count, …]; absent = all modern. */
+  styles?: number[];
   roads: RoadGraphData;
   buildings: { nextId: number; items: SavedBuilding[] };
   /** Run-length encoded zone per cell: [value, count, …]. */
@@ -111,6 +114,7 @@ export function serializeCity(city: City, sim: CitySimulation): CityState {
     simulation: sim.serialize(),
     unlockTiles: [...city.world.unlock.tiles],
     sandbox: city.sandbox,
+    styles: rle(city.districtStyle),
   };
 }
 
@@ -132,6 +136,7 @@ export function restoreCity(city: City, sim: CitySimulation, s: CityState, tick:
   }
   city.treasury.restore(s.treasury.balance, s.treasury.spent, s.treasury.refunded);
   if (s.sandbox === true) city.enableSandbox();
+  if (Array.isArray(s.styles)) unrle(s.styles, city.districtStyle, ARCH_STYLES.length);
   city.economy.restore(s.economy);
   city.population.restore(s.population, (id) => city.buildings.items.get(id)?.zone === ZoneType.Residential);
   sim.restore(s.simulation, tick, gameMinutes);
@@ -229,4 +234,29 @@ export function newId(): string {
   const c = globalThis.crypto;
   if (c?.randomUUID) return c.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Run-length encodes a byte grid as [value, count, …]. */
+function rle(a: Uint8Array): number[] {
+  const out: number[] = [];
+  let i = 0;
+  while (i < a.length) {
+    const v = a[i];
+    let n = 1;
+    while (i + n < a.length && a[i + n] === v) n++;
+    out.push(v, n);
+    i += n;
+  }
+  return out;
+}
+
+/** Decodes [value, count, …] into `into`, ignoring values ≥ `max` and overflow. */
+function unrle(data: number[], into: Uint8Array, max: number): void {
+  let k = 0;
+  for (let p = 0; p + 1 < data.length && k < into.length; p += 2) {
+    const v = Number.isInteger(data[p]) && data[p] >= 0 && data[p] < max ? data[p] : 0;
+    const n = Math.max(0, Math.min(into.length - k, Math.floor(data[p + 1])));
+    into.fill(v, k, k + n);
+    k += n;
+  }
 }

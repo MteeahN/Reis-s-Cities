@@ -26,7 +26,7 @@ import { sampleProfile, type RoadRenderer, type SurfacePoint } from './roads/Roa
 /** Keep lamps and trees out of junction areas. */
 const END_CLEARANCE = 8;
 const LAMP_HEIGHT = 7.2;
-const POOL_SIZE = 24;
+const POOL_SIZE = 30;
 
 export interface LampSpot {
   x: number;
@@ -66,6 +66,8 @@ export class StreetFurniture {
   private readonly lampGeo: BufferGeometry;
   private readonly lampMat: MeshStandardMaterial;
   private readonly poolMat: MeshBasicMaterial;
+  private brightness = 0.45;
+  private readonly lampGlow = { value: 0.4 + 0.45 * 2.4 };
   private readonly treeGeo: BufferGeometry;
   private readonly treeMat: MeshStandardMaterial;
   private lamps: InstancedMesh;
@@ -88,14 +90,15 @@ export class StreetFurniture {
     this.lampMat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4 });
     this.lampMat.onBeforeCompile = (shader) => {
       shader.uniforms.uNight = nightUniform;
+      shader.uniforms.uLampGlow = this.lampGlow;
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float uNight;\nvarying float vGlow;')
-        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.8, 0.52) * vGlow * uNight * 5.0;');
+        .replace('#include <common>', '#include <common>\nuniform float uNight;\nuniform float uLampGlow;\nvarying float vGlow;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.84, 0.62) * vGlow * uNight * uLampGlow;');
     };
-    this.lampMat.customProgramCacheKey = () => 'reis-lamp-v1';
+    this.lampMat.customProgramCacheKey = () => 'reis-lamp-v2';
     this.poolMat = new MeshBasicMaterial({
       color: new Color(0xffc488),
       map: StreetFurniture.poolTexture(),
@@ -152,9 +155,11 @@ export class StreetFurniture {
     c.width = c.height = 64;
     const ctx = c.getContext('2d')!;
     const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.3, 'rgba(255,255,255,0.55)');
-    g.addColorStop(0.65, 'rgba(255,255,255,0.15)');
+    // Soft, wide fall-off (no bright hot spot under the lamp).
+    g.addColorStop(0, 'rgba(255,255,255,0.75)');
+    g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.22)');
+    g.addColorStop(0.8, 'rgba(255,255,255,0.06)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 64, 64);
@@ -258,13 +263,19 @@ export class StreetFurniture {
     for (const im of [lm, pm, tm]) im.instanceMatrix.needsUpdate = true;
   }
 
+  /** Street lamp brightness 0–1 (player setting): lamp heads and the light pools on the road. */
+  setBrightness(b: number): void {
+    this.brightness = Math.max(0, Math.min(1, b));
+    this.lampGlow.value = 0.4 + this.brightness * 2.4;
+  }
+
   /** @param night 0–1 from the day/night cycle; camDistance for the post LOD. */
   update(night: number, camDistance: number): void {
     if (this.dirty) {
       this.dirty = false;
       this.rebuild();
     }
-    this.poolMat.opacity = night * 0.26;
+    this.poolMat.opacity = night * 0.2 * this.brightness;
     this.pools.visible = night > 0.02 && this.pools.count > 0;
     const posts = camDistance < 1100;
     if (posts !== this.postsVisible) {

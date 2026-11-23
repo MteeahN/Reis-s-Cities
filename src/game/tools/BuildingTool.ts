@@ -2,6 +2,7 @@ import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, type Vector3 
 import { CELL_SIZE } from '../core/config';
 import { MouseButton, type PointerInfo } from '../core/Input';
 import { buildingsInGroup, getBuilding, type BuildingDef } from '../data/buildings';
+import type { ArchStyle } from '../data/styles';
 import { layerForBuilding } from '../rendering/InfoLayers';
 import { anchorFor, bestRotation, frontStep, type BuildingPlan, type Rotation } from '../entities/building/BuildingPlacement';
 import { buildingGeometry } from '../entities/building/BuildingModels';
@@ -19,6 +20,8 @@ export class BuildingTool implements Tool {
   private manualRotation = false;
   private plan: BuildingPlan | null = null;
   private lastGround: Vector3 | null = null;
+  /** Architecture for hand-placed growables. */
+  private style: ArchStyle = 'modern';
   private readonly ghost = new Group();
   private readonly ghostMat = new MeshBasicMaterial({ color: 0x34d399, transparent: true, opacity: 0.45, depthWrite: false });
   /** Coverage radius ring for service buildings. */
@@ -46,9 +49,17 @@ export class BuildingTool implements Tool {
     return this.def.id;
   }
 
+  setStyle(style: ArchStyle): void {
+    if (style === this.style) return;
+    this.style = style;
+    if (this.def.zone) this.rebuildGhost();
+  }
+
   setBuildingType(id: string): void {
     const def = getBuilding(id);
-    if ((def.group ?? 'landmark') !== this.group) return;
+    // The landmark tool also places zoned (growable) buildings by hand.
+    const growable = !!def.zone && this.group === 'landmark';
+    if (!growable && (def.group ?? 'landmark') !== this.group) return;
     this.def = def;
     this.rebuildGhost();
     this.ctx.showLayer(layerForBuilding(def.id));
@@ -57,7 +68,7 @@ export class BuildingTool implements Tool {
 
   private rebuildGhost(): void {
     this.ghost.clear();
-    const g = buildingGeometry(this.def);
+    const g = buildingGeometry(this.def, 0, true, this.def.zone ? this.style : 'modern');
     for (const geo of [g.plain, g.facade, g.detail]) if (geo) this.ghost.add(new Mesh(geo, this.ghostMat));
   }
 
@@ -139,10 +150,12 @@ export class BuildingTool implements Tool {
       this.ctx.events.emit('toast', { kind: 'error', text: plan.errors[0] });
       return;
     }
-    const b = this.ctx.city.placeBuilding(plan);
+    const b = this.def.zone
+      ? this.ctx.city.placeGrowable(plan, this.style, Math.random(), this.ctx.tick())
+      : this.ctx.city.placeBuilding(plan);
     if (b) {
       this.ctx.events.emit('sfx', 'place');
-      this.ctx.events.emit('toast', { kind: 'success', text: `${this.def.name} inşa edildi` });
+      this.ctx.events.emit('toast', { kind: 'success', text: this.def.zone ? `${this.def.name} inşaatı başladı` : `${this.def.name} inşa edildi` });
     }
     this.refresh();
   }

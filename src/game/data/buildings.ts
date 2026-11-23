@@ -294,6 +294,17 @@ export const getBuilding = (id: string): BuildingDef => {
   return b;
 };
 
+/**
+ * Price (₺) to have a growable built by hand instead of waiting for a
+ * developer: per lot cell, rising with level; workplaces cost more.
+ */
+export function growablePrice(def: BuildingDef): number {
+  const cells = def.footprint[0] * def.footprint[1];
+  const level = def.level ?? 1;
+  const kind = def.zone === ZoneType.Residential ? 1 : def.zone === ZoneType.Commercial ? 1.3 : 1.5;
+  return Math.round((400 * cells * (0.5 + level * 0.75) * kind) / 10) * 10;
+}
+
 /** Growable templates for a zone/level, optionally restricted to a footprint. */
 export function zonedTemplates(zone: ZoneKind, level: number, footprint?: [number, number]): BuildingDef[] {
   return ZONED_BUILDINGS.filter(

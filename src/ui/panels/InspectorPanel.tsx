@@ -1,5 +1,6 @@
+import { ARCH_STYLE_DEFS } from '../../game/data/styles';
 import type { BuildingInfo, RoadInfo } from '../../game/core/events';
-import { getBuilding } from '../../game/data/buildings';
+import { getBuilding, growablePrice } from '../../game/data/buildings';
 import { getRoadType } from '../../game/data/roads';
 import { LINE_TYPES } from '../../game/data/infrastructure';
 import { getZone, ZoneType, type ZoneKind } from '../../game/data/zones';
@@ -101,6 +102,7 @@ function GrowableDetails({ b }: { b: BuildingInfo }) {
       )}
       <KV k={home ? 'Sakinler' : 'Çalışanlar'} v={`${b.occupants} / ${b.capacity}`} testId="building-occupants" />
       <KV k="Kategori" v={b.category} />
+      {b.styleName && <KV k="Stil" v={b.styleName} />}
       <KV k="Alan" v={`${b.w}×${b.d} hücre`} />
       <KV k="Arazi değeri" v={b.landValue} />
       {b.groundPollution > 0 && <KV k="Kirlilik (çevre)" v={b.groundPollution} cls="text-yellow" />}
@@ -273,6 +275,7 @@ function LinePlanCard({ kind }: { kind: 'power' | 'pipe' }) {
 
 function BuildingPlanCard() {
   const plan = useGameStore((s) => s.buildingPlan);
+  const style = useGameStore((s) => s.zoneTool.style);
   const type = useGameStore((s) => s.buildingType);
   const def = getBuilding(plan?.defId ?? type);
   return (
@@ -283,9 +286,12 @@ function BuildingPlanCard() {
       </div>
       <p className="muted small">{def.description}</p>
       <KV k="Alan" v={`${def.footprint[0]}×${def.footprint[1]} hücre`} />
-      <KV k="Maliyet" v={formatMoney(def.cost)} cls="text-blue" />
-      <KV k="Haftalık bakım" v={formatMoney(def.maintenance)} />
-      <KV k="Çalışan" v={formatNumber(def.workers)} />
+      <KV k="Maliyet" v={formatMoney(def.zone ? growablePrice(def) : def.cost)} cls="text-blue" />
+      {!def.zone && <KV k="Haftalık bakım" v={formatMoney(def.maintenance)} />}
+      {def.residents > 0 && <KV k="Konut kapasitesi" v={formatNumber(def.residents)} />}
+      {def.workers > 0 && <KV k="Çalışan" v={formatNumber(def.workers)} />}
+      {def.zone && <KV k="Stil" v={ARCH_STYLE_DEFS[style].name} />}
+      {def.zone && <p className="hint">Elle yerleştirilen bina: bölgesi kendiliğinden atanır, inşaattan sonra diğer binalar gibi yaşar ve gelişir. Yıkılırsa bedelin yarısı iade edilir.</p>}
       {def.utility?.power && <KV k="Üretim" v={`${(def.utility.power / 1000).toFixed(1)} MW`} cls="text-yellow" />}
       {def.utility?.water && <KV k="Su üretimi" v={`${def.utility.water} m³/gün`} cls="text-blue" />}
       {def.utility?.sewage && <KV k="Atık su kapasitesi" v={`${def.utility.sewage} m³/gün`} />}

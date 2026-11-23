@@ -57,8 +57,9 @@ export class PostProcessing {
       return;
     }
     const c = this.ensure();
-    this.bloom!.threshold = 2.6 - 1.7 * night;
-    this.bloom!.strength = 0.22 + 0.5 * night;
+    // Gentle at night: lit windows and lamps glow softly instead of flaring.
+    this.bloom!.threshold = 2.6 - 1.3 * night;
+    this.bloom!.strength = 0.22 + 0.26 * night;
     c.render();
   }
 
