@@ -22,9 +22,10 @@ function SaveRow({ m }: { m: SaveMeta }) {
           <div className="save-name">
             {m.name}
             {m.kind === 'auto' && <span className="chip">Otomatik</span>}
+            {m.sandbox && <span className="chip">Yaratıcı</span>}
           </div>
           <div className="save-sub">
-            {formatNumber(m.population)} nüfus · {formatMoney(m.balance)} · {date}
+            {formatNumber(m.population)} nüfus · {m.sandbox ? 'sınırsız para' : formatMoney(m.balance)} · {date}
           </div>
           <div className="save-sub faint">
             {savedAgo(m.savedAt)} · {m.achievements} başarım · tohum {m.seed}
@@ -93,6 +94,7 @@ export function MainMenu() {
   const [name, setName] = useState(useGameStore.getState().cityName);
   const [seed, setSeed] = useState(() => useGameStore.getState().seedText || randomSeed());
   const [tab, setTab] = useState<'new' | 'saves'>('new');
+  const [sandbox, setSandbox] = useState(useGameStore.getState().newSandbox);
 
   useEffect(() => {
     void refreshSaves();
@@ -101,7 +103,7 @@ export function MainMenu() {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const cityName = name.trim() || 'Yeni Şehir';
-    set({ cityName, seedText: seed.trim(), pendingLoad: null, currentSlot: null, screen: 'loading', loading: { fraction: 0, label: 'Hazırlanıyor' }, error: null });
+    set({ cityName, seedText: seed.trim(), newSandbox: sandbox, pendingLoad: null, currentSlot: null, screen: 'loading', loading: { fraction: 0, label: 'Hazırlanıyor' }, error: null });
   };
   const latest = saves[0];
 
@@ -149,6 +151,13 @@ export function MainMenu() {
                 </button>
               </div>
               <small>Aynı tohum her zaman aynı araziyi üretir.</small>
+            </label>
+            <label className="check-field">
+              <input type="checkbox" checked={sandbox} onChange={(e) => setSandbox(e.target.checked)} data-testid="input-sandbox" />
+              <span>
+                <strong>Yaratıcı mod</strong>
+                <small>Sınırsız para, tüm binalar, yollar ve bölgeler açık, haritanın tamamı kullanılabilir. Başarımlar kazanılmaz.</small>
+              </span>
             </label>
             <button type="submit" className={`btn full big ${latest ? 'secondary' : 'primary'}`} data-testid="btn-start">
               Şehri Kur

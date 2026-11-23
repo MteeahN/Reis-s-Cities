@@ -40,7 +40,7 @@ const MODES: { id: RoadMode; label: string; icon: IconName; hint: string }[] = [
 function RoadPicker() {
   const roadType = useGameStore((s) => s.roadType);
   const roadMode = useGameStore((s) => s.roadMode);
-  const population = useGameStore((s) => s.maxPopulation);
+  const population = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
   return (
     <div className="subtoolbar panel" data-testid="road-types">
       <div className="mode-group" role="group" aria-label="Çizim modu">
@@ -98,7 +98,7 @@ const ZONE_HEX = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
 function ZonePicker() {
   const zt = useGameStore((s) => s.zoneTool);
-  const maxPop = useGameStore((s) => s.maxPopulation);
+  const maxPop = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
   const set = (patch: Partial<ZoneToolState>) => getGame()?.setZoneTool(patch);
   return (
     <div className="subtoolbar panel" data-testid="zone-picker">
@@ -161,7 +161,7 @@ const LINE_TOOL = { power: 'powerline', water: 'pipe' } as const;
 function InfraPicker({ group, lineKind }: { group: 'power' | 'water' | 'service'; lineKind?: 'power' | 'pipe' }) {
   const buildingType = useGameStore((s) => s.buildingType);
   const tool = useGameStore((s) => s.tool);
-  const maxPop = useGameStore((s) => s.maxPopulation);
+  const maxPop = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
   const lineTool = group === 'power' ? LINE_TOOL.power : group === 'water' ? LINE_TOOL.water : null;
   const buildingTool = group === 'service' ? 'services' : group;
   return (

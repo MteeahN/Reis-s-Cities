@@ -252,12 +252,21 @@ function LinePlanCard({ kind }: { kind: 'power' | 'pipe' }) {
           <KV k="Uzunluk" v={formatMeters(plan.length)} />
           <KV k="İnşaat" v={formatMoney(plan.cost)} cls="text-blue" />
           <KV k="Haftalık bakım" v={formatMoney(plan.weeklyMaintenance)} />
+          {plan.valid && (plan.joins > 0 || plan.crossings > 0) && (
+            <p className="hint text-green" data-testid="line-joins">
+              {plan.joins > 0 ? `Mevcut hatta bağlanır (${plan.joins} uç)` : ''}
+              {plan.joins > 0 && plan.crossings > 0 ? ' · ' : ''}
+              {plan.crossings > 0 ? `${plan.crossings} hatla kesişip birleşir` : ''}
+            </p>
+          )}
           <Errors valid={plan.valid} errors={plan.errors} okText="Geçerli — tıklayarak döşeyin" />
         </>
       ) : (
         <p className="hint">Başlangıç ve bitiş noktasına tıklayın; hat bittiği yerden devam eder.</p>
       )}
-      <p className="hint">{kind === 'pipe' ? 'Borular yeraltındadır; Su katmanında görünür.' : 'Binalar birbirine elektrik iletir; hatlar ayrı bölgeleri bağlar.'} Sağ tık / ESC: bitir</p>
+      <p className="hint">{kind === 'pipe'
+          ? 'Borular yeraltındadır; Su katmanında görünür. Mavi: su kaynağına bağlı, kırmızı: bağlı değil. Yeni boruyu mevcut bir borunun ucuna veya ortasına başlatıp bitirerek ağları birleştirin.'
+          : 'Binalar birbirine elektrik iletir; hatlar ayrı bölgeleri bağlar. Yeni hattı mevcut bir hattın üzerinden başlatabilirsiniz.'} Sağ tık / ESC: bitir</p>
     </section>
   );
 }

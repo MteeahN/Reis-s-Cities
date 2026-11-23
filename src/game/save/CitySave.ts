@@ -29,6 +29,8 @@ export interface SavedLine {
 
 /** Everything about the built city (the terrain itself is regenerated from the seed). */
 export interface CityState {
+  /** Sandbox (creative) mode; absent in older saves = normal game. */
+  sandbox?: boolean;
   roads: RoadGraphData;
   buildings: { nextId: number; items: SavedBuilding[] };
   /** Run-length encoded zone per cell: [value, count, …]. */
@@ -78,6 +80,8 @@ export interface SaveMeta {
   population: number;
   balance: number;
   achievements: number;
+  /** Sandbox (creative) mode city. */
+  sandbox?: boolean;
   appVersion: string;
   version: number;
   /** Small JPEG data URL of the view at save time (may be empty). */
@@ -101,11 +105,12 @@ export function serializeCity(city: City, sim: CitySimulation): CityState {
     },
     zones: city.zones.serialize(),
     lines: { power: lines(city.powerLines), pipe: lines(city.pipes) },
-    treasury: { balance: city.treasury.balance, spent: { ...city.treasury.spent }, refunded: { ...city.treasury.refunded } },
+    treasury: { balance: city.treasury.storedBalance, spent: { ...city.treasury.spent }, refunded: { ...city.treasury.refunded } },
     economy: city.economy.serialize(),
     population: city.population.serialize(),
     simulation: sim.serialize(),
     unlockTiles: [...city.world.unlock.tiles],
+    sandbox: city.sandbox,
   };
 }
 
@@ -126,6 +131,7 @@ export function restoreCity(city: City, sim: CitySimulation, s: CityState, tick:
     target.setNextId(lines.nextId);
   }
   city.treasury.restore(s.treasury.balance, s.treasury.spent, s.treasury.refunded);
+  if (s.sandbox === true) city.enableSandbox();
   city.economy.restore(s.economy);
   city.population.restore(s.population, (id) => city.buildings.items.get(id)?.zone === ZoneType.Residential);
   sim.restore(s.simulation, tick, gameMinutes);
@@ -211,6 +217,7 @@ export function makeMeta(data: CitySaveData, id: string, kind: SaveMeta['kind'],
     population: Math.round(pop),
     balance: data.city.treasury.balance,
     achievements: data.achievements.earned.length,
+    sandbox: data.city.sandbox === true,
     appVersion: APP_VERSION,
     version: SAVE_VERSION,
     thumbnail,

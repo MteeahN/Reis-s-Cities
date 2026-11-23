@@ -3,6 +3,7 @@ import { formatGameDate } from '../../utils/format';
 import { Icon } from '../components/Icon';
 
 export function AchievementsPanel() {
+  const sandbox = useGameStore((s) => s.sandbox);
   const open = useGameStore((s) => s.popup === 'achievements');
   const list = useGameStore((s) => s.achievements);
   const set = useGameStore((s) => s.set);
@@ -27,6 +28,7 @@ export function AchievementsPanel() {
           <Icon name="close" size={14} />
         </button>
       </div>
+      {sandbox && <p className="hint" data-testid="achievements-sandbox">Yaratıcı modda başarımlar kazanılmaz; ilerleme yalnızca gösterilir.</p>}
       <div className="bar">
         <span className="fill-green" style={{ width: `${list.length ? (earned / list.length) * 100 : 0}%` }} />
       </div>

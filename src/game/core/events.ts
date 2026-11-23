@@ -21,6 +21,10 @@ export interface LinePlanView {
   weeklyMaintenance: number;
   valid: boolean;
   errors: string[];
+  /** Ends of the new segment that land on an existing line (0–2). */
+  joins: number;
+  /** Existing lines the new segment crosses (they connect too). */
+  crossings: number;
 }
 
 export interface ZoneToolState {

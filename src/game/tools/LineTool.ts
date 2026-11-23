@@ -48,8 +48,12 @@ export class LineTool implements Tool {
   }
 
   private snap(ground: Vector3, forEnd: boolean): P2 {
-    const end = this.ctx.city.linesOf(this.kind).nearestEnd(ground.x, ground.z, 8);
+    const lines = this.ctx.city.linesOf(this.kind);
+    const end = lines.nearestEnd(ground.x, ground.z, 8);
     if (end) return { ...end };
+    // Join onto the middle of an existing segment (a T junction).
+    const onLine = lines.nearestPoint(ground.x, ground.z, 6);
+    if (onLine) return onLine.p;
     const raw = { x: ground.x, z: ground.z };
     if (this.free) return raw;
     if (forEnd && this.start) return snapSegment(this.start, raw, 15, CELL_SIZE);
@@ -71,7 +75,29 @@ export class LineTool implements Tool {
     this.preview.showPath([this.start, this.cursor], WIDTH[this.kind], this.plan.valid ? (this.kind === 'pipe' ? 'upgrade' : 'valid') : 'invalid', h);
     this.preview.setMarkers([this.start, this.cursor], 3, h);
     const p = this.plan;
-    this.ctx.events.emit('linePlan', { kind: this.kind, length: p.length, cost: p.cost, weeklyMaintenance: p.weeklyMaintenance, valid: p.valid, errors: p.errors });
+    if (!p.valid) {
+      this.ctx.events.emit('linePlan', { kind: this.kind, length: p.length, cost: p.cost, weeklyMaintenance: p.weeklyMaintenance, valid: false, errors: p.errors, joins: 0, crossings: 0 });
+      return;
+    }
+    const { joins, crossings } = this.connections(this.start, this.cursor);
+    this.ctx.events.emit('linePlan', { kind: this.kind, length: p.length, cost: p.cost, weeklyMaintenance: p.weeklyMaintenance, valid: p.valid, errors: p.errors, joins, crossings });
+  }
+
+  /** How the planned segment connects to the existing network. */
+  private connections(a: P2, b: P2): { joins: number; crossings: number } {
+    const lines = this.ctx.city.linesOf(this.kind);
+    const touching = new Set<number>();
+    let joins = 0;
+    for (const p of [a, b]) {
+      const hit = lines.nearestPoint(p.x, p.z, 0.5);
+      if (hit) {
+        joins++;
+        touching.add(hit.line.id);
+      }
+    }
+    let crossings = 0;
+    for (const l of lines.lines.values()) if (!touching.has(l.id) && segmentsCross(a, b, l.a, l.b)) crossings++;
+    return { joins, crossings };
   }
 
   onPointerMove(p: PointerInfo, ground: Vector3 | null): void {
@@ -129,4 +155,14 @@ export class LineTool implements Tool {
   get lineType() {
     return LINE_TYPES[this.kind];
   }
+}
+
+/** True when segments ab and cd properly intersect. */
+function segmentsCross(a: P2, b: P2, c: P2, d: P2): boolean {
+  const o = (p: P2, q: P2, r: P2) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
+  const d1 = o(c, d, a);
+  const d2 = o(c, d, b);
+  const d3 = o(a, b, c);
+  const d4 = o(a, b, d);
+  return d1 * d2 < 0 && d3 * d4 < 0;
 }

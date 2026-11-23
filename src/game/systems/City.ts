@@ -1,4 +1,4 @@
-import { CELL_SIZE, GRID_CELLS, WORLD_SIZE } from '../core/config';
+import { CELL_SIZE, GRID_CELLS, WORLD_SIZE, TILES_PER_SIDE } from '../core/config';
 import { LINE_TYPES, type LineKind } from '../data/infrastructure';
 import { UtilityLines } from '../entities/infra/UtilityLines';
 import type { P2 } from '../entities/road/curve';
@@ -58,6 +58,8 @@ export class City {
   private utilitiesDirty = true;
   /** Highest population reached (kept in sync by the simulation; drives unlocks). */
   maxPopulation = 0;
+  /** Sandbox (creative) mode: unlimited money, every tool and all land unlocked. */
+  sandbox = false;
   private utilityListeners = new Set<(u: UtilityResult) => void>();
   readonly plannerWorld: PlannerWorld;
   readonly placementWorld: PlacementWorld;
@@ -335,12 +337,26 @@ export class City {
     for (const k of b.cells) this.zones.refresh(k, this.isCellFree(k));
   }
 
+  // ---------------------------------------------------------------- sandbox
+
+  enableSandbox(): void {
+    if (this.sandbox) return;
+    this.sandbox = true;
+    this.treasury.setUnlimited();
+    for (let z = 0; z < TILES_PER_SIDE; z++) for (let x = 0; x < TILES_PER_SIDE; x++) this.world.unlock.unlockTile(x, z);
+  }
+
+  /** Population level used for unlock checks (everything in sandbox mode). */
+  get unlockLevel(): number {
+    return this.sandbox ? Infinity : this.maxPopulation;
+  }
+
   // ---------------------------------------------------------------- player buildings
 
   planBuilding(defId: string, i: number, j: number, rot: Rotation): BuildingPlan {
     const def = getBuilding(defId);
     const plan = planBuilding(def, i, j, rot, this.placementWorld, this.treasury.balance, this.buildings.countOf(defId));
-    if (def.unlockPopulation > this.maxPopulation) {
+    if (def.unlockPopulation > this.unlockLevel) {
       plan.errors.unshift(`Kilitli: ${def.unlockPopulation.toLocaleString('tr-TR')} nüfusta açılır`);
       plan.valid = false;
     }

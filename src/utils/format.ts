@@ -1,7 +1,7 @@
 const moneyFmt = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 });
 const numFmt = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 });
 
-export const formatMoney = (v: number): string => `₺${moneyFmt.format(Math.round(v))}`;
+export const formatMoney = (v: number): string => (Number.isFinite(v) ? `₺${moneyFmt.format(Math.round(v))}` : 'Sınırsız');
 export const formatNumber = (v: number): string => numFmt.format(v);
 
 const MONTHS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];

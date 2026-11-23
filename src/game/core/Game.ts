@@ -22,6 +22,7 @@ import { RoadRenderer } from '../rendering/roads/RoadRenderer';
 import { City } from '../systems/City';
 import { ZoneOverlay } from '../rendering/ZoneOverlay';
 import { PowerLineRenderer } from '../rendering/PowerLineRenderer';
+import { PipeRenderer } from '../rendering/PipeRenderer';
 import { ProblemIcons } from '../rendering/ProblemIcons';
 import { InfoLayerView } from '../rendering/InfoLayerView';
 import { TrafficOverlay } from '../rendering/TrafficOverlay';
@@ -62,6 +63,8 @@ export interface GameOptions {
   settings?: Settings;
   /** A saved city to load (its seed and name replace the ones above). */
   save?: CitySaveData;
+  /** New city in sandbox mode (ignored when loading a save: the save decides). */
+  sandbox?: boolean;
 }
 
 /**
@@ -89,6 +92,7 @@ export class Game {
   private city!: City;
   private citySim!: CitySimulation;
   private powerLineRenderer!: PowerLineRenderer;
+  private pipeRenderer!: PipeRenderer;
   private problemIcons!: ProblemIcons;
   private infoView!: InfoLayerView;
   private trafficOverlay!: TrafficOverlay;
@@ -180,18 +184,24 @@ export class Game {
     this.world.addTo(this.scene);
 
     this.city = new City(this.world);
+    if (!this.options.save && this.options.sandbox) this.city.enableSandbox();
     this.roadRenderer = new RoadRenderer(this.city.roads, this.world.heightAt);
     this.buildingRenderer = new BuildingRenderer(this.city.buildings);
     this.furniture = new StreetFurniture(this.city.roads, this.roadRenderer, this.world.heightAt);
     this.scene.add(this.roadRenderer.group, this.buildingRenderer.group, this.furniture.group);
     this.zoneOverlay = new ZoneOverlay(this.city, this.world.terrainMaterial);
     this.powerLineRenderer = new PowerLineRenderer(this.city.powerLines, this.world.heightAt);
+    this.pipeRenderer = new PipeRenderer(this.city.pipes, this.world.heightAt);
+    this.scene.add(this.pipeRenderer.group);
     this.problemIcons = new ProblemIcons(this.city);
     this.infoView = new InfoLayerView(this.city, this.world.terrainMaterial, this.buildingRenderer);
     this.trafficOverlay = new TrafficOverlay(this.city.traffic, this.city.roads, this.roadRenderer);
     this.vehicles = new VehicleRenderer(this.city.traffic, this.city.roads, this.roadRenderer);
     this.scene.add(this.powerLineRenderer.group, this.problemIcons.group, this.trafficOverlay.mesh, this.vehicles.group);
-    this.city.onUtilities(() => this.refreshOverlays());
+    this.city.onUtilities((u) => {
+      this.pipeRenderer.setSupply(u.pipeSupplied);
+      this.refreshOverlays();
+    });
     this.citySim = new CitySimulation(this.city, this.seed, {
       onStats: (stats, demand) => {
         this.emitEconomy();
@@ -227,7 +237,7 @@ export class Game {
       events: this.events,
       overlay: this.overlay,
       pick: (x, y) => this.pick(x, y),
-      population: () => this.citySim.maxPopulation,
+      population: () => this.city.unlockLevel,
       zoneOverlay: this.zoneOverlay,
       isZoneUnlocked: (z) => this.citySim.isZoneUnlocked(z),
       showLayer: (layer) => {
@@ -253,6 +263,7 @@ export class Game {
       progress(0.9, 'Şehir yükleniyor');
       this.restoreSave(this.options.save);
     }
+    this.pipeRenderer.setSupply(this.city.utilities.pipeSupplied);
     renderer.domElement.addEventListener('webglcontextlost', this.onContextLost);
 
     this.quality = new QualityManager((level) => this.applyQuality(level));
@@ -324,6 +335,11 @@ export class Game {
     if (cam) this.cameraCtl.setView(cam.x, cam.z, cam.yaw, cam.pitch, cam.distance);
   }
 
+  /** Sandbox (creative) mode: unlimited money, everything unlocked. */
+  get sandbox(): boolean {
+    return this.city?.sandbox ?? false;
+  }
+
   /** Complete state of the city, ready to store. */
   serialize(): CitySaveData {
     const c = this.cameraCtl;
@@ -374,7 +390,8 @@ export class Game {
     const m = this.sim.gameMinutes;
     if (st && this.history.record(this.sample(st, m))) this.events.emit('history', this.history.samples.slice());
     const ctx = this.achievementContext();
-    for (const a of this.achievements.evaluate(ctx, m)) {
+    // Achievements are not earned in sandbox mode (money and unlocks are free there).
+    if (!this.city.sandbox) for (const a of this.achievements.evaluate(ctx, m)) {
       this.events.emit('sfx', 'milestone');
       this.events.emit('toast', { kind: 'success', text: `Başarım kazanıldı: ${a.title} — ${a.description}` });
     }
@@ -783,7 +800,7 @@ export class Game {
 
   setRoadType(id: string): void {
     const t = getRoadType(id);
-    if (!isRoadTypeUnlocked(t, this.citySim.maxPopulation)) {
+    if (!isRoadTypeUnlocked(t, this.city.unlockLevel)) {
       this.events.emit('toast', { kind: 'warning', text: `${t.name} ${t.unlockPopulation.toLocaleString('tr-TR')} nüfusta açılır.` });
       return;
     }
@@ -851,6 +868,7 @@ export class Game {
     const layer = this.toolLayer ?? this.userLayer;
     this.infoView.set(layer);
     this.trafficOverlay.setVisible(layer === 'traffic');
+    this.pipeRenderer.setVisible(layer === 'water' || layer === 'sewage');
     this.events.emit('infoLayer', layer);
   }
 
@@ -1044,6 +1062,8 @@ export class Game {
     this.dayNight?.dispose();
     this.post?.dispose();
     this.roadRenderer?.dispose();
+    this.powerLineRenderer?.dispose();
+    this.pipeRenderer?.dispose();
     this.buildingRenderer?.dispose();
     this.zoneOverlay?.dispose();
     this.trafficOverlay?.dispose();

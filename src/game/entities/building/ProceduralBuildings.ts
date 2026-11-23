@@ -21,70 +21,272 @@ const GROUND = { grass: '#6f9a4a', paving: '#bdb6a6', concrete: '#a29d93' };
 const DOOR = '#4a3a2c';
 const DARK = '#2e3338';
 const GREEN = '#4f7f33';
+const GREEN_DARK = '#3d6a2a';
 const GLASS = '#7f9db3';
+const GLASS_DARK = '#4e6a80';
+const METAL = '#9a9ea3';
+const METAL_DARK = '#6c7177';
+const CONCRETE = '#b9b4aa';
+const PATH = '#c9c1b0';
+const ASPHALT = '#55585c';
+const SOLAR = '#24344d';
+const TRUNK = '#5a4330';
+const CAR_COLORS = ['#c8ccd0', '#2b2f36', '#a83232', '#2f5d9b', '#e8e6e0', '#6b6f45', '#8c8f94', '#b8862f'];
+const CONTAINER_COLORS = ['#b5472f', '#2f6db5', '#3d8a4d', '#c79a2a', '#7a7f86', '#8a4f9e'];
+
+type Parts = BuildingPart[];
+
+const box = (parts: Parts, size: [number, number, number], pos: [number, number, number], color: string, extra: Partial<BuildingPart> = {}) =>
+  parts.push({ shape: 'box', size, pos, color, ...extra });
+const cyl = (parts: Parts, d: number, h: number, pos: [number, number, number], color: string, segments = 8, extra: Partial<BuildingPart> = {}) =>
+  parts.push({ shape: 'cylinder', size: [d, h, d], pos, color, segments, ...extra });
+
+/** Deterministic 0..1 value for feature `k` of variant `v` (looks stay stable per variant). */
+function hash(v: number, k: number): number {
+  let x = Math.imul(v + 1, 0x9e3779b1) ^ Math.imul(k + 7, 0x85ebca6b);
+  x ^= x >>> 15;
+  x = Math.imul(x, 0x2c1b3c6d);
+  x ^= x >>> 12;
+  return (x >>> 0) / 4294967296;
+}
+
+function tree(parts: Parts, x: number, z: number, size = 1, conifer = false): void {
+  cyl(parts, 0.35 * size, 1.6 * size, [x, 0.1, z], TRUNK, 6);
+  if (conifer) parts.push({ shape: 'cone', size: [2 * size, 3.6 * size, 2 * size], pos: [x, 1.2 * size, z], color: GREEN_DARK, segments: 7 });
+  else parts.push({ shape: 'dome', size: [2.4 * size, 1.6 * size, 2.4 * size], pos: [x, 1.4 * size, z], color: GREEN, segments: 8 });
+}
+
+/** A parked car facing along x (rot 90 → along z). */
+function car(parts: Parts, x: number, z: number, color: string, alongZ = false, y = 0): void {
+  const rot: [number, number, number] | undefined = alongZ ? [0, 90, 0] : undefined;
+  box(parts, [4.2, 0.75, 1.8], [x, y + 0.35, z], color, { rot });
+  box(parts, [2.2, 0.6, 1.6], [x, y + 1.1, z], DARK, { rot });
+}
+
+function truck(parts: Parts, x: number, z: number, trailer: string, alongZ = false): void {
+  const rot: [number, number, number] | undefined = alongZ ? [0, 90, 0] : undefined;
+  const o = (d: number): [number, number] => (alongZ ? [x, z + d] : [x + d, z]);
+  const [cx, cz] = o(3.4);
+  box(parts, [2.2, 2.6, 2.3], [cx, 0.3, cz], '#e4e2dc', { rot });
+  const [tx, tz] = o(-1.1);
+  box(parts, [6.6, 2.9, 2.4], [tx, 0.6, tz], trailer, { rot });
+}
+
+/** Low fence along the lot front with a gap for the entrance. */
+function frontFence(parts: Parts, W: number, front: number, gapX: number, gap: number, color: string, h = 0.9): void {
+  const left = -W / 2 + 0.3;
+  const right = W / 2 - 0.3;
+  const a = gapX - gap / 2;
+  const b = gapX + gap / 2;
+  if (a - left > 0.4) box(parts, [a - left, h, 0.12], [(left + a) / 2, 0.1, front - 0.35], color);
+  if (right - b > 0.4) box(parts, [right - b, h, 0.12], [(b + right) / 2, 0.1, front - 0.35], color);
+}
+
+function rooftopUnits(parts: Parts, n: number, y: number, cx: number, cz: number, spanX: number, spanZ: number, v: number): void {
+  for (let k = 0; k < n; k++) {
+    const x = cx + (hash(v, 40 + k) - 0.5) * spanX;
+    const z = cz + (hash(v, 60 + k) - 0.5) * spanZ;
+    if (hash(v, 80 + k) < 0.5) box(parts, [1.4, 0.9, 1.1], [x, y, z], METAL);
+    else cyl(parts, 1.1, 0.8, [x, y, z], METAL_DARK, 8);
+  }
+}
+
+function antenna(parts: Parts, x: number, y: number, z: number, h: number): void {
+  cyl(parts, 0.18, h, [x, y, z], '#c9c9c9', 5);
+  box(parts, [1.2, 0.08, 0.08], [x, y + h * 0.7, z], '#c9c9c9');
+}
+
+function solarPanels(parts: Parts, x: number, y: number, z: number, w: number, d: number, tilt: number): void {
+  box(parts, [w, 0.12, d], [x, y, z], SOLAR, { rot: [tilt, 0, 0] });
+}
 
 /**
  * Turns a spec into primitive parts (same format as hand-authored catalogue
  * models), so zoned buildings render through the same instanced pipeline.
+ * The variant drives structure too (roof shapes, setbacks, balconies, porches,
+ * rooftop equipment, yards), not only colours.
  */
 export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
   const W = s.footprint[0] * CELL_SIZE;
   const D = s.footprint[1] * CELL_SIZE;
   const v = s.variant ?? 0;
-  const parts: BuildingPart[] = [{ shape: 'box', size: [W - 0.3, 0.12, D - 0.3], pos: [0, 0, 0], color: GROUND[s.ground] }];
+  const parts: Parts = [{ shape: 'box', size: [W - 0.3, 0.12, D - 0.3], pos: [0, 0, 0], color: GROUND[s.ground] }];
   const front = D / 2;
+  const r = (k: number) => hash(v, k);
 
   switch (s.style) {
     case 'house': {
-      const bw = Math.min(W - 2.4, 6.5 + (W > 8 ? 4 : 0));
-      const bd = Math.min(D - 3.2, 6 + (D > 8 ? 3 : 0));
+      const wide = W > 8;
+      const deep = D > 8;
+      const bw = Math.min(W - 2.4, 6.5 + (wide ? 4 : 0));
+      const bd = Math.min(D - 3.2, 6 + (deep ? 3 : 0));
       const h = s.floors * 3;
       const cz = front - 2.2 - bd / 2;
-      const cx = W > 8 ? -1.5 : 0;
+      const cx = wide ? -1.5 : 0;
+      const modern = v % 6 === 5;
       parts.push({ shape: 'box', size: [bw, h, bd], pos: [cx, 0.1, cz], color: s.wall, facade: true });
-      if (v % 3 === 2) parts.push({ shape: 'hip', size: [bw + 0.7, 2.2, bd + 0.7], pos: [cx, h + 0.1, cz], color: s.roof });
-      else parts.push({ shape: 'gable', size: [bw + 0.7, 2.4, bd + 0.7], pos: [cx, h + 0.1, cz], color: s.roof, rot: v % 2 ? [0, 90, 0] : undefined });
-      parts.push({ shape: 'box', size: [1.1, 2.1, 0.2], pos: [cx + bw * 0.2, 0.1, cz + bd / 2 + 0.05], color: DOOR });
-      parts.push({ shape: 'box', size: [0.7, 1.8, 0.7], pos: [cx - bw * 0.3, h + 1, cz - bd * 0.2], color: '#7d6b5d' });
-      parts.push({ shape: 'box', size: [1.2, 0.8, 0.6], pos: [-W / 2 + 1.2, 0.1, front - 0.8], color: GREEN });
-      if (W > 8) {
-        parts.push({ shape: 'box', size: [3.6, 2.6, 5], pos: [W / 2 - 2.4, 0.1, front - 4], color: s.accent });
-        parts.push({ shape: 'box', size: [2.8, 2, 0.15], pos: [W / 2 - 2.4, 0.1, front - 1.45], color: '#d8d4cc' });
+      // Plinth course.
+      box(parts, [bw + 0.15, 0.45, bd + 0.15], [cx, 0.1, cz], s.accent);
+      if (modern) {
+        // Flat roof with parapet and a roof terrace.
+        box(parts, [bw + 0.3, 0.5, bd + 0.3], [cx, h + 0.1, cz], '#e6e3dc');
+        box(parts, [bw * 0.45, 0.9, bd * 0.4], [cx - bw * 0.2, h + 0.6, cz - bd * 0.2], s.wall);
+        solarPanels(parts, cx + bw * 0.2, h + 0.7, cz, Math.min(2.4, bw * 0.4), 1.6, -18);
+      } else if (v % 3 === 2) {
+        parts.push({ shape: 'hip', size: [bw + 0.7, 2.2, bd + 0.7], pos: [cx, h + 0.1, cz], color: s.roof });
+      } else {
+        const turned = v % 2 === 1;
+        // A turned ridge swaps the gable's own axes so it still covers bw × bd.
+        parts.push({ shape: 'gable', size: turned ? [bd + 0.7, 2.4, bw + 0.7] : [bw + 0.7, 2.4, bd + 0.7], pos: [cx, h + 0.1, cz], color: s.roof, rot: turned ? [0, 90, 0] : undefined });
+        // Dormer on the road side of two-storey houses.
+        if (s.floors >= 2 && !turned && bw > 5) {
+          box(parts, [1.4, 1.1, 1.2], [cx - bw * 0.15, h + 0.7, cz + bd * 0.18], s.wall);
+          parts.push({ shape: 'gable', size: [1.7, 0.7, 1.5], pos: [cx - bw * 0.15, h + 1.8, cz + bd * 0.18], color: s.roof, rot: [0, 90, 0] });
+        }
       }
-      if (D > 8) {
-        parts.push({ shape: 'cylinder', size: [0.4, 2.2, 0.4], pos: [W / 2 - 2, 0.1, -D / 2 + 3], color: '#5a4330' });
-        parts.push({ shape: 'dome', size: [3, 2.6, 3], pos: [W / 2 - 2, 2, -D / 2 + 3], color: GREEN });
+      // Gutters / eaves line.
+      box(parts, [bw + 0.5, 0.15, 0.15], [cx, h + 0.05, cz + bd / 2 + 0.3], '#d8d4cc');
+      // Door and porch.
+      const doorX = cx + bw * 0.2;
+      box(parts, [1.1, 2.1, 0.2], [doorX, 0.1, cz + bd / 2 + 0.05], DOOR);
+      if (v % 2 === 0) {
+        box(parts, [2.4, 0.18, 1.5], [doorX, 2.5, cz + bd / 2 + 0.75], s.accent);
+        cyl(parts, 0.16, 2.4, [doorX - 1.05, 0.1, cz + bd / 2 + 1.35], '#e8e4dc', 6);
+        cyl(parts, 0.16, 2.4, [doorX + 1.05, 0.1, cz + bd / 2 + 1.35], '#e8e4dc', 6);
+        box(parts, [2.4, 0.25, 1.5], [doorX, 0.1, cz + bd / 2 + 0.75], CONCRETE);
+      } else {
+        box(parts, [1.6, 0.12, 0.9], [doorX, 2.4, cz + bd / 2 + 0.45], s.accent);
+      }
+      // Path to the street.
+      const pathLen = front - (cz + bd / 2) - 0.2;
+      if (pathLen > 0.4) box(parts, [1.1, 0.06, pathLen], [doorX, 0.12, front - pathLen / 2 - 0.15], PATH);
+      // Chimney.
+      if (!modern) box(parts, [0.7, 1.8, 0.7], [cx - bw * 0.3, h + 1, cz - bd * 0.2], v % 4 === 1 ? '#8a5a44' : '#7d6b5d');
+      // Solar panels on some pitched roofs.
+      if (!modern && v % 4 === 3) solarPanels(parts, cx + bw * 0.1, h + 0.9, cz - bd * 0.22, Math.min(2.6, bw * 0.45), 1.6, -26);
+      // Front fence or hedge.
+      if (r(1) < 0.5) frontFence(parts, W, front, doorX, 1.4, '#e8e4dc', 0.8);
+      else frontFence(parts, W, front, doorX, 1.4, GREEN_DARK, 1.0);
+      box(parts, [1.2, 0.8, 0.6], [-W / 2 + 1.2, 0.1, front - 1.2], GREEN);
+      // Mailbox.
+      box(parts, [0.35, 1.1, 0.3], [doorX + 1.1, 0.1, front - 0.6], '#3b4a5a');
+      if (wide) {
+        // Garage with driveway, often a car on it.
+        box(parts, [3.6, 2.6, 5], [W / 2 - 2.4, 0.1, front - 4], s.accent);
+        box(parts, [3.9, 0.25, 5.3], [W / 2 - 2.4, 2.7, front - 4], s.roof);
+        box(parts, [2.8, 2, 0.15], [W / 2 - 2.4, 0.1, front - 1.45], '#d8d4cc');
+        box(parts, [3, 0.06, 1.3], [W / 2 - 2.4, 0.12, front - 0.75], ASPHALT);
+        if (r(2) < 0.7) car(parts, W / 2 - 2.4, front - 0.8, CAR_COLORS[Math.floor(r(3) * CAR_COLORS.length)]);
+      }
+      if (deep) {
+        tree(parts, W / 2 - 2, -D / 2 + 3, 1.2);
+        if (r(4) < 0.6) tree(parts, -W / 2 + 2, -D / 2 + 2.4, 0.9, r(5) < 0.4);
+        // Back garden: shed or a small pool.
+        if (r(6) < 0.5) {
+          box(parts, [2, 2, 1.8], [cx, 0.1, -D / 2 + 1.6], '#8a6a4a');
+          parts.push({ shape: 'gable', size: [2.3, 0.8, 2.1], pos: [cx, 2.1, -D / 2 + 1.6], color: s.roof });
+        } else {
+          box(parts, [3.4, 0.08, 2], [cx, 0.12, -D / 2 + 1.8], '#4fb3d9');
+          box(parts, [3.8, 0.1, 2.4], [cx, 0.1, -D / 2 + 1.8], '#e6e1d6');
+        }
+      } else if (r(4) < 0.5) {
+        tree(parts, -W / 2 + 1.4, -D / 2 + 1.4, 0.75);
       }
       break;
     }
     case 'apartment': {
       const bw = W - 1.8;
       const bd = D - 3;
-      const h = s.floors * 3.2;
+      const fh = 3.2;
+      const h = s.floors * fh;
       const cz = front - 2 - bd / 2;
-      parts.push({ shape: 'box', size: [bw, h, bd], pos: [0, 0.1, cz], color: s.wall, facade: true });
-      parts.push({ shape: 'box', size: [bw + 0.3, 0.6, bd + 0.3], pos: [0, h + 0.1, cz], color: s.accent });
-      parts.push({ shape: 'box', size: [Math.min(3, bw * 0.4), 1.6, 2], pos: [bw * 0.2, h + 0.7, cz - bd * 0.1], color: '#9a958c' });
-      parts.push({ shape: 'box', size: [2.6, 0.25, 1.6], pos: [0, 2.8, cz + bd / 2 + 0.8], color: s.accent });
-      parts.push({ shape: 'box', size: [1.6, 2.4, 0.2], pos: [0, 0.1, cz + bd / 2 + 0.05], color: DARK });
-      // Balcony slabs every other floor on wide buildings.
-      if (bw > 9) {
-        for (let f = 1; f < s.floors; f += 2) parts.push({ shape: 'box', size: [bw * 0.8, 0.2, 1], pos: [0, f * 3.2 + 0.1, cz + bd / 2 + 0.5], color: s.accent });
+      const setback = v % 3 === 1 && s.floors >= 4;
+      const lower = setback ? h - fh : h;
+      parts.push({ shape: 'box', size: [bw, lower, bd], pos: [0, 0.1, cz], color: s.wall, facade: true });
+      if (setback) {
+        // Recessed top floor with a terrace in front.
+        parts.push({ shape: 'box', size: [bw * 0.8, fh, bd * 0.75], pos: [0, lower + 0.1, cz - bd * 0.1], color: s.wall, facade: true });
+        box(parts, [bw + 0.2, 0.9, 0.15], [0, lower + 0.1, cz + bd / 2], s.accent);
       }
+      box(parts, [bw + 0.3, 0.6, bd + 0.3], [0, h + 0.1, cz], s.accent);
+      // Ground-floor plinth and floor bands.
+      box(parts, [bw + 0.12, 0.6, bd + 0.12], [0, 0.1, cz], s.accent);
+      if (v % 2 === 0) for (let f = 2; f < s.floors; f += 2) box(parts, [bw + 0.1, 0.18, bd + 0.1], [0, f * fh + 0.05, cz], s.accent);
+      // Stair / lift housing, water tanks and AC units on the roof.
+      box(parts, [Math.min(3, bw * 0.4), 2.2, 2.2], [bw * 0.2, h + 0.7, cz - bd * 0.1], '#9a958c');
+      cyl(parts, 1.3, 1.4, [-bw * 0.25, h + 0.7, cz - bd * 0.25], '#d6d2ca', 10);
+      if (bw > 8) cyl(parts, 1.3, 1.4, [-bw * 0.25 + 1.6, h + 0.7, cz - bd * 0.25], '#d6d2ca', 10);
+      rooftopUnits(parts, 2 + (v % 3), h + 0.7, 0, cz, bw * 0.6, bd * 0.5, v);
+      if (r(7) < 0.5) antenna(parts, -bw * 0.3, h + 0.7, cz + bd * 0.2, 3);
+      // Entrance canopy and door.
+      box(parts, [2.6, 0.25, 1.6], [0, 2.8, cz + bd / 2 + 0.8], s.accent);
+      box(parts, [1.6, 2.4, 0.2], [0, 0.1, cz + bd / 2 + 0.05], DARK);
+      box(parts, [2, 0.06, front - (cz + bd / 2) - 0.2], [0, 0.12, (front + cz + bd / 2) / 2], PATH);
+      // Balconies with railings: every floor (v even) or every other floor.
+      const step = v % 2 === 0 ? 1 : 2;
+      const balW = bw > 9 ? bw * 0.8 : Math.min(2.4, bw * 0.35);
+      const bal = bw > 9 ? [0] : [-bw * 0.28, bw * 0.28];
+      for (let f = 1; f < (setback ? s.floors - 1 : s.floors); f += step) {
+        for (const bx of bal) {
+          box(parts, [balW, 0.2, 1], [bx, f * fh + 0.1, cz + bd / 2 + 0.5], s.accent);
+          box(parts, [balW, 0.9, 0.08], [bx, f * fh + 0.3, cz + bd / 2 + 0.97], v % 4 < 2 ? '#d9d6cf' : GLASS);
+        }
+      }
+      // Side yard: trees, bikes, parking.
+      tree(parts, -W / 2 + 1, front - 1, 0.8);
+      if (W > 8) tree(parts, W / 2 - 1, front - 1, 0.8, r(8) < 0.3);
       break;
     }
     case 'tower': {
       const pw = W - 1.6;
       const pd = D - 2.6;
-      const tw = pw * 0.72;
-      const td = pd * 0.72;
       const cz = front - 1.8 - pd / 2;
       const th = s.floors * 3.2;
+      const facade = v % 2 ? 'office' : 'residential';
       parts.push({ shape: 'box', size: [pw, 4.4, pd], pos: [0, 0.1, cz], color: s.accent, facade: 'shop' });
-      parts.push({ shape: 'box', size: [tw, th, td], pos: [0, 4.5, cz], color: s.wall, facade: v % 2 ? 'office' : 'residential' });
-      parts.push({ shape: 'box', size: [tw + 0.4, 1.2, td + 0.4], pos: [0, 4.5 + th, cz], color: s.accent });
-      parts.push({ shape: 'box', size: [tw * 0.4, 2.2, td * 0.4], pos: [0, 5.7 + th, cz], color: '#8d8a84' });
-      if (v % 2) parts.push({ shape: 'cylinder', size: [0.25, 6, 0.25], pos: [tw * 0.2, 7.9 + th, cz], color: '#c9c9c9' });
+      box(parts, [pw + 0.3, 0.4, pd + 0.3], [0, 4.5, cz], s.accent);
+      // Tower massing: straight, two tiers or three stepped tiers.
+      const tiers = 1 + (v % 3);
+      let y = 4.5;
+      let tw = pw * 0.72;
+      let td = pd * 0.72;
+      let left = th;
+      for (let t = 0; t < tiers; t++) {
+        const hh = t === tiers - 1 ? left : Math.round((th / tiers) * (t === 0 ? 1.2 : 1));
+        left -= hh;
+        parts.push({ shape: 'box', size: [tw, hh, td], pos: [0, y, cz], color: s.wall, facade });
+        y += hh;
+        box(parts, [tw + 0.3, 0.35, td + 0.3], [0, y, cz], s.accent);
+        tw *= 0.82;
+        td *= 0.82;
+      }
+      // Corner fins in the accent colour.
+      const fw = pw * 0.72;
+      const fd = pd * 0.72;
+      if (v % 4 !== 3) {
+        const finH = Math.round(th / tiers * 1.2);
+        for (const sx of [-1, 1]) box(parts, [0.4, finH, 0.4], [(sx * fw) / 2, 4.5, cz + fd / 2], s.accent);
+      }
+      // Balconies on residential towers.
+      if (facade === 'residential') {
+        for (let f = 1; f < Math.min(s.floors, Math.round(th / tiers * 1.2 / 3.2)); f += 2) box(parts, [fw * 0.5, 0.18, 0.9], [0, 4.5 + f * 3.2, cz + fd / 2 + 0.45], '#d9d6cf');
+      }
+      // Crown and roof.
+      box(parts, [tw + 0.2, 1.2, td + 0.2], [0, y + 0.35, cz], s.accent);
+      box(parts, [tw * 0.45, 2.2, td * 0.45], [0, y + 1.55, cz], '#8d8a84');
+      if (W >= 16 && D >= 16 && v % 2 === 0) {
+        cyl(parts, Math.min(tw, td) * 0.7, 0.3, [0, y + 1.55, cz], '#5e6367', 16);
+        box(parts, [0.4, 0.05, 2.4], [-0.6, y + 1.86, cz], '#e8e8e8');
+        box(parts, [0.4, 0.05, 2.4], [0.6, y + 1.86, cz], '#e8e8e8');
+        box(parts, [1.2, 0.05, 0.4], [0, y + 1.86, cz], '#e8e8e8');
+      } else {
+        rooftopUnits(parts, 2, y + 1.55, 0, cz, tw * 0.6, td * 0.6, v);
+      }
+      if (v % 2) antenna(parts, tw * 0.2, y + 3.7, cz, 6);
+      // Podium entrance canopy and street trees.
+      box(parts, [Math.min(6, pw * 0.5), 0.3, 1.8], [0, 3.6, cz + pd / 2 + 0.9], GLASS_DARK);
+      tree(parts, -W / 2 + 1, front - 0.9, 0.7);
+      tree(parts, W / 2 - 1, front - 0.9, 0.7);
       break;
     }
     case 'shop': {
@@ -97,11 +299,39 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
         // Shop front on the ground floor, flats or offices above.
         parts.push({ shape: 'box', size: [bw, 3.6, bd], pos: [0, 0.1, cz], color: s.wall, facade: 'shop' });
         parts.push({ shape: 'box', size: [bw, h - 3.6, bd], pos: [0, 3.7, cz], color: s.wall, facade: 'residential' });
+        box(parts, [bw + 0.15, 0.25, bd + 0.15], [0, 3.6, cz], s.accent);
+        // Bay windows / small balconies above the shop.
+        if (v % 2 === 1) for (const bx of [-bw * 0.28, bw * 0.28]) box(parts, [1.8, 1.6, 0.6], [bx, 4.6, cz + bd / 2 + 0.3], s.wall);
       }
-      parts.push({ shape: 'box', size: [bw + 0.2, 0.5, bd + 0.2], pos: [0, h + 0.1, cz], color: '#d6d0c4' });
-      parts.push({ shape: 'box', size: [bw * 0.92, 0.25, 1.8], pos: [0, 2.9, cz + bd / 2 + 0.9], color: s.accent, rot: [8, 0, 0] });
-      parts.push({ shape: 'box', size: [bw * 0.7, 2.3, 0.15], pos: [0, 0.1, cz + bd / 2 + 0.05], color: GLASS });
-      parts.push({ shape: 'box', size: [bw * 0.6, 1.1, 0.3], pos: [0, h + 0.6, cz + bd / 2 - 0.2], color: s.accent });
+      box(parts, [bw + 0.2, 0.5, bd + 0.2], [0, h + 0.1, cz], '#d6d0c4');
+      // Awning: sloped canopy (v even) or a flat one with a fascia.
+      if (v % 2 === 0) box(parts, [bw * 0.92, 0.25, 1.8], [0, 2.9, cz + bd / 2 + 0.9], s.accent, { rot: [8, 0, 0] });
+      else {
+        box(parts, [bw * 0.95, 0.2, 1.4], [0, 3.0, cz + bd / 2 + 0.7], s.accent);
+        box(parts, [bw * 0.95, 0.5, 0.1], [0, 2.7, cz + bd / 2 + 1.4], s.accent);
+      }
+      box(parts, [bw * 0.7, 2.3, 0.15], [0, 0.1, cz + bd / 2 + 0.05], GLASS);
+      // Sign board on the roof edge.
+      box(parts, [bw * 0.6, 1.1, 0.3], [0, h + 0.6, cz + bd / 2 - 0.2], s.accent);
+      box(parts, [bw * 0.5, 0.6, 0.05], [0, h + 0.85, cz + bd / 2 - 0.02], '#f4f1ea');
+      rooftopUnits(parts, 1 + (v % 3), h + 0.6, 0, cz - bd * 0.15, bw * 0.6, bd * 0.4, v);
+      // Street furniture: café tables, planters, bike rack.
+      const sz = front - 0.9;
+      if (v % 3 === 0) {
+        for (const tx of [-bw * 0.3, 0, bw * 0.3]) {
+          cyl(parts, 0.9, 0.75, [tx, 0.1, sz], '#f0ede6', 8);
+          parts.push({ shape: 'cone', size: [1.8, 0.7, 1.8], pos: [tx, 2.0, sz], color: s.accent, segments: 8 });
+          cyl(parts, 0.08, 1.9, [tx, 0.1, sz], '#d0ccc4', 4);
+        }
+      } else {
+        for (const px of [-bw * 0.4, bw * 0.4]) {
+          box(parts, [0.9, 0.6, 0.9], [px, 0.1, sz], CONCRETE);
+          parts.push({ shape: 'dome', size: [0.9, 0.5, 0.9], pos: [px, 0.7, sz], color: GREEN, segments: 6 });
+        }
+        if (v % 3 === 1) box(parts, [1.6, 0.8, 0.1], [0, 0.1, sz], METAL_DARK);
+      }
+      // Waste bins at the side.
+      box(parts, [0.8, 1.1, 0.7], [-W / 2 + 0.6, 0.1, front - 2.2], '#3c6b45');
       break;
     }
     case 'office': {
@@ -109,10 +339,29 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       const bd = D - 3;
       const h = s.floors * 3.4;
       const cz = front - 2 - bd / 2;
-      parts.push({ shape: 'box', size: [bw, h, bd], pos: [0, 0.1, cz], color: s.wall, facade: 'office' });
-      parts.push({ shape: 'box', size: [bw * 0.75, h * 0.25, bd * 0.75], pos: [0, h + 0.1, cz], color: s.wall, facade: 'office' });
-      parts.push({ shape: 'box', size: [bw * 0.75 + 0.3, 0.8, bd * 0.75 + 0.3], pos: [0, h * 1.25 + 0.1, cz], color: s.accent });
-      parts.push({ shape: 'box', size: [4, 3, 2], pos: [0, 0.1, cz + bd / 2 + 1], color: GLASS });
+      const glassy = v % 3 === 2;
+      parts.push({ shape: 'box', size: [bw, h, bd], pos: [0, 0.1, cz], color: glassy ? GLASS : s.wall, facade: 'office' });
+      // Upper setback block or a slim crown.
+      if (v % 2 === 0) {
+        parts.push({ shape: 'box', size: [bw * 0.75, h * 0.25, bd * 0.75], pos: [0, h + 0.1, cz], color: s.wall, facade: 'office' });
+        box(parts, [bw * 0.75 + 0.3, 0.8, bd * 0.75 + 0.3], [0, h * 1.25 + 0.1, cz], s.accent);
+        rooftopUnits(parts, 2, h * 1.25 + 0.9, 0, cz, bw * 0.4, bd * 0.4, v);
+      } else {
+        box(parts, [bw + 0.3, 1.2, bd + 0.3], [0, h + 0.1, cz], s.accent);
+        box(parts, [bw * 0.5, 2.4, bd * 0.5], [0, h + 1.3, cz], '#8d8a84');
+        rooftopUnits(parts, 3, h + 1.3, 0, cz, bw * 0.7, bd * 0.6, v);
+      }
+      // Vertical fins across the front.
+      if (!glassy) {
+        const fins = Math.max(2, Math.floor(bw / 3));
+        for (let k = 0; k <= fins; k++) box(parts, [0.3, h - 4, 0.5], [-bw / 2 + (bw / fins) * k, 4.1, cz + bd / 2 + 0.25], s.accent);
+      }
+      // Glass lobby, plaza, flag poles, trees.
+      box(parts, [4, 3.6, 2], [0, 0.1, cz + bd / 2 + 1], GLASS_DARK);
+      box(parts, [4.6, 0.3, 2.4], [0, 3.7, cz + bd / 2 + 1.1], s.accent);
+      box(parts, [W - 1.2, 0.06, front - (cz + bd / 2) - 0.3], [0, 0.12, (front + cz + bd / 2) / 2 + 0.1], PATH);
+      if (v % 3 !== 1) for (let k = 0; k < 3; k++) cyl(parts, 0.1, 6, [-bw / 2 + 1 + k * 0.9, 0.1, front - 0.6], '#d8d8d8', 4);
+      tree(parts, bw / 2 - 0.4, front - 0.9, 0.75);
       break;
     }
     case 'mall': {
@@ -121,11 +370,24 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       const h = s.floors * 4.5;
       const cz = front - 3 - bd / 2;
       parts.push({ shape: 'box', size: [bw, h, bd], pos: [0, 0.1, cz], color: s.wall, facade: 'shop' });
-      parts.push({ shape: 'box', size: [bw + 0.4, 0.8, bd + 0.4], pos: [0, h + 0.1, cz], color: s.accent });
-      parts.push({ shape: 'box', size: [6, h + 1.5, 3], pos: [0, 0.1, cz + bd / 2 + 1.2], color: GLASS });
-      parts.push({ shape: 'box', size: [7, 1.4, 0.4], pos: [0, h + 1, cz + bd / 2 + 2.6], color: s.accent });
-      parts.push({ shape: 'box', size: [3, 1.6, 3], pos: [-bw * 0.25, h + 0.9, cz - bd * 0.2], color: '#8f8b84' });
-      parts.push({ shape: 'box', size: [3, 1.6, 3], pos: [bw * 0.25, h + 0.9, cz - bd * 0.2], color: '#8f8b84' });
+      box(parts, [bw + 0.4, 0.8, bd + 0.4], [0, h + 0.1, cz], s.accent);
+      // Atrium entrance with a big sign.
+      box(parts, [6, h + 1.5, 3], [0, 0.1, cz + bd / 2 + 1.2], GLASS);
+      box(parts, [7, 1.4, 0.4], [0, h + 1, cz + bd / 2 + 2.6], s.accent);
+      box(parts, [6, 0.8, 0.05], [0, h + 1.3, cz + bd / 2 + 2.82], '#f4f1ea');
+      // Side entrances.
+      for (const sx of [-1, 1]) box(parts, [3, 3.2, 1.6], [sx * bw * 0.36, 0.1, cz + bd / 2 + 0.8], GLASS_DARK);
+      // Roof: plant rooms and skylights (or a roof car park).
+      box(parts, [3, 1.6, 3], [-bw * 0.25, h + 0.9, cz - bd * 0.2], '#8f8b84');
+      box(parts, [3, 1.6, 3], [bw * 0.25, h + 0.9, cz - bd * 0.2], '#8f8b84');
+      if (v % 2 === 0) {
+        for (const sx of [-0.25, 0, 0.25]) parts.push({ shape: 'pyramid', size: [2.6, 1.2, 2.6], pos: [bw * sx, h + 0.9, cz + bd * 0.15], color: GLASS });
+      } else {
+        for (let k = 0; k < 5; k++) car(parts, -bw * 0.35 + (bw * 0.7 * k) / 4, cz + bd * 0.15, CAR_COLORS[Math.floor(r(50 + k) * CAR_COLORS.length)], true, h + 0.9);
+      }
+      rooftopUnits(parts, 3, h + 0.9, 0, cz - bd * 0.3, bw * 0.6, bd * 0.2, v);
+      // Front plaza: trees and lamp posts.
+      for (const sx of [-0.4, -0.15, 0.15, 0.4]) tree(parts, bw * sx, front - 1, 0.7);
       break;
     }
     case 'warehouse': {
@@ -134,13 +396,32 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       const h = 4 + s.floors * 1.6;
       const cz = front - 3 - bd / 2;
       parts.push({ shape: 'box', size: [bw, h, bd], pos: [0, 0.1, cz], color: s.wall, facade: 'industrial' });
-      parts.push({ shape: 'gable', size: [bw + 0.4, 1.6, bd + 0.4], pos: [0, h + 0.1, cz], color: s.roof, rot: [0, 90, 0] });
+      if (v % 3 === 1) {
+        // Barrel / sawtooth roof as a row of small gables.
+        const n = Math.max(2, Math.round(bw / 4));
+        for (let k = 0; k < n; k++) parts.push({ shape: 'gable', size: [bw / n + 0.05, 1.3, bd + 0.4], pos: [-bw / 2 + (bw / n) * (k + 0.5), h + 0.1, cz], color: s.roof });
+      } else {
+        parts.push({ shape: 'gable', size: [bd + 0.4, 1.6, bw + 0.4], pos: [0, h + 0.1, cz], color: s.roof, rot: [0, 90, 0] });
+      }
+      // Roof vents.
+      for (let k = 0; k < 2 + (v % 2); k++) cyl(parts, 0.7, 0.9, [-bw * 0.3 + k * (bw * 0.3), h + 1.2, cz], METAL, 8);
+      // Loading docks with a canopy.
       const doors = Math.max(1, Math.floor(bw / 5));
       for (let k = 0; k < doors; k++) {
         const x = -bw / 2 + (bw / doors) * (k + 0.5);
-        parts.push({ shape: 'box', size: [3, 3.4, 0.2], pos: [x, 0.1, cz + bd / 2 + 0.05], color: '#6f7479' });
+        box(parts, [3, 3.4, 0.2], [x, 0.1, cz + bd / 2 + 0.05], '#6f7479');
+        box(parts, [3.4, 1.0, 1.0], [x, 0.1, cz + bd / 2 + 0.5], CONCRETE);
       }
-      parts.push({ shape: 'box', size: [bw, 0.15, 2.6], pos: [0, 0.1, cz + bd / 2 + 1.3], color: GROUND.concrete });
+      box(parts, [bw, 0.2, 2], [0, 3.8, cz + bd / 2 + 1], METAL_DARK);
+      box(parts, [bw, 0.15, 2.6], [0, 0.1, cz + bd / 2 + 1.3], GROUND.concrete);
+      // Yard: a truck (wide lots) or pallets.
+      if (r(11) < 0.6 && W >= 16) truck(parts, bw * 0.15, front - 1.3, CONTAINER_COLORS[Math.floor(r(12) * CONTAINER_COLORS.length)]);
+      else {
+        for (let k = 0; k < 3; k++) box(parts, [1.2, 0.9 + (k % 2) * 0.5, 1.2], [W / 2 - 1.2 - k * 1.4, 0.1, front - 1], '#a08560');
+      }
+      // Chain-link fence along the sides.
+      box(parts, [0.08, 1.8, D - 1], [-W / 2 + 0.3, 0.1, 0], '#8a9096');
+      box(parts, [0.08, 1.8, D - 1], [W / 2 - 0.3, 0.1, 0], '#8a9096');
       break;
     }
     case 'factory': {
@@ -149,17 +430,41 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
       const h = 5 + s.floors * 1.8;
       const cz = front - 2.5 - bd / 2;
       parts.push({ shape: 'box', size: [bw * 0.7, h, bd], pos: [-bw * 0.15, 0.1, cz], color: s.wall, facade: 'industrial' });
-      parts.push({ shape: 'box', size: [bw * 0.7 + 0.3, 0.6, bd + 0.3], pos: [-bw * 0.15, h + 0.1, cz], color: s.roof });
+      if (v % 2 === 1) {
+        // Sawtooth roof lights.
+        const n = Math.max(2, Math.round(bd / 3.5));
+        for (let k = 0; k < n; k++) parts.push({ shape: 'box', size: [bw * 0.7, 1.4, 0.15], pos: [-bw * 0.15, h + 0.1, cz - bd / 2 + (bd / n) * (k + 0.5)], color: GLASS, rot: [-35, 0, 0] });
+        box(parts, [bw * 0.7 + 0.3, 0.3, bd + 0.3], [-bw * 0.15, h + 0.1, cz], s.roof);
+      } else {
+        box(parts, [bw * 0.7 + 0.3, 0.6, bd + 0.3], [-bw * 0.15, h + 0.1, cz], s.roof);
+      }
       parts.push({ shape: 'box', size: [bw * 0.3, h * 0.6, bd * 0.45], pos: [bw * 0.35, 0.1, cz + bd * 0.25], color: s.accent, facade: 'office' });
       const stacks = s.floors >= 3 ? 2 : 1;
       for (let k = 0; k < stacks; k++) {
-        parts.push({ shape: 'cylinder', size: [1.4, h + 9 + k * 3, 1.4], pos: [-bw * 0.35 + k * 3, 0.1, cz - bd * 0.25], color: '#8a7f75', segments: 10 });
-        parts.push({ shape: 'cylinder', size: [1.6, 0.8, 1.6], pos: [-bw * 0.35 + k * 3, h + 8.4 + k * 3, cz - bd * 0.25], color: '#b5472f', segments: 10 });
+        const sx = -bw * 0.35 + k * 3;
+        cyl(parts, 1.4, h + 9 + k * 3, [sx, 0.1, cz - bd * 0.25], '#8a7f75', 10);
+        cyl(parts, 1.6, 0.8, [sx, h + 8.4 + k * 3, cz - bd * 0.25], '#b5472f', 10);
+        cyl(parts, 1.55, 0.4, [sx, h + 6 + k * 3, cz - bd * 0.25], '#e8e4dc', 10);
       }
-      if (D >= 16) {
-        parts.push({ shape: 'cylinder', size: [3.4, 4.5, 3.4], pos: [bw * 0.33, 0.1, cz - bd * 0.25], color: '#c9c4ba', segments: 14 });
-        parts.push({ shape: 'dome', size: [3.4, 0.8, 3.4], pos: [bw * 0.33, 4.6, cz - bd * 0.25], color: '#c9c4ba' });
+      // Tanks / silos and the pipe bridge between them and the hall.
+      const silos = D >= 16 ? 2 : v % 3 === 0 ? 1 : 0;
+      const sd = Math.min(3.2, bw * 0.28);
+      const sx = bw * 0.36;
+      for (let k = 0; k < silos; k++) {
+        const sz = cz - bd * 0.38 + k * (sd + 0.4);
+        const sh = 5 + (k % 2) * 2;
+        cyl(parts, sd, sh, [sx, 0.1, sz], '#c9c4ba', 14);
+        parts.push({ shape: 'dome', size: [sd, 0.8, sd], pos: [sx, sh + 0.1, sz], color: '#c9c4ba', segments: 12 });
       }
+      // Pipe bridge from the hall to the silos.
+      if (silos > 0) cyl(parts, 0.45, bw * 0.3, [bw * 0.2, 4.2, cz - bd * 0.38], METAL_DARK, 6, { rot: [0, 0, 90] });
+      // Rooftop ducts and fans.
+      rooftopUnits(parts, 2 + (v % 3), h + 0.7, -bw * 0.15, cz, bw * 0.5, bd * 0.6, v);
+      // A truck at the gate on wide lots.
+      if (W >= 16 && r(17) < 0.6) truck(parts, -bw * 0.1, front - 1.2, CONTAINER_COLORS[Math.floor(r(14) * CONTAINER_COLORS.length)]);
+      // Perimeter fence.
+      box(parts, [W - 0.6, 2, 0.08], [0, 0.1, -D / 2 + 0.3], '#8a9096');
+      box(parts, [0.08, 2, D - 1], [-W / 2 + 0.3, 0.1, 0], '#8a9096');
       break;
     }
   }
@@ -169,23 +474,27 @@ export function proceduralParts(s: ProceduralSpec): BuildingPart[] {
 /** Colour palettes that growable variants rotate through (data, not engine logic). */
 const PALETTES: Record<ProceduralStyle, { wall: string[]; roof: string[]; accent: string[] }> = {
   house: {
-    wall: ['#efe3cf', '#e5d2bd', '#dbe5ea', '#f2eee6', '#e7cec3', '#d9d0b8'],
-    roof: ['#9c4a3a', '#6b4f3f', '#5c6b7a', '#8a5a44', '#7a3b30', '#4f5a60'],
-    accent: ['#a89f92', '#9a8f80', '#b0a493'],
+    wall: ['#efe3cf', '#e5d2bd', '#dbe5ea', '#f2eee6', '#e7cec3', '#d9d0b8', '#cfdcc8', '#e9dcc6', '#c9c3bb', '#f0d9b8'],
+    roof: ['#9c4a3a', '#6b4f3f', '#5c6b7a', '#8a5a44', '#7a3b30', '#4f5a60', '#3f4448', '#a05a3c'],
+    accent: ['#a89f92', '#9a8f80', '#b0a493', '#8c7b6b', '#c2b8a8'],
   },
-  apartment: { wall: ['#efe3cf', '#e5d2bd', '#dbe5ea', '#f2eee6', '#e7cec3', '#cfd6cf'], roof: ['#777'], accent: ['#b3aa9c', '#a39a8c', '#8f9aa3', '#9c8574'] },
-  tower: { wall: ['#e9edf0', '#dfe6ea', '#eef1f3', '#e6e2da'], roof: ['#777'], accent: ['#5f6b75', '#4d5a64', '#3f4b55', '#6b5f55'] },
-  shop: { wall: ['#efe7da', '#e6e1d8', '#f1ece2', '#e9dccb', '#dde3e6'], roof: ['#777'], accent: ['#d9483b', '#2f7dd1', '#e0a321', '#2fa36b', '#8a4fc2'] },
-  office: { wall: ['#cfdbe4', '#b9cfdd', '#aac4d6', '#c9d2cf'], roof: ['#777'], accent: ['#5b6770', '#44515b', '#3d4a54'] },
-  mall: { wall: ['#e8e2d6', '#e1e6ea', '#ece4d4'], roof: ['#777'], accent: ['#d9483b', '#2f7dd1', '#2fa36b'] },
-  warehouse: { wall: ['#b8b3a7', '#a3a8ad', '#c4b49a', '#9fa79b'], roof: ['#6d7378', '#5f666c', '#7a6e5e', '#5a6a72'], accent: ['#777'] },
-  factory: { wall: ['#b8b3a7', '#a3a8ad', '#c4b49a', '#c9cdd1'], roof: ['#6b6f73', '#5a5f64', '#6f655a'], accent: ['#d8d2c6', '#e4e1da'] },
+  apartment: {
+    wall: ['#efe3cf', '#e5d2bd', '#dbe5ea', '#f2eee6', '#e7cec3', '#cfd6cf', '#d8c3a8', '#c9cfd6', '#e8d8c8'],
+    roof: ['#777'],
+    accent: ['#b3aa9c', '#a39a8c', '#8f9aa3', '#9c8574', '#7d8a7a', '#b07a5e'],
+  },
+  tower: { wall: ['#e9edf0', '#dfe6ea', '#eef1f3', '#e6e2da', '#d8dee3', '#c7d3dc'], roof: ['#777'], accent: ['#5f6b75', '#4d5a64', '#3f4b55', '#6b5f55', '#7a6a58', '#2f3a44'] },
+  shop: { wall: ['#efe7da', '#e6e1d8', '#f1ece2', '#e9dccb', '#dde3e6', '#e2d1bd', '#d6dccd'], roof: ['#777'], accent: ['#d9483b', '#2f7dd1', '#e0a321', '#2fa36b', '#8a4fc2', '#e06a2b', '#1f8f8f'] },
+  office: { wall: ['#cfdbe4', '#b9cfdd', '#aac4d6', '#c9d2cf', '#d6d2c8', '#b8c2c9'], roof: ['#777'], accent: ['#5b6770', '#44515b', '#3d4a54', '#6b5f55', '#2f3a44'] },
+  mall: { wall: ['#e8e2d6', '#e1e6ea', '#ece4d4', '#dcd6cc'], roof: ['#777'], accent: ['#d9483b', '#2f7dd1', '#2fa36b', '#e0a321'] },
+  warehouse: { wall: ['#b8b3a7', '#a3a8ad', '#c4b49a', '#9fa79b', '#c7c2b6', '#8f9aa6'], roof: ['#6d7378', '#5f666c', '#7a6e5e', '#5a6a72', '#4f6b5a', '#7d4e3c'], accent: ['#777'] },
+  factory: { wall: ['#b8b3a7', '#a3a8ad', '#c4b49a', '#c9cdd1', '#a8a294', '#b5bcc2'], roof: ['#6b6f73', '#5a5f64', '#6f655a', '#4f5a52'], accent: ['#d8d2c6', '#e4e1da', '#cfd6dc'] },
 };
 
-/** Distinct looks per growable template (colours, roof shape). */
-export const PROCEDURAL_VARIANTS = 3;
+/** Distinct looks per growable template (colours plus structure: roofs, setbacks, balconies, yards). */
+export const PROCEDURAL_VARIANTS = 6;
 
-/** Variant `k` of a spec: rotates wall/roof/accent colours and the roof shape. Variant 0 is the spec itself. */
+/** Variant `k` of a spec: rotates wall/roof/accent colours and the structure. Variant 0 is the spec itself. */
 export function variantSpec(s: ProceduralSpec, k: number): ProceduralSpec {
   if (k === 0) return s;
   const p = PALETTES[s.style];
@@ -196,7 +505,7 @@ export function variantSpec(s: ProceduralSpec, k: number): ProceduralSpec {
   return {
     ...s,
     variant: (s.variant ?? 0) + k,
-    wall: pick(p.wall, s.wall, k * 2),
+    wall: pick(p.wall, s.wall, k * 2 + 1),
     roof: pick(p.roof, s.roof, k),
     accent: pick(p.accent, s.accent, k),
   };

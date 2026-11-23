@@ -33,6 +33,7 @@ export async function startGame(container: HTMLElement): Promise<void> {
     cityName: store.cityName,
     settings: store.settings,
     save: save ?? undefined,
+    sandbox: store.newSandbox,
     onProgress: (fraction, label) => useGameStore.setState({ loading: { fraction, label } }),
   });
   game = g;
@@ -87,7 +88,7 @@ export async function startGame(container: HTMLElement): Promise<void> {
   try {
     await g.init();
     if (game === g) {
-      set({ screen: 'playing', cityName: g.cityName, pendingLoad: null });
+      set({ screen: 'playing', cityName: g.cityName, pendingLoad: null, sandbox: g.sandbox });
       startAutosave();
     }
   } catch (err) {

@@ -186,7 +186,7 @@ export class Economy {
 
   takeLoan(offerId: string): Loan | null {
     const offer = LOAN_OFFERS.find((o) => o.id === offerId);
-    if (!offer || this.loans.length >= MAX_LOANS) return null;
+    if (!offer || this.loans.length >= MAX_LOANS || this.treasury.unlimited) return null;
     const total = offer.amount * (1 + offer.interest);
     const loan: Loan = { id: this.nextLoanId++, offerId, amount: offer.amount, remaining: total, dailyPayment: total / offer.days, daysLeft: offer.days };
     this.loans.push(loan);

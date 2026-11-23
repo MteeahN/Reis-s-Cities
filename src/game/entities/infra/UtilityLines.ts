@@ -91,6 +91,29 @@ export class UtilityLines {
     return best;
   }
 
+  /**
+   * Closest point on any segment's centreline within `radius` (to join a new
+   * segment onto the middle of an existing one). Networks are cell-based, so a
+   * segment that ends on another one is connected to it.
+   */
+  nearestPoint(x: number, z: number, radius: number): { p: P2; line: UtilityLine } | null {
+    let best: { p: P2; line: UtilityLine } | null = null;
+    let bestD = radius;
+    for (const l of this.lines.values()) {
+      const dx = l.b.x - l.a.x;
+      const dz = l.b.z - l.a.z;
+      const t = Math.max(0, Math.min(1, ((x - l.a.x) * dx + (z - l.a.z) * dz) / (dx * dx + dz * dz || 1)));
+      const px = l.a.x + dx * t;
+      const pz = l.a.z + dz * t;
+      const d = Math.sqrt((x - px) ** 2 + (z - pz) ** 2);
+      if (d <= bestD) {
+        bestD = d;
+        best = { p: { x: px, z: pz }, line: l };
+      }
+    }
+    return best;
+  }
+
   /** Nearest segment end point within `radius` (for chaining/snapping). */
   nearestEnd(x: number, z: number, radius: number): P2 | null {
     let best: P2 | null = null;

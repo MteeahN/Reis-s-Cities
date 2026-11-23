@@ -3,6 +3,16 @@
 Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülasyonu.
 **Mevcut durum: Aşama 8 — Kayıt, başarımlar, yayın (v0.8.0)** — 8 aşamalık planın tamamı bitti.
 
+### Aşama 8 sonrası eklemeler
+- **Yaratıcı mod:** yeni şehir ekranındaki seçenekle sınırsız para, tüm binalar / yollar / bölgeler açık ve haritanın
+  tamamı kullanılabilir. Gelir-gider raporu yine tutulur; kredi alınmaz, başarımlar kazanılmaz. Kayıtta saklanır.
+- **Görünür borular:** su ve kanalizasyon görünümünde borular 3D tüp olarak çizilir; su kaynağına bağlı ağ mavi,
+  bağlı olmayan kırmızı, uçlarda vana. Yeni boru (veya elektrik hattı) mevcut bir hattın ucuna ya da ortasına
+  başlatılıp bitirilebilir (T bağlantısı); kesişen hatlar da birleşir. Plan kartı kaç bağlantı yapılacağını gösterir.
+- **Daha detaylı binalar:** her büyüyen bina şablonunun 6 görünümü var; renk yanında yapı da değişir (kırma / beşik /
+  düz teras çatı, çatı penceresi, veranda, garaj ve araba, çit, bahçe havuzu, kademeli kuleler, köşe kanatları,
+  balkonlar, çatı su depoları ve klima üniteleri, tabela ve tenteler, testere dişi çatılar, silolar, kamyonlar).
+
 ### Aşama 8'de neler var
 - **Kayıt sistemi (IndexedDB):** şehir tarayıcıda saklanır — yollar, binalar (durum, seviye, inşaat), bölgeler,
   elektrik hatları ve borular, bütçe ve hesap defteri, krediler, hane halkları, talep, oyun saati, kamera, başarımlar

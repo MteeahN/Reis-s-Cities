@@ -5,7 +5,7 @@ import { useGameStore } from '../../store/gameStore';
 /** RCI demand bars (0–100), coloured like the zones. */
 export const DemandMeter = memo(function DemandMeter() {
   const demand = useGameStore((s) => s.demand);
-  const maxPop = useGameStore((s) => s.maxPopulation);
+  const maxPop = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
   const values = [demand.residential, demand.commercial, demand.industrial];
   return (
     <div className="panel demand" data-testid="demand" title="Bölge talebi: binalar talep olan bölgelerde gelişir">

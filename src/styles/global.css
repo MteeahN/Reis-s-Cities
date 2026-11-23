@@ -1288,6 +1288,30 @@ kbd {
   text-transform: uppercase;
   color: var(--muted);
 }
+.check-field {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.check-field input {
+  margin-top: 2px;
+  accent-color: var(--accent, #3b82f6);
+}
+.check-field span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.check-field small {
+  color: var(--faint);
+  font-size: 11px;
+}
 .field small {
   color: var(--faint);
   font-size: 11px;

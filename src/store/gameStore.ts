@@ -64,6 +64,10 @@ export interface GameUIState {
   demand: Demand;
   population: PopulationStats | null;
   maxPopulation: number;
+  /** Running city is in sandbox mode. */
+  sandbox: boolean;
+  /** Main-menu choice for the next new city. */
+  newSandbox: boolean;
   economy: EconomyStats | null;
   linePlan: LinePlanView | null;
   infoLayer: InfoLayerId | null;
@@ -121,6 +125,7 @@ export const INITIAL_GAME_STATE = {
   demand: { residential: 70, commercial: 0, industrial: 0 } as Demand,
   population: null as PopulationStats | null,
   maxPopulation: 0,
+  sandbox: false,
   economy: null as EconomyStats | null,
   linePlan: null as LinePlanView | null,
   infoLayer: null as InfoLayerId | null,
@@ -139,6 +144,7 @@ export const useGameStore = create<GameUIState>((set) => ({
   screen: 'menu',
   cityName: 'Yeni Şehir',
   seedText: '',
+  newSandbox: false,
   loading: { fraction: 0, label: '' },
   error: null,
   ...INITIAL_GAME_STATE,

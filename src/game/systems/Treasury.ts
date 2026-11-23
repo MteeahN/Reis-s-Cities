@@ -27,6 +27,7 @@ export type FlowCategory =
  */
 export class Treasury {
   private _balance: number;
+  private _unlimited = false;
   readonly spent: Record<LedgerCategory, number> = { roads: 0, buildings: 0, infra: 0 };
   readonly refunded: Record<LedgerCategory, number> = { roads: 0, buildings: 0, infra: 0 };
   private listeners = new Set<(balance: number) => void>();
@@ -36,8 +37,24 @@ export class Treasury {
     this._balance = initial;
   }
 
+  /** Spendable balance; Infinity in sandbox mode. */
   get balance(): number {
+    return this._unlimited ? Infinity : this._balance;
+  }
+
+  /** The real ledger balance (finite; this is what gets saved). */
+  get storedBalance(): number {
     return this._balance;
+  }
+
+  /** Sandbox mode: everything is affordable and nothing reduces the balance. */
+  get unlimited(): boolean {
+    return this._unlimited;
+  }
+
+  setUnlimited(): void {
+    this._unlimited = true;
+    this.listeners.forEach((l) => l(this.balance));
   }
 
   /** Restores a saved balance and ledger totals (no transactions are recorded). */
@@ -45,11 +62,11 @@ export class Treasury {
     this._balance = balance;
     Object.assign(this.spent, spent);
     Object.assign(this.refunded, refunded);
-    this.listeners.forEach((l) => l(this._balance));
+    this.listeners.forEach((l) => l(this.balance));
   }
 
   canAfford(amount: number): boolean {
-    return amount <= this._balance;
+    return this._unlimited || amount <= this._balance;
   }
 
   /** Construction: deducts `amount` only if affordable. */
@@ -78,9 +95,10 @@ export class Treasury {
   }
 
   private flow(category: FlowCategory, signed: number): void {
-    this._balance += signed;
+    // Sandbox: flows are still reported (budget report stays meaningful) but the balance never moves.
+    if (!this._unlimited) this._balance += signed;
     this.flowListeners.forEach((l) => l(category, signed));
-    this.listeners.forEach((l) => l(this._balance));
+    this.listeners.forEach((l) => l(this.balance));
   }
 
   onChange(fn: (balance: number) => void): () => void {

@@ -32,6 +32,8 @@ export interface UtilityResult {
   sewageCells: Uint8Array;
   /** Pipe/connection network id per cell (−1 none), for diagnostics. */
   pipeNetwork: Int32Array;
+  /** 1 on pipe cells whose network is fed by a water source (drawn blue). */
+  pipeSupplied: Uint8Array;
 }
 
 export const SEWAGE_PER_WATER = 0.9;
@@ -217,6 +219,8 @@ export function computeUtilities(buildings: Iterable<PlacedBuilding>, powerLineC
   const sewageServed = allocate(sewageConsumers, new Map(sewageSupply), sewageSet);
   const waterCells = new Uint8Array(N * N);
   const sewageCells = new Uint8Array(N * N);
+  const pipeSupplied = new Uint8Array(N * N);
+  for (let k = 0; k < N * N; k++) if (pipes.ids[k] >= 0 && (waterSupply.get(pipes.ids[k]) ?? 0) > 0) pipeSupplied[k] = 1;
   for (let k = 0; k < N * N; k++) {
     if (reach.dist[k] > PIPE_SERVICE_RADIUS) continue;
     if ((waterSupply.get(reach.net[k]) ?? 0) > 0) waterCells[k] = 1;
@@ -244,5 +248,6 @@ export function computeUtilities(buildings: Iterable<PlacedBuilding>, powerLineC
     waterCells,
     sewageCells,
     pipeNetwork: reach.net,
+    pipeSupplied,
   };
 }

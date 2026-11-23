@@ -178,7 +178,7 @@ export class CitySimulation {
   }
 
   isZoneUnlocked(z: ZoneKind): boolean {
-    return this.maxPopulation >= ZONES.find((d) => d.type === z)!.unlockPopulation;
+    return Math.max(this.maxPopulation, this.city.unlockLevel) >= ZONES.find((d) => d.type === z)!.unlockPopulation;
   }
 
   // ---------------------------------------------------------------- growth

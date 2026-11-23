@@ -67,6 +67,13 @@ const WeeklyStat = memo(function WeeklyStat() {
 
 const Budget = memo(function Budget() {
   const budget = useGameStore((s) => s.budget);
+  if (!Number.isFinite(budget)) {
+    return (
+      <div data-testid="budget">
+        <Stat icon="money" label="Bütçe" value="Sınırsız" hint="Yaratıcı mod: para sınırsız, her bina, yol ve bölge açık, tüm arazi kullanılabilir. Gelir ve giderler yine Bütçe sekmesinde raporlanır." tone="tone-blue" />
+      </div>
+    );
+  }
   return (
     <div data-testid="budget">
       <Stat

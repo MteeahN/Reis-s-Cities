@@ -131,7 +131,8 @@ export function EconomyTab() {
       <History days={eco.history} />
 
       <div className="section-title">Krediler</div>
-      {eco.loans.map((l) => (
+      {!Number.isFinite(eco.balance) && <p className="hint">Yaratıcı modda para sınırsız; kredi gerekmez.</p>}
+      {Number.isFinite(eco.balance) && eco.loans.map((l) => (
         <div className="loan" key={l.id} data-testid="loan-active">
           <div>
             <strong>{formatMoney(l.amount)}</strong>
@@ -140,7 +141,7 @@ export function EconomyTab() {
           <button className="btn secondary small-btn" onClick={() => getGame()?.repayLoan(l.id)}>Kapat</button>
         </div>
       ))}
-      {LOAN_OFFERS.map((o) => (
+      {Number.isFinite(eco.balance) && LOAN_OFFERS.map((o) => (
         <div className="loan offer" key={o.id}>
           <div>
             <strong>{formatMoney(o.amount)}</strong>
