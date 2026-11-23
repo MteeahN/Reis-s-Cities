@@ -109,6 +109,51 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'month', title: 'Bir Ay', description: 'Şehrini 30 gün yönet.', progress: (c) => ratio(c.day, 30) },
 ];
 
+/**
+ * Mission rewards: the treasury pays this many TL when the achievement is
+ * earned, and the city gains the same amount / 100 as experience (XP).
+ */
+const REWARDS: Record<string, number> = {
+  first_road: 1000,
+  first_zone: 1000,
+  first_power: 2000,
+  first_water: 2000,
+  first_residents: 1500,
+  pop_100: 3000,
+  pop_500: 6000,
+  pop_1000: 10000,
+  pop_2500: 20000,
+  pop_5000: 35000,
+  pop_10000: 60000,
+  road_5km: 8000,
+  junctions_10: 4000,
+  mixed_city: 6000,
+  sewage: 4000,
+  services: 12000,
+  level_3: 15000,
+  no_outage: 10000,
+  happy: 15000,
+  full_employment: 15000,
+  smooth_traffic: 15000,
+  profit_day: 8000,
+  treasury: 20000,
+  debt_free: 5000,
+  week: 3000,
+  month: 12000,
+};
+
+export const rewardOf = (id: string): number => REWARDS[id] ?? 2000;
+export const xpOf = (id: string): number => Math.round(rewardOf(id) / 100);
+
+/** XP needed to reach each city level (level 1 needs 0). */
+export const LEVEL_XP = [0, 30, 80, 160, 280, 450, 700, 1000, 1400, 1900, 2500];
+
+export function cityLevel(xp: number): { level: number; xp: number; next: number | null; base: number } {
+  let level = 1;
+  for (let n = 1; n < LEVEL_XP.length; n++) if (xp >= LEVEL_XP[n]) level = n + 1;
+  return { level, xp, base: LEVEL_XP[level - 1], next: LEVEL_XP[level] ?? null };
+}
+
 export interface EarnedAchievement {
   id: string;
   /** Game minutes since founding when it was earned. */
@@ -125,6 +170,9 @@ export interface AchievementView {
   description: string;
   progress: number;
   earnedAt: number | null;
+  /** TL paid when earned. */
+  reward: number;
+  xp: number;
 }
 
 /** Tracks which achievements this city has earned (saved with the city). */
@@ -152,6 +200,13 @@ export class Achievements {
     return this.earned.size;
   }
 
+  /** Experience from every earned achievement. */
+  get xp(): number {
+    let sum = 0;
+    for (const id of this.earned.keys()) sum += xpOf(id);
+    return sum;
+  }
+
   view(c: AchievementContext | null): AchievementView[] {
     return ACHIEVEMENTS.map((a) => {
       const at = this.earned.get(a.id);
@@ -161,6 +216,8 @@ export class Achievements {
         description: a.description,
         progress: at !== undefined ? 1 : c ? Math.min(0.99, a.progress(c)) : 0,
         earnedAt: at ?? null,
+        reward: rewardOf(a.id),
+        xp: xpOf(a.id),
       };
     });
   }

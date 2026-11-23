@@ -11,6 +11,7 @@ import { getGame } from '../../store/gameBridge';
 import { useGameStore } from '../../store/gameStore';
 import { formatMoney, formatNumber } from '../../utils/format';
 import { Icon, type IconName } from '../components/Icon';
+import { FavStar, useCatalog } from './catalog';
 
 interface ToolEntry {
   id: string;
@@ -32,6 +33,7 @@ const TOOLS: ToolEntry[] = [
   { id: 'services', label: 'Hizmetler', icon: 'services', tool: 'services', hotkey: 'J' },
   { id: 'landscape', label: 'Peyzaj', icon: 'tree', phase: 7 },
   { id: 'traffic', label: 'Trafik', icon: 'traffic', tool: 'traffic', hotkey: 'K' },
+  { id: 'move', label: 'Taşı', icon: 'move', tool: 'move', hotkey: 'M' },
   { id: 'demolish', label: 'Yıkım', icon: 'demolish', tool: 'demolish', hotkey: 'X' },
 ];
 
@@ -299,8 +301,10 @@ function InfraPicker({ group, lineKind }: { group: 'power' | 'water' | 'service'
   const maxPop = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
   const lineTool = group === 'power' ? LINE_TOOL.power : group === 'water' ? LINE_TOOL.water : null;
   const buildingTool = group === 'service' ? 'services' : group;
+  const catalog = useCatalog(buildingsInGroup(group));
   return (
     <div className="subtoolbar panel" data-testid={`picker-${group}`}>
+      {catalog.controls}
       {lineKind && lineTool && (
         <button
           className={`road-type building-card line-card ${tool === lineTool ? 'active' : ''}`}
@@ -312,7 +316,8 @@ function InfraPicker({ group, lineKind }: { group: 'power' | 'water' | 'service'
           <span className="road-meta">{formatMoney(LINE_TYPES[lineKind].costPerMeter)}/m · çizerek</span>
         </button>
       )}
-      {buildingsInGroup(group).map((b) => {
+      {catalog.empty}
+      {catalog.items.map((b) => {
         const locked = maxPop < b.unlockPopulation;
         return (
           <button
@@ -327,6 +332,7 @@ function InfraPicker({ group, lineKind }: { group: 'power' | 'water' | 'service'
             data-testid={`building-type-${b.id}`}
           >
             <span className="road-name">{b.name}</span>
+            <FavStar id={b.id} />
             <span className="road-meta">
               {locked ? (
                 <>
@@ -380,6 +386,7 @@ function BuildingPicker() {
   const current = ZONED_BUILDINGS.find((b) => b.id === buildingType);
   const [tab, setTab] = useState<(typeof BUILD_TABS)[number]['id']>(current ? BUILD_TABS.find((t) => t.zone === current.zone)!.id : 'landmark');
   const zone = BUILD_TABS.find((t) => t.id === tab)!.zone;
+  const catalog = useCatalog(zone === 0 ? buildingsInGroup('landmark') : ZONED_BUILDINGS.filter((b) => b.zone === zone));
   const choose = (id: (typeof BUILD_TABS)[number]['id']) => {
     setTab(id);
     const z = BUILD_TABS.find((t) => t.id === id)!.zone;
@@ -395,12 +402,14 @@ function BuildingPicker() {
           </button>
         ))}
       </div>
+      {catalog.controls}
+      {catalog.empty}
       {zone === 0 ? (
-        <LandmarkCards buildingType={buildingType} />
+        <LandmarkCards buildingType={buildingType} items={catalog.items} />
       ) : (
         <>
           <div className="growable-cards">
-            {ZONED_BUILDINGS.filter((b) => b.zone === zone).map((b) => {
+            {catalog.items.map((b) => {
               const locked = maxPop < (ZONES.find((z) => z.type === zone)?.unlockPopulation ?? 0);
               const people = b.residents ? `${b.residents} kişi` : `${b.workers} iş`;
               return (
@@ -413,6 +422,7 @@ function BuildingPicker() {
                   data-testid={`building-type-${b.id}`}
                 >
                   <span className="road-name">{b.name}</span>
+                  <FavStar id={b.id} />
                   <span className="road-meta">
                     Sv {b.level} · {b.footprint[0]}×{b.footprint[1]} · {people} · {formatMoney(growablePrice(b))}
                   </span>
@@ -427,10 +437,10 @@ function BuildingPicker() {
   );
 }
 
-function LandmarkCards({ buildingType }: { buildingType: string }) {
+function LandmarkCards({ buildingType, items }: { buildingType: string; items: BuildingDef[] }) {
   return (
     <>
-      {buildingsInGroup('landmark').map((b) => (
+      {items.map((b) => (
         <button
           key={b.id}
           className={`road-type building-card ${b.id === buildingType ? 'active' : ''}`}
@@ -439,6 +449,7 @@ function LandmarkCards({ buildingType }: { buildingType: string }) {
           data-testid={`building-type-${b.id}`}
         >
           <span className="road-name">{b.name}</span>
+          <FavStar id={b.id} />
           <span className="road-meta">
             {b.footprint[0]}×{b.footprint[1]} hücre · {formatMoney(b.cost)}
           </span>
@@ -471,6 +482,7 @@ function LayersButton() {
 export function Toolbar() {
   const tool = useGameStore((s) => s.tool);
   const grid = useGameStore((s) => s.grid);
+  const undoState = useGameStore((s) => s.undoState);
 
   return (
     <div className="toolbar-wrap">
@@ -502,6 +514,29 @@ export function Toolbar() {
             </button>
           );
         })}
+        <div className="divider vertical" />
+        <button
+          className="tool"
+          disabled={!undoState.undo}
+          onClick={() => getGame()?.undo()}
+          title={undoState.undo ? `Geri al: ${undoState.undo} (Ctrl+Z)` : 'Geri alınacak bina işlemi yok'}
+          data-testid="tool-undo"
+        >
+          <Icon name="undo" size={22} />
+          <span className="tool-label">Geri al</span>
+          <kbd>⌃Z</kbd>
+        </button>
+        <button
+          className="tool"
+          disabled={!undoState.redo}
+          onClick={() => getGame()?.redo()}
+          title={undoState.redo ? `Yinele: ${undoState.redo} (Ctrl+Y)` : 'Yinelenecek işlem yok'}
+          data-testid="tool-redo"
+        >
+          <Icon name="redo" size={22} />
+          <span className="tool-label">Yinele</span>
+          <kbd>⌃Y</kbd>
+        </button>
         <div className="divider vertical" />
         <button
           className={`tool ${grid ? 'active' : ''}`}

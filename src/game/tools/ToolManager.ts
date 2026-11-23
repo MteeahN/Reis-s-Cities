@@ -8,6 +8,7 @@ import { SelectTool } from './SelectTool';
 import { ZoneTool } from './ZoneTool';
 import { LineTool } from './LineTool';
 import { TrafficTool } from './TrafficTool';
+import { MoveTool } from './MoveTool';
 import type { Tool, ToolContext } from './Tool';
 
 /** Routes pointer/key input to the single active tool. */
@@ -23,6 +24,7 @@ export class ToolManager implements InputListener {
   readonly powerline: LineTool;
   readonly pipe: LineTool;
   readonly traffic: TrafficTool;
+  readonly move: MoveTool;
   private active: Tool;
   private readonly tools: Record<ToolId, Tool>;
 
@@ -38,6 +40,7 @@ export class ToolManager implements InputListener {
     this.demolish = new DemolishTool(ctx);
     this.zone = new ZoneTool(ctx);
     this.traffic = new TrafficTool(ctx);
+    this.move = new MoveTool(ctx);
     this.tools = {
       select: this.select,
       road: this.road,
@@ -50,6 +53,7 @@ export class ToolManager implements InputListener {
       powerline: this.powerline,
       pipe: this.pipe,
       traffic: this.traffic,
+      move: this.move,
     };
     this.active = this.select;
     this.active.activate();

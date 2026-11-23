@@ -30,9 +30,14 @@ export interface GameplaySettings {
   autosave: boolean;
   /** Real-time minutes between autosaves. */
   autosaveMinutes: number;
+  /** Interface (HUD) size multiplier. */
+  uiScale: number;
+  /** Show the step-by-step tutorial for new cities. */
+  tutorial: boolean;
 }
 
 export const AUTOSAVE_MINUTES = [1, 3, 5, 10] as const;
+export const UI_SCALES = [0.85, 1, 1.15, 1.3] as const;
 
 export interface Settings {
   graphics: GraphicsSettings;
@@ -68,7 +73,7 @@ export function nextGraphics(cur: GraphicsSettings, patch: Partial<GraphicsSetti
 export const DEFAULT_SETTINGS: Settings = {
   graphics: { preset: 'auto', ...presetValues('high'), dayNight: 'cycle', streetLights: 0.45 },
   audio: { master: 0.8, ambience: 0.7, effects: 0.8, muted: false },
-  gameplay: { autosave: true, autosaveMinutes: 3 },
+  gameplay: { autosave: true, autosaveMinutes: 3, uiScale: 1, tutorial: true },
 };
 
 const KEY = 'reis.settings.v1';
@@ -105,6 +110,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     gameplay: {
       autosave: typeof p.autosave === 'boolean' ? p.autosave : dp.autosave,
       autosaveMinutes: (AUTOSAVE_MINUTES as readonly number[]).includes(p.autosaveMinutes as number) ? (p.autosaveMinutes as number) : dp.autosaveMinutes,
+      uiScale: (UI_SCALES as readonly number[]).includes(p.uiScale as number) ? (p.uiScale as number) : dp.uiScale,
+      tutorial: typeof p.tutorial === 'boolean' ? p.tutorial : dp.tutorial,
     },
   };
 }

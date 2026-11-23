@@ -156,7 +156,7 @@ export function MainMenu() {
               <input type="checkbox" checked={sandbox} onChange={(e) => setSandbox(e.target.checked)} data-testid="input-sandbox" />
               <span>
                 <strong>Yaratıcı mod</strong>
-                <small>Sınırsız para, tüm binalar, yollar ve bölgeler açık, haritanın tamamı kullanılabilir. Başarımlar kazanılmaz.</small>
+                <small>Sınırsız para, tüm binalar, yollar ve bölgeler açık, haritanın tamamı kullanılabilir. Görev ödülleri verilmez.</small>
               </span>
             </label>
             <button type="submit" className={`btn full big ${latest ? 'secondary' : 'primary'}`} data-testid="btn-start">

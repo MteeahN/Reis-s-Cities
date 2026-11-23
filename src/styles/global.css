@@ -1864,3 +1864,141 @@ kbd {
   max-width: 100%;
   padding-bottom: 2px;
 }
+
+/* ---------------------------------------------------------------- catalogue search / favourites */
+.catalog-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 150px;
+  flex-shrink: 0;
+  justify-content: center;
+}
+.catalog-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--muted);
+}
+.catalog-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.catalog-controls select {
+  padding: 5px 6px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+.fav-star {
+  position: absolute;
+  bottom: 5px;
+  right: 7px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--faint);
+  cursor: pointer;
+  opacity: 0.55;
+}
+.fav-star:hover,
+.fav-star:focus-visible {
+  opacity: 1;
+  color: var(--yellow);
+}
+.fav-star.on {
+  opacity: 1;
+  color: var(--yellow);
+}
+.catalog-controls select option {
+  background: #18202b;
+}
+.brand-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--yellow);
+}
+.brand-xp {
+  display: inline-block;
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  overflow: hidden;
+}
+.brand-xp > span {
+  display: block;
+  height: 100%;
+  background: var(--yellow);
+}
+.achievement-reward {
+  font-size: 10.5px;
+  color: var(--yellow);
+  margin-top: 2px;
+}
+
+/* ---------------------------------------------------------------- tutorial */
+.tutorial {
+  position: absolute;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 5;
+}
+.tutorial-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tutorial-title {
+  font-size: 14px;
+}
+.tutorial-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.tutorial-steps {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 11px;
+  color: var(--faint);
+}
+.tutorial-steps li.done {
+  color: var(--accent);
+  text-decoration: line-through;
+}
+.tutorial-steps li.current {
+  color: var(--text);
+  font-weight: 600;
+}
+@media (max-width: 1100px) {
+  .tutorial {
+    left: auto;
+    right: 12px;
+    transform: none;
+    width: 300px;
+  }
+}

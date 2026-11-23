@@ -22,6 +22,7 @@ import type { World } from '../world/World';
 import { ZoneMap } from '../world/ZoneMap';
 import { Economy } from './Economy';
 import { Treasury } from './Treasury';
+import { UndoHistory, type Spot, type UndoEntry } from './UndoHistory';
 
 export const DEMOLISH_REFUND = 0.5;
 export const MIN_LINE_LENGTH = 8;
@@ -62,6 +63,10 @@ export class City {
   maxPopulation = 0;
   /** Sandbox (creative) mode: unlimited money, every tool and all land unlocked. */
   sandbox = false;
+  /** Undo / redo of hand-placed buildings. */
+  readonly undo = new UndoHistory();
+  /** False while undo/redo replays an entry, so it is not recorded again. */
+  private recording = true;
   /** Architectural style painted on each cell (index into ARCH_STYLES; 0 = modern). */
   readonly districtStyle = new Uint8Array(GRID_CELLS * GRID_CELLS);
   /** Wealth homes are built for, per cell (0 mixed, 1 modest, 2 middle, 3 wealthy). */
@@ -489,6 +494,7 @@ export class City {
     this.occupancy.setBuilding(b.id, b.cells);
     for (const k of b.cells) this.zones.refresh(k, false);
     this.clearVegetationRect(b.i, b.j, b.w, b.d);
+    if (this.recording) this.undo.push({ kind: 'place', id: b.id, defId: def.id, at: spotOf(b), cost: b.cost, style, tint });
     return b;
   }
 
@@ -502,6 +508,7 @@ export class City {
     // A player building replaces any zoning under it.
     this.zones.set(b.cells, ZoneType.None, () => false);
     this.clearVegetationRect(b.i, b.j, b.w, b.d);
+    if (this.recording) this.undo.push({ kind: 'place', id: b.id, defId: b.defId, at: spotOf(b), cost: b.cost, tint: b.tint });
     return b;
   }
 
@@ -524,8 +531,110 @@ export class City {
     const refund = this.buildingRefund(id);
     this.buildings.remove(id);
     this.occupancy.clearBuilding(id, b.cells);
-    this.treasury.refund(refund, (getBuilding(b.defId).group ?? 'landmark') === 'landmark' ? 'buildings' : 'infra');
+    this.treasury.refund(refund, ledgerOf(b.defId));
+    if (this.recording) this.undo.push({ kind: 'demolish', id, defId: b.defId, at: spotOf(b), cost: b.cost, refund });
     return refund;
+  }
+
+  // ---------------------------------------------------------------- moving
+
+  /** Can player building `id` stand at (i, j, rot)? Its own cells count as free. Moving is free. */
+  planMove(id: number, i: number, j: number, rot: Rotation): BuildingPlan | null {
+    const b = this.buildings.items.get(id);
+    if (!b || b.zone) return null;
+    this.occupancy.clearBuilding(id, b.cells);
+    const plan = planBuilding(getBuilding(b.defId), i, j, rot, this.placementWorld, Infinity, 0);
+    this.occupancy.setBuilding(id, b.cells);
+    plan.cost = 0;
+    plan.errors = plan.errors.filter((e) => e !== 'Yetersiz bütçe' && !e.startsWith('Bu binadan'));
+    plan.valid = plan.errors.length === 0;
+    return plan;
+  }
+
+  /** Moves a hand-placed (non-zoned) building. Returns the building at its new spot. */
+  moveBuilding(id: number, i: number, j: number, rot: Rotation): PlacedBuilding | null {
+    const b = this.buildings.items.get(id);
+    const plan = this.planMove(id, i, j, rot);
+    if (!b || !plan?.valid) return null;
+    const from = spotOf(b);
+    this.buildings.remove(id);
+    this.occupancy.clearBuilding(id, b.cells);
+    const moved = this.buildings.add({ ...plan, cost: b.cost });
+    this.occupancy.setBuilding(moved.id, moved.cells);
+    this.zones.set(moved.cells, ZoneType.None, () => false);
+    this.clearVegetationRect(moved.i, moved.j, moved.w, moved.d);
+    if (this.recording) this.undo.push({ kind: 'move', id: moved.id, defId: b.defId, from, to: spotOf(moved) });
+    return moved;
+  }
+
+  // ---------------------------------------------------------------- undo / redo
+
+  /** Undoes the last building action. Returns a player-facing error, or null on success. */
+  undoLast(): string | null {
+    const e = this.undo.peekUndo();
+    if (!e) return 'Geri alınacak işlem yok';
+    const err = this.replay(e, 'undo');
+    if (err) this.undo.dropUndo();
+    else this.undo.markUndone();
+    return err;
+  }
+
+  redoLast(): string | null {
+    const e = this.undo.peekRedo();
+    if (!e) return 'Yinelenecek işlem yok';
+    const err = this.replay(e, 'redo');
+    if (err) this.undo.dropRedo();
+    else this.undo.markRedone();
+    return err;
+  }
+
+  private replay(e: UndoEntry, dir: 'undo' | 'redo'): string | null {
+    this.recording = false;
+    try {
+      if (e.kind === 'move') {
+        const to = dir === 'undo' ? e.from : e.to;
+        const moved = this.buildings.items.has(e.id) ? this.moveBuilding(e.id, to.i, to.j, to.rot) : null;
+        if (!moved) return 'Bina eski yerine sığmıyor';
+        e.id = moved.id;
+        return null;
+      }
+      const remove = (e.kind === 'place') === (dir === 'undo');
+      if (remove) {
+        const b = this.buildings.items.get(e.id);
+        if (!b) return 'Bina artık yok';
+        if (e.kind === 'place') {
+          // Undoing a placement gives the whole price back.
+          if (b.zone) this.removeGrowable(e.id);
+          else {
+            this.buildings.remove(e.id);
+            this.occupancy.clearBuilding(e.id, b.cells);
+          }
+          this.treasury.refund(e.cost, ledgerOf(e.defId));
+        } else this.demolishBuilding(e.id);
+        return null;
+      }
+      // Rebuild: a placement pays its price again, an undone demolition pays back the refund.
+      const price = e.kind === 'place' ? e.cost : e.refund;
+      const plan = this.planBuilding(e.defId, e.at.i, e.at.j, e.at.rot);
+      const blocking = plan.errors.filter((x) => x !== 'Yetersiz bütçe' && !x.startsWith('Kilitli'));
+      if (blocking.length > 0) return blocking[0];
+      if (!this.treasury.canAfford(price)) return 'Yetersiz bütçe';
+      let b: PlacedBuilding | null;
+      if (e.kind === 'place' && e.style) {
+        b = this.placeGrowable(plan, e.style, e.tint, 0);
+      } else {
+        this.treasury.spend(price, ledgerOf(e.defId));
+        b = this.buildings.add({ ...plan, cost: e.cost });
+        this.occupancy.setBuilding(b.id, b.cells);
+        this.zones.set(b.cells, ZoneType.None, () => false);
+        this.clearVegetationRect(b.i, b.j, b.w, b.d);
+      }
+      if (!b) return 'Bina yeniden kurulamadı';
+      e.id = b.id;
+      return null;
+    } finally {
+      this.recording = true;
+    }
   }
 
   stats() {
@@ -541,3 +650,6 @@ export class City {
     };
   }
 }
+
+const spotOf = (b: PlacedBuilding): Spot => ({ i: b.i, j: b.j, rot: b.rot });
+const ledgerOf = (defId: string) => ((getBuilding(defId).group ?? 'landmark') === 'landmark' ? 'buildings' : 'infra') as 'buildings' | 'infra';

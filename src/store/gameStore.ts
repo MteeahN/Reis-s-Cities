@@ -56,6 +56,8 @@ export interface GameUIState {
   roadMode: RoadMode;
   buildingType: string;
   grid: boolean;
+  undoState: { undo: string | null; redo: string | null };
+  cityLevel: { level: number; xp: number; base: number; next: number | null };
   hover: CellInfo | null;
   selection: Selection | null;
   roadPlan: RoadPlanView | null;
@@ -155,6 +157,8 @@ export const useGameStore = create<GameUIState>((set) => ({
   error: null,
   ...INITIAL_GAME_STATE,
   grid: false,
+  undoState: { undo: null, redo: null },
+  cityLevel: { level: 1, xp: 0, base: 0, next: 30 },
   toasts: [],
   helpOpen: false,
   settingsOpen: false,

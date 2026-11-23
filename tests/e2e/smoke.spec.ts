@@ -244,7 +244,6 @@ test('saves a city to IndexedDB, survives a reload and continues; achievements a
   await canvas.click({ position: { x: 1150, y: 470 } });
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('stat-road-segments')).toHaveText('1');
-  const budget = await page.getByTestId('budget').innerText();
 
   // The first road earns an achievement (checked on the next simulation step).
   await page.getByTestId('btn-achievements').click();
@@ -255,6 +254,8 @@ test('saves a city to IndexedDB, survives a reload and continues; achievements a
 
   // Manual save (Ctrl+S); pause first so the budget can't move before saving.
   await page.getByTestId('btn-pause').click();
+  // Read after the pause: the mission reward for the first road is already paid.
+  const budget = await page.getByTestId('budget').innerText();
   await page.keyboard.press('Control+s');
   await expect(page.getByTestId('toast').filter({ hasText: 'kaydedildi' })).toBeVisible();
 

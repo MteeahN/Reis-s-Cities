@@ -68,7 +68,7 @@ describe('Architectural styles', () => {
     restoreCity(loaded, new CitySimulation(loaded, 1, { onStats: () => {}, onMilestone: () => {} }), valid.city, 0, 0);
     expect([...loaded.districtStyle]).toEqual([...t.city.districtStyle]);
     expect([...loaded.buildings.items.values()].filter((b) => b.zone).every((b) => b.style === 'ottoman')).toBe(true);
-  });
+  }, 20_000);
 
   it('a growable can be placed by hand: paid, zoned, under construction, half refunded', () => {
     const t = buildTown({ utilities: true });

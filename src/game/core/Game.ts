@@ -13,7 +13,7 @@ import {
 import { CameraController } from '../camera/CameraController';
 import { BUILDING_CATEGORY_LABEL, getBuilding, HEIGHT_LABEL, WEALTH_LABEL, type ServiceKind } from '../data/buildings';
 import { SAVE_FORMAT, SAVE_VERSION, newId, restoreCity, serializeCity, type CitySaveData } from '../save/CitySave';
-import { Achievements, type AchievementContext } from '../systems/Achievements';
+import { Achievements, cityLevel, rewardOf, xpOf, type AchievementContext } from '../systems/Achievements';
 import { StatsHistory, type StatsSample } from '../systems/StatsHistory';
 import type { PopulationStats } from '../simulation/CitySimulation';
 import { getRoadType, isRoadTypeUnlocked } from '../data/roads';
@@ -36,6 +36,7 @@ import { SERVICE_KINDS } from '../simulation/Services';
 import { CitySimulation } from '../simulation/CitySimulation';
 import type { ZoneToolState, DemolishFilter, TrafficToolMode } from './events';
 import { buildingCapacity } from '../data/buildings';
+import { undoLabel } from '../systems/UndoHistory';
 import { ZoneType } from '../data/zones';
 import type { TaxKind } from '../data/economy';
 import { Lighting } from '../rendering/Lighting';
@@ -269,6 +270,7 @@ export class Game {
     };
     this.city.roads.onChange(onCityChange);
     this.city.buildings.onChange(onCityChange);
+    this.city.undo.onChange(() => this.emitUndoState());
     this.input.addListener(this.tools);
     this.input.addListener({
       onKeyDown: (code, e) => this.handleKey(code, e),
@@ -316,11 +318,13 @@ export class Game {
     this.events.emit('maxPopulation', this.citySim.maxPopulation);
     if (this.citySim.stats) this.events.emit('population', this.citySim.stats);
     this.events.emit('achievements', this.achievements.view(this.achievementContext()));
+    this.events.emit('cityLevel', cityLevel(this.achievements.xp));
     this.events.emit('history', this.history.samples.slice());
     this.emitEconomy();
     this.emitCityStats();
     this.events.emit('grid', this.gridUser);
     this.events.emit('settings', this.getSettings());
+    this.emitUndoState();
     this.emitTime(true);
     progress(1, 'Hazır');
 
@@ -408,9 +412,12 @@ export class Game {
     // Achievements are not earned in sandbox mode (money and unlocks are free there).
     if (!this.city.sandbox) for (const a of this.achievements.evaluate(ctx, m)) {
       this.events.emit('sfx', 'milestone');
-      this.events.emit('toast', { kind: 'success', text: `Başarım kazanıldı: ${a.title} — ${a.description}` });
+      const reward = rewardOf(a.id);
+      this.city.treasury.credit(reward, 'reward');
+      this.events.emit('toast', { kind: 'success', text: `Görev tamamlandı: ${a.title} — ödül ₺${reward.toLocaleString('tr-TR')}, +${xpOf(a.id)} XP` });
     }
     this.events.emit('achievements', this.achievements.view(ctx));
+    this.events.emit('cityLevel', cityLevel(this.achievements.xp));
   }
 
   private sample(st: PopulationStats, t: number): StatsSample {
@@ -652,6 +659,16 @@ export class Game {
   // ---------------------------------------------------------------- input
 
   private handleKey(code: string, e: KeyboardEvent): void {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      if (code === 'KeyZ' && !e.shiftKey) {
+        e.preventDefault();
+        this.undo();
+      } else if (code === 'KeyY' || (code === 'KeyZ' && e.shiftKey)) {
+        e.preventDefault();
+        this.redo();
+      }
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     switch (code) {
       case 'Escape':
@@ -687,6 +704,9 @@ export class Game {
         break;
       case 'KeyV':
         this.setTool('select');
+        break;
+      case 'KeyM':
+        this.setTool('move');
         break;
       case 'KeyY':
         this.setTool('road');
@@ -820,6 +840,32 @@ export class Game {
 
   setTool(id: ToolId): void {
     this.tools.setTool(id);
+  }
+
+  /** Undoes the last building action (place, bulldoze, move). */
+  undo(): void {
+    const e = this.city.undo.peekUndo();
+    const label = e ? undoLabel(e, getBuilding(e.defId).name) : '';
+    const err = this.city.undoLast();
+    this.events.emit('toast', err ? { kind: 'warning', text: err } : { kind: 'info', text: `Geri alındı: ${label}` });
+    if (!err) this.events.emit('sfx', 'place');
+  }
+
+  redo(): void {
+    const e = this.city.undo.peekRedo();
+    const label = e ? undoLabel(e, getBuilding(e.defId).name) : '';
+    const err = this.city.redoLast();
+    this.events.emit('toast', err ? { kind: 'warning', text: err } : { kind: 'info', text: `Yinelendi: ${label}` });
+    if (!err) this.events.emit('sfx', 'place');
+  }
+
+  private emitUndoState(): void {
+    const u = this.city.undo.peekUndo();
+    const r = this.city.undo.peekRedo();
+    this.events.emit('undoState', {
+      undo: u ? undoLabel(u, getBuilding(u.defId).name) : null,
+      redo: r ? undoLabel(r, getBuilding(r.defId).name) : null,
+    });
   }
 
   setRoadType(id: string): void {

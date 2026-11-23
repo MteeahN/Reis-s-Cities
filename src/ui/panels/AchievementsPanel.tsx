@@ -1,5 +1,5 @@
 import { useGameStore } from '../../store/gameStore';
-import { formatGameDate } from '../../utils/format';
+import { formatGameDate, formatMoney } from '../../utils/format';
 import { Icon } from '../components/Icon';
 
 export function AchievementsPanel() {
@@ -19,7 +19,7 @@ export function AchievementsPanel() {
     <div className="panel popover achievements-panel" data-testid="achievements-panel">
       <div className="panel-header">
         <h3>
-          <Icon name="trophy" size={16} /> Başarımlar
+          <Icon name="trophy" size={16} /> Görevler
         </h3>
         <span className="muted small" data-testid="achievements-count">
           {earned} / {list.length}
@@ -28,7 +28,7 @@ export function AchievementsPanel() {
           <Icon name="close" size={14} />
         </button>
       </div>
-      {sandbox && <p className="hint" data-testid="achievements-sandbox">Yaratıcı modda başarımlar kazanılmaz; ilerleme yalnızca gösterilir.</p>}
+      {sandbox && <p className="hint" data-testid="achievements-sandbox">Yaratıcı modda görevler tamamlanmaz ve ödül verilmez; ilerleme yalnızca gösterilir.</p>}
       <div className="bar">
         <span className="fill-green" style={{ width: `${list.length ? (earned / list.length) * 100 : 0}%` }} />
       </div>
@@ -43,6 +43,7 @@ export function AchievementsPanel() {
               <div className="achievement-text">
                 <div className="achievement-title">{a.title}</div>
                 <div className="achievement-desc">{a.description}</div>
+                <div className="achievement-reward">Ödül: {formatMoney(a.reward)} · +{a.xp} XP</div>
                 {done ? (
                   <div className="achievement-when">Kazanıldı: {formatGameDate(a.earnedAt!).date}</div>
                 ) : (

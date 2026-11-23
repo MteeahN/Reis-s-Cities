@@ -18,7 +18,9 @@ export type FlowCategory =
   | 'constructionBuildings'
   | 'refunds'
   | 'loan'
-  | 'loanPayment';
+  | 'loanPayment'
+  /** Money paid out when the city completes a mission. */
+  | 'reward';
 
 /**
  * Municipal treasury. Construction requires funds up front; recurring costs

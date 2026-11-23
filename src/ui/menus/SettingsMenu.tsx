@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { AudioSettings, GraphicsSettings } from '../../game/core/settings';
 import type { DayNightMode } from '../../game/rendering/DayNight';
 import type { ShadowQuality } from '../../game/rendering/QualityManager';
-import { AUTOSAVE_MINUTES, type GameplaySettings } from '../../game/core/settings';
+import { AUTOSAVE_MINUTES, UI_SCALES, type GameplaySettings } from '../../game/core/settings';
 import { getGame, stopGame } from '../../store/gameBridge';
 import { exportSave, saveBeforeLeaving, saveCity } from '../../store/saveManager';
 import { useGameStore } from '../../store/gameStore';
@@ -124,6 +124,21 @@ function GameplayTab({ p }: { p: GameplaySettings }) {
   const setP = (patch: Partial<GameplaySettings>) => getGame()?.setGameplay(patch);
   return (
     <>
+      <div className="section-title">Arayüz</div>
+      <div className="kv">
+        <span>Arayüz boyutu</span>
+      </div>
+      <div className="segmented">
+        {UI_SCALES.map((v) => (
+          <button key={v} className={p.uiScale === v ? 'active' : ''} onClick={() => setP({ uiScale: v })} data-testid={`ui-scale-${v}`}>
+            %{Math.round(v * 100)}
+          </button>
+        ))}
+      </div>
+      <label className="toggle" style={{ marginTop: 8 }}>
+        <input type="checkbox" checked={p.tutorial} onChange={() => setP({ tutorial: !p.tutorial })} data-testid="tutorial-toggle" />
+        <span>Öğreticiyi göster</span>
+      </label>
       <div className="section-title">Kayıt</div>
       <div className="btn-row">
         <button className="btn primary" onClick={() => void saveCity('manual')} disabled={saving} data-testid="btn-save-city">

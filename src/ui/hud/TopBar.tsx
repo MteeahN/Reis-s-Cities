@@ -139,6 +139,7 @@ const SpeedControls = memo(function SpeedControls() {
 
 export function TopBar() {
   const cityName = useGameStore((s) => s.cityName);
+  const level = useGameStore((s) => s.cityLevel);
   const set = useGameStore((s) => s.set);
   const helpOpen = useGameStore((s) => s.helpOpen);
   const settingsOpen = useGameStore((s) => s.settingsOpen);
@@ -158,6 +159,10 @@ export function TopBar() {
         <div className="brand-text">
           <span className="brand-title">REIS'S CITIES</span>
           <span className="brand-city" data-testid="city-name">{cityName}</span>
+          <span className="brand-level" data-testid="city-level" title={level.next === null ? `En yüksek seviye · ${level.xp} XP` : `${level.xp} / ${level.next} XP — görevleri tamamlayarak seviye atlayın`}>
+            Sv {level.level}
+            <span className="brand-xp"><span style={{ width: `${level.next === null ? 100 : ((level.xp - level.base) / (level.next - level.base)) * 100}%` }} /></span>
+          </span>
         </div>
       </div>
 
@@ -178,7 +183,7 @@ export function TopBar() {
         <button className={`icon-btn ${popup === 'stats' ? 'active' : ''}`} onClick={() => togglePopup('stats')} title="İstatistikler" data-testid="btn-stats">
           <Icon name="chart" size={18} />
         </button>
-        <button className={`icon-btn badge-btn ${popup === 'achievements' ? 'active' : ''}`} onClick={() => togglePopup('achievements')} title="Başarımlar" data-testid="btn-achievements">
+        <button className={`icon-btn badge-btn ${popup === 'achievements' ? 'active' : ''}`} onClick={() => togglePopup('achievements')} title="Görevler ve ödüller" data-testid="btn-achievements">
           <Icon name="trophy" size={18} />
           {earned > 0 && <span className="count-badge">{earned}</span>}
         </button>

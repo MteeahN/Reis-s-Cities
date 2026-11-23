@@ -65,6 +65,8 @@ export async function startGame(container: HTMLElement): Promise<void> {
   ev.on('perf', (perf) => set({ perf, qualitySetting: perf.qualitySetting }));
   ev.on('camera', (camera) => set({ camera }));
   ev.on('grid', (grid) => set({ grid }));
+  ev.on('undoState', (undoState) => set({ undoState }));
+  ev.on('cityLevel', (cityLevel) => set({ cityLevel }));
   ev.on('settings', (settings) => {
     const before = useGameStore.getState().settings.gameplay;
     saveSettings(settings);

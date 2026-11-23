@@ -13,7 +13,7 @@ import type { GameSpeed } from './config';
 import type { AchievementView } from '../systems/Achievements';
 import type { StatsSample } from '../systems/StatsHistory';
 
-export type ToolId = 'select' | 'road' | 'building' | 'demolish' | 'zone' | 'power' | 'water' | 'services' | 'powerline' | 'pipe' | 'traffic';
+export type ToolId = 'select' | 'road' | 'building' | 'demolish' | 'zone' | 'power' | 'water' | 'services' | 'powerline' | 'pipe' | 'traffic' | 'move';
 
 /** Traffic tool: what a click changes. */
 export type TrafficToolMode = 'oneway' | 'lights' | 'stop' | 'clear';
@@ -240,6 +240,10 @@ export type GameEvents = {
   camera: CameraState;
   grid: boolean;
   toast: { kind: ToastKind; text: string };
+  /** City level from mission experience. */
+  cityLevel: { level: number; xp: number; base: number; next: number | null };
+  /** What undo / redo would do next (null = nothing). */
+  undoState: { undo: string | null; redo: string | null };
   toggleHelp: undefined;
   toggleLayers: undefined;
   zoneTool: ZoneToolState;

@@ -123,7 +123,8 @@ export function EconomyTab() {
       </div>
 
       <div className="section-title">Bugün (gerçekleşen)</div>
-      <Line k="Gelir" v={eco.today.income - (t.loan ?? 0) - (t.refunds ?? 0)} />
+      <Line k="Gelir" v={eco.today.income - (t.loan ?? 0) - (t.refunds ?? 0) - (t.reward ?? 0)} />
+      {(t.reward ?? 0) > 0 && <Line k="Görev ödülleri" v={t.reward ?? 0} />}
       <Line k="İşletme giderleri" v={-(eco.today.expenses + construction)} />
       {construction < 0 && <Line k="İnşaat" v={construction} />}
 

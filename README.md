@@ -3,6 +3,21 @@
 Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülasyonu.
 **Mevcut durum: Aşama 8 — Kayıt, başarımlar, yayın (v0.8.0)** — 8 aşamalık planın tamamı bitti.
 
+### Son eklemeler: oynanış araçları
+- **Geri al / yinele (Ctrl+Z / Ctrl+Y):** elle konan binaların yerleştirme, yıkım ve taşıma işlemleri geri alınır
+  (son 50 işlem). Yerleştirmeyi geri almak tüm parayı geri verir; yıkımı geri almak ödenen iadeyi geri alır. Yer
+  artık doluysa işlem yapılmaz ve nedeni yazılır. Yollar, bölgeler ve hatlar şimdilik geri alınmaz.
+- **Taşı (M):** simge, hizmet ve altyapı binaları ücretsiz taşınır; binaya tıklayın, R ile döndürün, yeni yere tıklayın.
+  Bölgede büyüyen binalar taşınmaz.
+- **Katalog:** her bina menüsünde arama, sıralama (ad, fiyat, boyut) ve favoriler (★, tarayıcıda saklanır).
+- **Görevler ve şehir seviyesi:** her başarım bir görevdir; tamamlanınca bütçeye gerçek para ödülü yatar
+  (ekonomi raporunda "Görev ödülleri") ve şehir XP kazanır. Üst çubukta şehir seviyesi ve XP çubuğu görünür.
+- **Öğretici:** yeni şehirde 6 adımlı rehber. Her adım şehrin gerçek durumuyla (görev ilerlemesi) tamamlanır.
+  Ayarlar → Oyun'dan kapatılıp açılır.
+- **Arayüz boyutu:** Ayarlar → Oyun'da %85–%130.
+- Ayrıntılı belgeler: [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md), [docs/TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md),
+  [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md).
+
 ### Aşama 8 sonrası eklemeler
 - **Yaratıcı mod:** yeni şehir ekranındaki seçenekle sınırsız para, tüm binalar / yollar / bölgeler açık ve haritanın
   tamamı kullanılabilir. Gelir-gider raporu yine tutulur; kredi alınmaz, başarımlar kazanılmaz. Kayıtta saklanır.
@@ -228,6 +243,8 @@ Gereksinim: Node.js 20+ ve WebGL 2 destekli masaüstü tarayıcı.
 | Space | Duraklat |
 | 1 / 2 / 3 | Oyun hızı |
 | V / Y / Z / B / X | Seçim / Yol / Bölgeleme / Bina / Yıkım aracı |
+| M | Bina taşıma aracı |
+| Ctrl+Z / Ctrl+Y | Bina işlemini geri al / yinele |
 | P / U / J | Elektrik / Su / Hizmetler aracı |
 | L | Bilgi katmanları |
 | T | Trafik yoğunluğu katmanı |
@@ -257,7 +274,7 @@ src/
                  Vegetation, Water, TerrainPicker, generation/ (gürültü, arazi, worker protokolü)
     entities/    TreeModels; road/ (curve, RoadGraph); building/ (BuildingPlacement, BuildingRegistry, BuildingModels);
                  infra/ (UtilityLines: elektrik hatları ve borular)
-    tools/       ToolManager, SelectTool, RoadTool, BuildingTool, LineTool, DemolishTool,
+    tools/       ToolManager, SelectTool, RoadTool, BuildingTool, MoveTool, LineTool, DemolishTool, TrafficTool, ZoneTool,
                  placement/ (snapping, RoadPlanner, RoadPreview)
     rendering/   … roads/ (roadGeometry, RoadMaterial, RoadRenderer), BuildingRenderer, PowerLineRenderer,
                  InfoLayers + InfoLayerView (bilgi katmanları), ProblemIcons, VehicleRenderer + VehicleModels (3D araçlar),
@@ -268,7 +285,7 @@ src/
                  LandValue, LotFinder, Workforce (eğitim-iş eşleştirme), Utilities (elektrik/su/kanalizasyon şebekeleri),
                  Services (kapsama alanları, suç), traffic/TrafficModel (sefer üretimi, çekim modeli, rota ataması, BPR)
     systems/     City (yollar + binalar + doluluk + hazine), Treasury (kategorili hareketler), Economy (vergi, rapor, kredi),
-                 Achievements (başarımlar), StatsHistory (istatistik geçmişi)
+                 Achievements (görevler, ödüller, şehir seviyesi), StatsHistory (istatistik geçmişi), UndoHistory (geri al / yinele)
     data/        roads.ts, buildings.ts (özel + bölge şablonları), infrastructure.ts (santral, su, hizmet binaları, hatlar),
                  zones.ts, economy.ts (vergi, ücret, kredi ayarları)
     world/       … ZoneMap (bölgeler + boş arsa dizini), Occupancy

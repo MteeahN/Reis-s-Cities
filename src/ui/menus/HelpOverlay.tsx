@@ -27,6 +27,8 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
       ['L', 'Bilgi katmanları'],
       ['T', 'Trafik yoğunluğu katmanı'],
       ['X / Delete', 'Yıkım aracı'],
+      ['M', 'Bina taşıma aracı (R ile döndür)'],
+      ['Ctrl+Z / Ctrl+Y', 'Bina işlemini geri al / yinele'],
       ['R', 'Binayı döndür'],
       ['Ctrl (yol)', 'Izgara ve açı yakalamayı kapat'],
       ['Sağ tık (yol)', 'Çizimi iptal et'],
