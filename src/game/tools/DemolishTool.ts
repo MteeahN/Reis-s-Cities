@@ -81,9 +81,7 @@ export class DemolishTool implements Tool {
         if (onPipe) return onPipe;
       }
     }
-    const i = Math.floor(ground.x / CELL_SIZE);
-    const j = Math.floor(ground.z / CELL_SIZE);
-    const bid = allow('building') ? city.occupancy.buildingAt(i, j) : 0;
+    const bid = allow('building') ? city.buildingAtWorld(ground.x, ground.z) : 0;
     if (bid) {
       const b = city.buildings.items.get(bid)!;
       return { kind: 'building', id: bid, name: getBuilding(b.defId).name, refund: city.buildingRefund(bid) };

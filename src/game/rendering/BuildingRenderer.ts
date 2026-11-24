@@ -185,7 +185,7 @@ export class BuildingRenderer {
 
   static modelMatrix(b: PlacedBuilding, out = new Matrix4(), scale = new Vector3(1, 1, 1)): Matrix4 {
     const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), (b.rot * Math.PI) / 2);
-    return out.compose(new Vector3((b.i + b.w / 2) * CELL_SIZE, b.baseY, (b.j + b.d / 2) * CELL_SIZE), q, scale);
+    return out.compose(new Vector3((b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0), b.baseY, (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0)), q, scale);
   }
 
   /** Which look (colour/roof variant) a building uses — stable per building. */
@@ -245,7 +245,7 @@ export class BuildingRenderer {
       // Foundation plinth from the lowest ground corner up to the base.
       const depth = b.baseY - b.minY + 0.6;
       const f = new Matrix4().compose(
-        new Vector3((b.i + b.w / 2) * CELL_SIZE, b.baseY - depth + 0.05, (b.j + b.d / 2) * CELL_SIZE),
+        new Vector3((b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0), b.baseY - depth + 0.05, (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0)),
         new Quaternion(),
         new Vector3(b.w * CELL_SIZE - 0.4, depth, b.d * CELL_SIZE - 0.4),
       );

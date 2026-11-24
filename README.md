@@ -16,6 +16,12 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   sorun sürdükçe birkaç günde bir tekrar yazılır, çözülünce teşekkür gelir. "Göster" kamerayı sorunun yerine
   götürür. Okunmamış gönderi sayısı simgede görünür. Akış kayda yazılmaz; yüklenen şehirde şehrin o anki
   durumundan yeniden başlar.
+- **Yola yaslanan binalar:** önündeki düz yolla arasında çim şerit kalan binalar kaldırım kenarına kadar
+  çekilerek çizilir (yalnızca görüntü; hücreleri yerinde kalır, seçme / yıkma / taşıma çizildiği yerden çalışır).
+  Kavisli ya da çapraz yollarda ve arada başka bir bina varsa kaydırılmaz.
+- **Yol kenarı bölgeleme:** seçim yalnızca işaret edilen yola bakan araziyi alır; köşede kesişen yolun cephesine
+  taşmaz. Başka türde bölgelenmiş arazi sınırdır: yeni bölge onun sınırına kadar uzanır, onu ve arkasını
+  değiştirmez (örneğin konutun yanına sanayi çizerken konut korunur). Fırça modu ve "Kaldır" eskisi gibi her şeye işler.
 - **Yol eklemleri:** aynı türden iki yol hafif açıyla birleştiğinde uçları ortak bir gönye çizgisinde buluşur;
   araya yırtık gibi görünen boşluk girmez.
 - **Taşı (M):** simge, hizmet ve altyapı binaları ücretsiz taşınır; binaya tıklayın, R ile döndürün, yeni yere tıklayın.

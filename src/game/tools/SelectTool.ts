@@ -100,7 +100,7 @@ export class SelectTool implements Tool {
     if (!ground) return;
     const city = this.ctx.city;
     const { i, j } = WorldGrid.cellOf(ground.x, ground.z);
-    const bid = city.occupancy.buildingAt(i, j);
+    const bid = city.buildingAtWorld(ground.x, ground.z);
     const building = bid ? this.ctx.buildingInfo(bid) : null;
     if (building) {
       this.selected = { kind: 'building', building };

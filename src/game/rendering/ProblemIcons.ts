@@ -142,7 +142,7 @@ export class ProblemIcons {
       else if (garbageMatters && b.zone && this.city.services.average('garbage', b.cells) < 0.3) kind = 'garbage';
       if (!kind) continue;
       const h = buildingGeometry(def).height;
-      pos[kind].push((b.i + b.w / 2) * CELL_SIZE, b.baseY + h + 4, (b.j + b.d / 2) * CELL_SIZE);
+      pos[kind].push((b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0), b.baseY + h + 4, (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0));
     }
     for (const k of KINDS) {
       const p = this.points.get(k)!;

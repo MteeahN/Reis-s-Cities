@@ -48,6 +48,11 @@ React HUD (src/ui)  ←  Zustand store (src/store)  ←  EventBus olayları  ←
 - Döner kavşak: `tools/placement/Roundabout.ts` kolları yarıçapta `splitEdge` ile keser, eski kavşağa uzanan
   parçaları siler ve kesim noktalarını tek yönlü (`oneway2`) çember yaylarıyla bağlar (150°'den geniş aralara ara
   düğüm). Yön, sağdan trafik için ortası solda kalacak biçimdedir.
+- Bina hizası: `City.roadSnap` önündeki düz yol ile parselin ön kenarı arasındaki boşluğu (en fazla 1,25 hücre)
+  ölçer; `BuildingRegistry` bunu binaya `ox/oz` olarak yazar, `BuildingRenderer` modeli o kadar kaydırır.
+  Doluluk hücreleri değişmez; `City.buildingAtWorld` seçme ve yıkmada kaydırılmış yeri dikkate alır.
+- Yol kenarı bölgeleme (`ZoneTool`): aday hücreler yolun o tarafındaki, en yakın yolu bu yol olan hücrelerdir;
+  bir hücreden yola giden doğru başka türde bölgelenmiş bir hücreden geçiyorsa hücre seçilmez.
 - Yol doluluğu: hücrenin merkezi yola yakınsa ya da karesinin herhangi bir yeri yol yüzeyine değiyorsa hücre yol
   sayılır; kavisli ve çapraz yollarda binalar yola taşmaz.
 

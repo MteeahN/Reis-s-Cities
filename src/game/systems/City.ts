@@ -3,13 +3,13 @@ import { growablePrice, type DistrictRules } from '../data/buildings';
 import { CELL_SIZE, GRID_CELLS, START_TILES, TILE_CELLS, WORLD_SIZE, TILES_PER_SIDE } from '../core/config';
 import { LINE_TYPES, type LineKind } from '../data/infrastructure';
 import { UtilityLines } from '../entities/infra/UtilityLines';
-import { sampleBezier, type P2 } from '../entities/road/curve';
+import { bezierTangent, sampleBezier, type P2 } from '../entities/road/curve';
 import { ServiceCoverage } from '../simulation/Services';
 import { computeUtilities, type UtilityResult } from '../simulation/Utilities';
 import { getBuilding } from '../data/buildings';
 import { getRoadType, type RoadTypeDef } from '../data/roads';
 import { getZone, ZoneType, type ZoneKind } from '../data/zones';
-import { frontCells, planBuilding, type BuildingPlan, type PlacementWorld, type Rotation } from '../entities/building/BuildingPlacement';
+import { frontCells, frontStep, planBuilding, type BuildingPlan, type PlacementWorld, type Rotation } from '../entities/building/BuildingPlacement';
 import { BuildingRegistry, type PlacedBuilding } from '../entities/building/BuildingRegistry';
 import { RoadGraph, type RoadEdge } from '../entities/road/RoadGraph';
 import { LandValueMap, waterProximity } from '../simulation/LandValue';
@@ -119,6 +119,8 @@ export class City {
       rulesAt: (i, j) => this.rulesAt(i, j),
     };
 
+    // Buildings are drawn up to the kerb of the road in front of them.
+    this.buildings.snapper = (i, j, w, d, rot) => this.roadSnap(i, j, w, d, rot);
     this.roads.onChange((c) => {
       this.outsideCache = null;
 
@@ -670,6 +672,48 @@ export class City {
   }
 
   /** Restores saved buildings (save system): occupancy, zoning index and cleared trees follow. */
+  /**
+   * How far a building on these cells is drawn towards the road in front of
+   * it, so the lot meets the kerb (straight roads running along the front;
+   * nothing for curved, diagonal or distant roads).
+   */
+  roadSnap(i: number, j: number, w: number, d: number, rot: Rotation): { x: number; z: number } | null {
+    const [sx, sz] = frontStep(rot);
+    const cx = (i + w / 2) * CELL_SIZE;
+    const cz = (j + d / 2) * CELL_SIZE;
+    const half = (sx !== 0 ? w : d) * CELL_SIZE * 0.5;
+    const fx = cx + sx * half;
+    const fz = cz + sz * half;
+    const hit = this.roads.nearestEdge(fx + sx * CELL_SIZE * 0.5, fz + sz * CELL_SIZE * 0.5, CELL_SIZE * 1.5, true, (e) => !this.roads.isElevated(e));
+    if (!hit) return null;
+    const t = bezierTangent(this.roads.curveOf(hit.edge), hit.t);
+    // The road must run along the front (within about 15°).
+    if (Math.abs(sx * t.z - sz * t.x) < 0.965) return null;
+    const ahead = (hit.point.x - fx) * sx + (hit.point.z - fz) * sz;
+    const gap = ahead - getRoadType(hit.edge.typeId).width / 2 - 0.1;
+    if (gap < 0.05 || gap > CELL_SIZE * 1.25) return null;
+    // Never over a building standing between the lot and the road.
+    if (gap > 1 && frontCells(i, j, w, d, rot, 1).some(([ci, cj]) => this.occupancy.buildingAt(ci, cj) !== 0)) return null;
+    return { x: sx * gap, z: sz * gap };
+  }
+
+  /** The building drawn at a world point (buildings are drawn up to the kerb, slightly off their cells). */
+  buildingAtWorld(x: number, z: number): number {
+    const i = Math.floor(x / CELL_SIZE);
+    const j = Math.floor(z / CELL_SIZE);
+    for (let dj = -1; dj <= 1; dj++) {
+      for (let di = -1; di <= 1; di++) {
+        const id = this.occupancy.buildingAt(i + di, j + dj);
+        const b = id ? this.buildings.items.get(id) : undefined;
+        if (!b) continue;
+        const lx = x - (b.ox ?? 0);
+        const lz = z - (b.oz ?? 0);
+        if (lx >= b.i * CELL_SIZE && lx < (b.i + b.w) * CELL_SIZE && lz >= b.j * CELL_SIZE && lz < (b.j + b.d) * CELL_SIZE) return b.id;
+      }
+    }
+    return 0;
+  }
+
   restoreBuildings(items: Parameters<BuildingRegistry['restore']>[0], nextId: number): void {
     const added = this.buildings.restore(items, nextId);
     for (const b of added) {

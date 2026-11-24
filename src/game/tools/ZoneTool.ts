@@ -15,7 +15,10 @@ const ERASE_COLOR = 0xff6b6b;
  *  - Brush: press and drag to paint square brushes of 1/3/5 cells.
  *  - Roadside: point at the empty land beside a road — that side of the road
  *    is selected up to the chosen parcel depth (both sides when pointing at
- *    the road itself). Click, or press and drag along several streets.
+ *    the road itself). Click, or press and drag along several streets. Only
+ *    land that faces this road is taken (not the frontage of a crossing road),
+ *    and land already zoned as something else stops the selection: the new
+ *    zone fills up to that zone's border without changing it.
  * Zone "None" erases. Zoning is free; repainting a lot with a different zone
  * replaces the growable building on it.
  */
@@ -81,12 +84,40 @@ export class ZoneTool implements Tool {
     if (!hit) return [];
     const half = getRoadType(hit.edge.typeId).width / 2;
     if (hit.dist > half + reach) return [];
-    const pts = hit.edge.poly.points;
-    const cells = rasterizePolyline(pts, half + reach).filter(keep);
-    if (hit.dist <= half) return cells;
+    const edge = hit.edge;
+    const pts = edge.poly.points;
+    const cx = (k: number) => ((k % GRID_CELLS) + 0.5) * CELL_SIZE;
+    const cz = (k: number) => (Math.floor(k / GRID_CELLS) + 0.5) * CELL_SIZE;
+    let area = rasterizePolyline(pts, half + reach);
     // Only the side of the road the cursor is on.
-    const side = sideOf(pts, ground.x, ground.z);
-    return cells.filter((k) => sideOf(pts, ((k % GRID_CELLS) + 0.5) * CELL_SIZE, (Math.floor(k / GRID_CELLS) + 0.5) * CELL_SIZE) === side);
+    if (hit.dist > half) {
+      const side = sideOf(pts, ground.x, ground.z);
+      area = area.filter((k) => sideOf(pts, cx(k), cz(k)) === side);
+    }
+    // Only land facing this road: cells nearer another road belong to that road's frontage.
+    area = area.filter((k) => {
+      const near = city.roads.nearestEdge(cx(k), cz(k), half + reach + CELL_SIZE, true);
+      return !near || near.edge.id === edge.id;
+    });
+    // Land zoned as something else is a border: a cell is left out when that zone lies
+    // between it and the road (walking straight from the cell to the road).
+    const other = (k: number) => !erase && city.zones.zone[k] !== ZoneType.None && city.zones.zone[k] !== this.state.zone;
+    const shadowed = (k: number) => {
+      if (other(k)) return true;
+      const x = cx(k);
+      const z = cz(k);
+      const p = city.roads.closestOnEdge(edge, { x, z }).point;
+      const len = Math.hypot(p.x - x, p.z - z);
+      const steps = Math.ceil(len / 2);
+      for (let s = 1; s < steps; s++) {
+        const sx = x + ((p.x - x) * s) / steps;
+        const sz = z + ((p.z - z) * s) / steps;
+        const n = Math.floor(sz / CELL_SIZE) * GRID_CELLS + Math.floor(sx / CELL_SIZE);
+        if (n !== k && other(n)) return true;
+      }
+      return false;
+    };
+    return area.filter((k) => keep(k) && !shadowed(k));
   }
 
   private refresh(): void {

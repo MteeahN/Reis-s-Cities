@@ -39,6 +39,12 @@ export interface PlacedBuilding {
   burnTicks: number;
   /** Architectural style of a growable (absent: modern). */
   style?: ArchStyle;
+  /**
+   * Drawn this far (m) from its cells, towards the road in front, so the lot
+   * meets the kerb without a strip of grass. Visual only; cells stay put.
+   */
+  ox?: number;
+  oz?: number;
 }
 
 export interface BuildingChange {
@@ -72,6 +78,20 @@ export class BuildingRegistry {
   readonly items = new Map<number, PlacedBuilding>();
   private nextId = 1;
   private listeners = new Set<(c: BuildingChange) => void>();
+  /** Where a new building is drawn relative to its cells (set by the city: towards the road). */
+  snapper: ((i: number, j: number, w: number, d: number, rot: Rotation) => { x: number; z: number } | null) | null = null;
+
+  private snap<T extends { i: number; j: number; w: number; d: number; rot: Rotation }>(b: T): T & { ox?: number; oz?: number } {
+    const s = this.snapper?.(b.i, b.j, b.w, b.d, b.rot);
+    const out = { ...b } as T & { ox?: number; oz?: number };
+    delete out.ox;
+    delete out.oz;
+    if (s && (s.x !== 0 || s.z !== 0)) {
+      out.ox = s.x;
+      out.oz = s.z;
+    }
+    return out;
+  }
 
   /** Adds a player-placed building from a validated plan. */
   add(plan: BuildingPlan): PlacedBuilding {
@@ -95,7 +115,7 @@ export class BuildingRegistry {
 
   create(n: NewBuilding): PlacedBuilding {
     const b: PlacedBuilding = {
-      ...n,
+      ...this.snap(n),
       id: this.nextId++,
       cells: footprintCells(n.i, n.j, n.w, n.d),
       progress: n.state === 'construction' ? 0 : 1,
@@ -136,7 +156,7 @@ export class BuildingRegistry {
   restore(items: Omit<PlacedBuilding, 'cells'>[], nextId: number): PlacedBuilding[] {
     const added: PlacedBuilding[] = [];
     for (const it of items) {
-      const b: PlacedBuilding = { ...it, cells: footprintCells(it.i, it.j, it.w, it.d) };
+      const b: PlacedBuilding = { ...this.snap(it), cells: footprintCells(it.i, it.j, it.w, it.d) };
       this.items.set(b.id, b);
       this.nextId = Math.max(this.nextId, b.id + 1);
       added.push(b);

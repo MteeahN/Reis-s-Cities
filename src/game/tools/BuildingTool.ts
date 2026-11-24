@@ -107,7 +107,9 @@ export class BuildingTool implements Tool {
     }
     this.plan = plan;
     this.ghost.visible = true;
-    this.ghost.position.set(plan.centerX, plan.baseY + 0.05, plan.centerZ);
+    // Drawn up to the kerb, as the placed building will be.
+    const snap = city.roadSnap(plan.i, plan.j, plan.w, plan.d, plan.rot);
+    this.ghost.position.set(plan.centerX + (snap?.x ?? 0), plan.baseY + 0.05, plan.centerZ + (snap?.z ?? 0));
     this.ghost.rotation.y = (plan.rot * Math.PI) / 2;
     const svc = this.def.service;
     const radius = svc ? svc.radius * CELL_SIZE : this.def.landValueEffect ? this.def.landValueEffect.radius * CELL_SIZE : 0;

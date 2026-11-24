@@ -22,5 +22,7 @@ export default defineConfig({
   test: {
     include: ['tests/unit/**/*.test.ts'],
     environment: 'node',
+    // Many tests generate a whole world; under full parallel load they can pass 5 s.
+    testTimeout: 20_000,
   },
 });

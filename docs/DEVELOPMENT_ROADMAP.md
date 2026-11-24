@@ -22,6 +22,7 @@
     döner kavşak, yüksek katlı oteller ve kumarhaneler; fütüristik stil kaldırıldı
 14. ✅ Yollar, bölgeleme, hatlar ve trafik düzenlemeleri için geri al / yinele; Kent Sesi vatandaş akışı;
     aynı türden yolların açılı eklemlerinde gönye
+15. ✅ Binaların kaldırıma yaslanması, yol kenarı bölgelemenin tek yolda kalması ve başka bölgenin sınırında durması
 
 ## Bilinen sınırlar (dürüst durum)
 

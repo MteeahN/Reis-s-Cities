@@ -93,7 +93,7 @@ export class MoveTool implements Tool {
       const i = Math.floor(ground.x / CELL_SIZE);
       const j = Math.floor(ground.z / CELL_SIZE);
       if (i < 0 || j < 0 || i >= GRID_CELLS || j >= GRID_CELLS) return;
-      const id = this.ctx.city.occupancy.buildingAt(i, j);
+      const id = this.ctx.city.buildingAtWorld(ground.x, ground.z);
       if (id) this.pickUp(id);
       return;
     }

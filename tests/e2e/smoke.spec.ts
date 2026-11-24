@@ -270,6 +270,8 @@ test('builds a road, charges the budget and demolishes it with a refund', async 
 });
 
 test('saves a city to IndexedDB, survives a reload and continues; achievements and statistics', async ({ page }) => {
+  // Generates the world twice (new city, then the reload): give it room on a busy machine.
+  test.setTimeout(180_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
