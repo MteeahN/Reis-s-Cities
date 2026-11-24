@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import type { DemolishFilter, RoadMode, ToolId, TrafficToolMode, ZoneToolState } from '../../game/core/events';
+import type { DecorToolState, DemolishFilter, PaintToolState, RoadMode, TerrainToolState, ToolId, TrafficToolMode, ZoneToolState } from '../../game/core/events';
+import { getProp, PAINTS, PROP_GROUPS, PROPS, type PropGroup } from '../../game/data/decor';
 import { LIGHTS_COST, STOP_COST } from '../../game/tools/TrafficTool';
+import { TERRAIN_BRUSH, TERRAIN_PRICE } from '../../game/tools/TerrainTool';
 import { ZONES } from '../../game/data/zones';
 import { buildingsInGroup, growablePrice, storeysOf, ZONED_BUILDINGS, type BuildingDef } from '../../game/data/buildings';
 import { ARCH_STYLE_DEFS, ARCH_STYLES, type ArchStyle } from '../../game/data/styles';
 import { LINE_TYPES } from '../../game/data/infrastructure';
 import { INFO_LAYERS } from '../../game/rendering/InfoLayers';
-import { BUILDABLE_ROAD_TYPES as ROAD_TYPES, ROAD_CATEGORIES, isRoadTypeUnlocked, type RoadCategory } from '../../game/data/roads';
+import { BUILDABLE_ROAD_TYPES as ROAD_TYPES, ROAD_CATEGORIES, ROAD_SURFACES, isRoadTypeUnlocked, type RoadCategory } from '../../game/data/roads';
 import { getGame } from '../../store/gameBridge';
 import { useGameStore } from '../../store/gameStore';
 import { formatMoney, formatNumber } from '../../utils/format';
@@ -32,7 +34,9 @@ const TOOLS: ToolEntry[] = [
   { id: 'power', label: 'Elektrik', icon: 'power', tool: 'power', hotkey: 'P' },
   { id: 'water', label: 'Su', icon: 'water', tool: 'water', hotkey: 'U' },
   { id: 'services', label: 'Hizmetler', icon: 'services', tool: 'services', hotkey: 'J' },
-  { id: 'landscape', label: 'Peyzaj', icon: 'tree', phase: 7 },
+  { id: 'terrain', label: 'Arazi', icon: 'terrain', tool: 'terrain', hotkey: 'E' },
+  { id: 'paint', label: 'Kaplama', icon: 'brush', tool: 'paint', hotkey: 'Q' },
+  { id: 'decor', label: 'Süsler', icon: 'bench', tool: 'decor', hotkey: 'N' },
   { id: 'traffic', label: 'Trafik', icon: 'traffic', tool: 'traffic', hotkey: 'K' },
   { id: 'move', label: 'Taşı', icon: 'move', tool: 'move', hotkey: 'M' },
   { id: 'demolish', label: 'Yıkım', icon: 'demolish', tool: 'demolish', hotkey: 'X' },
@@ -41,13 +45,16 @@ const TOOLS: ToolEntry[] = [
 const MODES: { id: RoadMode; label: string; icon: IconName; hint: string }[] = [
   { id: 'straight', label: 'Düz', icon: 'road', hint: 'Tıkla-tıkla veya sürükle-bırak ile düz yol' },
   { id: 'curve', label: 'Kavisli', icon: 'curve', hint: 'Başlangıç → kontrol noktası → bitiş' },
-  { id: 'upgrade', label: 'Yenile', icon: 'upgrade', hint: 'Mevcut bir yolu seçili türe dönüştür' },
+  { id: 'free', label: 'Serbest', icon: 'freehand', hint: 'Basılı tutup yolun gideceği yeri çizin; keskin dönüşler yumuşatılır' },
+  { id: 'arc', label: 'Yay', icon: 'arc', hint: 'Başlangıç → bitiş → yayın bükümü (dairesel yay)' },
+  { id: 'upgrade', label: 'Yenile', icon: 'upgrade', hint: 'Mevcut bir yolu seçili türe dönüştür; aynı türse seçili kaplamayla yeniden kapla' },
 ];
 
 function RoadPicker() {
   const roadType = useGameStore((s) => s.roadType);
   const roadMode = useGameStore((s) => s.roadMode);
   const elevation = useGameStore((s) => s.roadElevation);
+  const surface = useGameStore((s) => s.roadSurface);
   const population = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
   const [cat, setCat] = useState<RoadCategory>(() => ROAD_TYPES.find((t) => t.id === roadType)?.category ?? 'street');
   return (
@@ -79,6 +86,15 @@ function RoadPicker() {
           >
             <Icon name={m.icon} size={16} />
             <span>{m.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="divider vertical" />
+      <div className="mode-group surface-group" role="group" aria-label="Kaplama">
+        {ROAD_SURFACES.map((s) => (
+          <button key={s.id} className={`mode-btn ${surface === s.id ? 'active' : ''}`} onClick={() => getGame()?.setRoadSurface(s.id)} title={`Yeni yollar ${s.name.toLowerCase()} kaplanır. Var olan yolu yeniden kaplamak için Yenile modunda aynı yol türüne tıklayın.`} data-testid={`road-surface-${s.id}`}>
+            <span className={`surface-swatch sw-${s.id}`} aria-hidden />
+            <span>{s.name}</span>
           </button>
         ))}
       </div>
@@ -136,6 +152,7 @@ const DEMOLISH_FILTERS: { id: DemolishFilter; name: string; hint: string; icon: 
   { id: 'all', name: 'Hepsi', hint: 'İmlecin altındaki her şey (hattın üzerinde: hat)', icon: 'demolish' },
   { id: 'road', name: 'Yollar', hint: 'Yalnızca yol parçaları', icon: 'road' },
   { id: 'building', name: 'Binalar', hint: 'Yalnızca binalar', icon: 'building' },
+  { id: 'prop', name: 'Süsler', hint: 'Yalnızca süs eşyaları (bank, çardak…)', icon: 'bench' },
   { id: 'powerline', name: 'Elektrik hatları', hint: 'Yalnızca elektrik hatları (yolun üzerindekiler dahil)', icon: 'power' },
   { id: 'pipe', name: 'Borular', hint: 'Yalnızca su boruları (su görünümü açılır)', icon: 'water' },
 ];
@@ -152,6 +169,101 @@ function DemolishPicker() {
         ))}
       </div>
       <span className="muted small">Tab: değiştir</span>
+    </div>
+  );
+}
+
+function PaintPicker() {
+  const st = useGameStore((s) => s.paintTool);
+  const set = (patch: Partial<PaintToolState>) => getGame()?.setPaintTool(patch);
+  return (
+    <div className="subtoolbar panel" data-testid="paint-picker">
+      <div className="mode-group row" role="group" aria-label="Kaplama">
+        {PAINTS.map((p) => (
+          <button key={p.id} className={`mode-btn ${st.paint === p.id ? 'active' : ''}`} onClick={() => set({ paint: p.id })} title={`₺${p.price}/m²`} data-testid={`paint-${p.key}`}>
+            <span className="surface-swatch" style={{ background: p.swatch }} aria-hidden />
+            {p.name}
+          </button>
+        ))}
+        <button className={`mode-btn ${st.paint === 0 ? 'active' : ''}`} onClick={() => set({ paint: 0 })} title="Kaplamayı sil (ücretsiz)" data-testid="paint-erase">
+          <Icon name="demolish" size={14} /> Sil
+        </button>
+      </div>
+      <div className="divider vertical" />
+      <div className="mode-group row" role="group" aria-label="Fırça">
+        {([2, 4, 8] as const).map((r) => (
+          <button key={r} className={`mode-btn ${st.radius === r ? 'active' : ''}`} onClick={() => set({ radius: r })} title="Fırça yarıçapı ( [ / ] )">
+            {r} m
+          </button>
+        ))}
+      </div>
+      <span className="muted small">Basılı tutup boyayın · yalnızca şehre ait kuru arazi · görünüm içindir · Ctrl+Z geri alır</span>
+    </div>
+  );
+}
+
+function DecorPicker() {
+  const st = useGameStore((s) => s.decorTool);
+  const [group, setGroup] = useState<PropGroup>(() => getProp(st.defId).group);
+  const set = (patch: Partial<DecorToolState>) => getGame()?.setDecorTool(patch);
+  return (
+    <div className="subtoolbar panel" data-testid="decor-picker">
+      <div className="mode-group" role="tablist" aria-label="Süs grupları">
+        {PROP_GROUPS.map((g) => (
+          <button key={g.id} role="tab" aria-selected={group === g.id} className={`mode-btn ${group === g.id ? 'active' : ''}`} onClick={() => setGroup(g.id)}>
+            {g.name}
+          </button>
+        ))}
+      </div>
+      <div className="divider vertical" />
+      {PROPS.filter((p) => p.group === group).map((p) => (
+        <button key={p.id} className={`road-type road-card decor-card ${st.defId === p.id ? 'active' : ''}`} onClick={() => set({ defId: p.id })} data-testid={`decor-${p.id}`}>
+          <span className="road-name">{p.name}</span>
+          <span className="road-meta">{formatMoney(p.cost)}</span>
+        </button>
+      ))}
+      <div className="divider vertical" />
+      <span className="muted small decor-hint">
+        {st.error ? <span className="text-red">{st.error}</span> : 'Tıklayın: yerleştir'} · R: döndür ({st.rot}°) · görünüm içindir
+      </span>
+    </div>
+  );
+}
+
+const TERRAIN_OPS: { id: TerrainToolState['op']; name: string; hint: string }[] = [
+  { id: 'raise', name: 'Yükselt', hint: 'Basılı tutun: zemin yükselir' },
+  { id: 'lower', name: 'Alçalt', hint: 'Basılı tutun: zemin alçalır' },
+  { id: 'flatten', name: 'Düzle', hint: 'Basmaya başladığınız noktanın yüksekliğine düzler' },
+  { id: 'smooth', name: 'Yumuşat', hint: 'Engebeleri yumuşatır' },
+  { id: 'pond', name: 'Gölet', hint: 'Su seviyesinin altına kazar; çukur suyla dolar' },
+];
+
+function TerrainPicker() {
+  const st = useGameStore((s) => s.terrainTool);
+  const set = (patch: Partial<TerrainToolState>) => getGame()?.setTerrainTool(patch);
+  return (
+    <div className="subtoolbar panel" data-testid="terrain-picker">
+      <div className="mode-group row" role="group" aria-label="Arazi işlemi">
+        {TERRAIN_OPS.map((o) => (
+          <button key={o.id} className={`mode-btn ${st.op === o.id ? 'active' : ''}`} onClick={() => set({ op: o.id })} title={o.hint} data-testid={`terrain-op-${o.id}`}>
+            {o.name}
+          </button>
+        ))}
+      </div>
+      <div className="divider vertical" />
+      <div className="mode-group row" role="group" aria-label="Fırça boyutu">
+        {(['S', 'M', 'L'] as const).map((s) => (
+          <button key={s} className={`mode-btn ${st.size === s ? 'active' : ''}`} onClick={() => set({ size: s })} title={`Fırça yarıçapı ${TERRAIN_BRUSH[s]} m ( [ / ] )`} data-testid={`terrain-size-${s}`}>
+            {s} · {TERRAIN_BRUSH[s]} m
+          </button>
+        ))}
+      </div>
+      <div className="divider vertical" />
+      <label className="terrain-strength" title="Güç">
+        Güç %{Math.round(st.strength * 100)}
+        <input type="range" min={10} max={100} step={10} value={Math.round(st.strength * 100)} onChange={(e) => set({ strength: Number(e.target.value) / 100 })} data-testid="terrain-strength" />
+      </label>
+      <span className="muted small">Yol, bina ve satın alınmamış arazi değişmez · taşınan toprak ₺{TERRAIN_PRICE.toLocaleString('tr-TR')}/m³ · Ctrl+Z geri alır</span>
     </div>
   );
 }
@@ -561,6 +673,9 @@ export function Toolbar() {
       {tool === 'zone' && <ZonePicker />}
       {tool === 'demolish' && <DemolishPicker />}
       {tool === 'traffic' && <TrafficPicker />}
+      {tool === 'terrain' && <TerrainPicker />}
+      {tool === 'paint' && <PaintPicker />}
+      {tool === 'decor' && <DecorPicker />}
       {(tool === 'power' || tool === 'powerline') && <InfraPicker group="power" lineKind="power" />}
       {(tool === 'water' || tool === 'pipe') && <InfraPicker group="water" lineKind="pipe" />}
       {tool === 'services' && <InfraPicker group="service" />}

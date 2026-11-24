@@ -1,4 +1,4 @@
-import { getRoadType } from '../../data/roads';
+import { getRoadType, isRoadSurface, type RoadSurface } from '../../data/roads';
 import {
   bezierLength,
   bezierTangent,
@@ -37,6 +37,8 @@ export interface RoadEdge {
   poly: Polyline;
   /** Player-set travel direction: 1 = a → b only, −1 = b → a only (absent: the road type decides). */
   oneWay?: 1 | -1;
+  /** Paving (absent: asphalt). */
+  surface?: RoadSurface;
 }
 
 export interface RoadChange {
@@ -47,7 +49,7 @@ export interface RoadChange {
 export interface RoadGraphData {
   version: 1;
   nodes: { id: number; x: number; z: number; ctl?: JunctionControl; el?: number }[];
-  edges: { id: number; a: number; b: number; typeId: string; cx: number; cz: number; cost: number; ow?: 1 | -1 }[];
+  edges: { id: number; a: number; b: number; typeId: string; cx: number; cz: number; cost: number; ow?: 1 | -1; sf?: RoadSurface }[];
   nextId: number;
 }
 
@@ -107,6 +109,17 @@ export class RoadGraph {
     if (e.oneWay === next) return;
     if (next === undefined) delete e.oneWay;
     else e.oneWay = next;
+    this.controlsChanged();
+  }
+
+  /** Repaves a road (asphalt removes the setting). */
+  setSurface(id: number, surface: RoadSurface): void {
+    const e = this.edges.get(id);
+    if (!e) return;
+    const next = surface === 'asphalt' ? undefined : surface;
+    if (e.surface === next) return;
+    if (next) e.surface = next;
+    else delete e.surface;
     this.controlsChanged();
   }
 
@@ -240,12 +253,13 @@ export class RoadGraph {
       const lenL = bezierLength(L);
       const lenR = bezierLength(R);
       const share = lenL / Math.max(1e-6, lenL + lenR);
-      const { a, b, typeId, cost, oneWay } = e;
+      const { a, b, typeId, cost, oneWay, surface } = e;
       this.removeEdge(id, true);
       const left = this.addEdge(a, node.id, typeId, L.p1, cost * share);
       const right = this.addEdge(node.id, b, typeId, R.p1, cost * (1 - share));
       // Both halves keep the a → b orientation, so a one-way setting carries over.
       if (oneWay) left.oneWay = right.oneWay = oneWay;
+      if (surface) left.surface = right.surface = surface;
       return { node, left, right };
     });
   }
@@ -394,6 +408,12 @@ export class RoadGraph {
         let e = this.edges.get(w.id);
         if (!e) e = this.addEdge(w.a, w.b, w.typeId, { x: w.cx, z: w.cz }, w.cost, w.id);
         e.cost = w.cost;
+        const sf = isRoadSurface(w.sf) && w.sf !== 'asphalt' ? w.sf : undefined;
+        if (e.surface !== sf) {
+          if (sf) e.surface = sf;
+          else delete e.surface;
+          controls = true;
+        }
         const ow = w.ow === 1 || w.ow === -1 ? w.ow : undefined;
         if (e.oneWay !== ow) {
           if (ow) e.oneWay = ow;
@@ -425,7 +445,7 @@ export class RoadGraph {
     return {
       version: 1,
       nodes: [...this.nodes.values()].map((n) => ({ id: n.id, x: n.x, z: n.z, ...(n.control ? { ctl: n.control } : {}), ...(n.y ? { el: n.y } : {}) })),
-      edges: [...this.edges.values()].map((e) => ({ id: e.id, a: e.a, b: e.b, typeId: e.typeId, cx: e.c.x, cz: e.c.z, cost: e.cost, ...(e.oneWay ? { ow: e.oneWay } : {}) })),
+      edges: [...this.edges.values()].map((e) => ({ id: e.id, a: e.a, b: e.b, typeId: e.typeId, cx: e.c.x, cz: e.c.z, cost: e.cost, ...(e.oneWay ? { ow: e.oneWay } : {}), ...(e.surface ? { sf: e.surface } : {}) })),
       nextId: this.nextId,
     };
   }
@@ -444,6 +464,7 @@ export class RoadGraph {
       for (const e of data.edges) {
         const edge = this.addEdge(e.a, e.b, e.typeId, { x: e.cx, z: e.cz }, e.cost, e.id);
         if (e.ow === 1 || e.ow === -1) edge.oneWay = e.ow;
+        if (isRoadSurface(e.sf) && e.sf !== 'asphalt') edge.surface = e.sf;
       }
       for (const n of data.nodes) this.nextId = Math.max(this.nextId, n.id + 1);
       this.nextId = Math.max(this.nextId, data.nextId);

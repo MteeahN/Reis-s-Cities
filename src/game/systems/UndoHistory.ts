@@ -3,6 +3,16 @@ import type { ArchStyle } from '../data/styles';
 import type { RoadGraphData } from '../entities/road/RoadGraph';
 import type { LineKind } from '../data/infrastructure';
 
+/** A decoration standing in the city. */
+export interface PlacedProp {
+  id: number;
+  defId: string;
+  x: number;
+  z: number;
+  /** Rotation (radians). */
+  rot: number;
+}
+
 /** Where a player building stands. */
 export interface Spot {
   i: number;
@@ -41,7 +51,10 @@ export type UndoEntry =
   | { kind: 'move'; id: number; defId: string; from: Spot; to: Spot }
   | { kind: 'roads'; label: string; before: RoadGraphData; after: RoadGraphData; net: number }
   | { kind: 'zone'; label: string; before: CellZoning[]; after: CellZoning[] }
-  | { kind: 'line'; label: string; lineKind: LineKind; op: 'add' | 'remove'; line: LineRecord; net: number };
+  | { kind: 'line'; label: string; lineKind: LineKind; op: 'add' | 'remove'; line: LineRecord; net: number }
+  | { kind: 'terrain'; label: string; vertices: number[]; before: number[]; after: number[]; net: number }
+  | { kind: 'paint'; label: string; texels: number[]; before: number[]; after: number[]; net: number }
+  | { kind: 'prop'; label: string; op: 'place' | 'remove'; prop: PlacedProp; net: number };
 
 export const UNDO_LIMIT = 50;
 

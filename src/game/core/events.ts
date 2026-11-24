@@ -1,4 +1,5 @@
 import type { ArchStyle } from '../data/styles';
+import type { RoadSurface } from '../data/roads';
 import type { FeedPost } from '../systems/CitizenFeed';
 import type { QualityLevel, QualitySetting } from '../rendering/QualityManager';
 import type { SfxId } from '../audio/AudioEngine';
@@ -14,7 +15,28 @@ import type { GameSpeed } from './config';
 import type { AchievementView } from '../systems/Achievements';
 import type { StatsSample } from '../systems/StatsHistory';
 
-export type ToolId = 'select' | 'road' | 'building' | 'demolish' | 'zone' | 'power' | 'water' | 'services' | 'powerline' | 'pipe' | 'traffic' | 'move';
+export type ToolId = 'select' | 'road' | 'building' | 'demolish' | 'zone' | 'power' | 'water' | 'services' | 'powerline' | 'pipe' | 'traffic' | 'move' | 'terrain' | 'paint' | 'decor';
+
+/** Ground paint brush: paint id (0 erases) and radius (m). */
+export interface PaintToolState {
+  paint: number;
+  radius: 2 | 4 | 8;
+}
+
+/** Decoration placement: which one and its rotation (degrees). */
+export interface DecorToolState {
+  defId: string;
+  rot: number;
+  /** Why it can't stand under the cursor (null: it can). */
+  error: string | null;
+}
+
+/** Terrain brush: what it does, its size and strength (0–1). */
+export interface TerrainToolState {
+  op: 'raise' | 'lower' | 'flatten' | 'smooth' | 'pond';
+  size: 'S' | 'M' | 'L';
+  strength: number;
+}
 
 /** Traffic tool: what a click changes. */
 export type TrafficToolMode = 'oneway' | 'lights' | 'stop' | 'roundabout' | 'clear';
@@ -53,7 +75,7 @@ export interface ZoneToolState {
   /** Height limit: 0 none, 1 low (≤ 3 storeys), 2 mid-rise (≤ 7). */
   height: number;
 }
-export type RoadMode = 'straight' | 'curve' | 'upgrade';
+export type RoadMode = 'straight' | 'curve' | 'free' | 'arc' | 'upgrade';
 
 export interface PerfStats {
   fps: number;
@@ -202,10 +224,10 @@ export interface BuildingPlanView {
 }
 
 /** What the bulldozer may pick: everything, or one kind only. */
-export type DemolishFilter = 'all' | 'road' | 'building' | 'powerline' | 'pipe';
+export type DemolishFilter = 'all' | 'road' | 'building' | 'powerline' | 'pipe' | 'prop';
 
 export interface DemolishTarget {
-  kind: 'road' | 'building' | 'powerline' | 'pipe';
+  kind: 'road' | 'building' | 'powerline' | 'pipe' | 'prop';
   id: number;
   name: string;
   refund: number;
@@ -232,11 +254,16 @@ export type GameEvents = {
   roadType: string;
   /** Height the road tool builds at (m above the ground). */
   roadElevation: number;
+  /** Paving the road tool builds with. */
+  roadSurface: RoadSurface;
   buildingType: string;
   buildingPlan: BuildingPlanView | null;
   demolishTarget: DemolishTarget | null;
   demolishFilter: DemolishFilter;
   trafficTool: TrafficToolState;
+  terrainTool: TerrainToolState;
+  paintTool: PaintToolState;
+  decorTool: DecorToolState;
   budget: number;
   cityStats: CityStats;
   tool: ToolId;

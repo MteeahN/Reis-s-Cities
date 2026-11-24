@@ -4,6 +4,7 @@ import type { DemolishFilter, DemolishTarget } from '../core/events';
 import { MouseButton, type PointerInfo } from '../core/Input';
 import { getBuilding } from '../data/buildings';
 import { getRoadType } from '../data/roads';
+import { getProp } from '../data/decor';
 import { LINE_TYPES } from '../data/infrastructure';
 import { sampleBezier } from '../entities/road/curve';
 import { RoadPreview } from './placement/RoadPreview';
@@ -81,6 +82,11 @@ export class DemolishTool implements Tool {
         if (onPipe) return onPipe;
       }
     }
+    if (allow('prop')) {
+      const prop = city.propAt(ground.x, ground.z);
+      if (prop) return { kind: 'prop', id: prop.id, name: getProp(prop.defId).name, refund: city.propRefund(prop.id) };
+      if (f === 'prop') return null;
+    }
     const bid = allow('building') ? city.buildingAtWorld(ground.x, ground.z) : 0;
     if (bid) {
       const b = city.buildings.items.get(bid)!;
@@ -107,6 +113,11 @@ export class DemolishTool implements Tool {
       const e = city.roads.edges.get(t.id)!;
       mat.clearHover();
       this.preview.showPath(sampleBezier(city.roads.curveOf(e), 3).points, getRoadType(e.typeId).width + 1, 'demolish', this.ctx.world.heightAt);
+    } else if (t.kind === 'prop') {
+      const p = city.props.get(t.id)!;
+      const r = getProp(p.defId).radius;
+      this.preview.hide();
+      mat.setHover(p.x - r, p.z - r, p.x + r, p.z + r, 0xff4d4d);
     } else {
       const b = city.buildings.items.get(t.id)!;
       this.preview.hide();
@@ -142,7 +153,9 @@ export class DemolishTool implements Tool {
         ? city.demolishRoad(t.id)
         : t.kind === 'building'
           ? city.demolishBuilding(t.id)
-          : city.demolishLine(t.kind === 'powerline' ? 'power' : 'pipe', t.id);
+          : t.kind === 'prop'
+            ? city.removeProp(t.id)
+            : city.demolishLine(t.kind === 'powerline' ? 'power' : 'pipe', t.id);
     this.ctx.events.emit('sfx', 'demolish');
     this.ctx.events.emit('toast', { kind: 'info', text: `${t.name} yıkıldı (+₺${refund.toLocaleString('tr-TR')} iade)` });
     this.setTarget(null);
@@ -152,7 +165,7 @@ export class DemolishTool implements Tool {
   onKey(code: string): boolean {
     // Tab cycles the filter.
     if (code === 'Tab') {
-      const order: DemolishFilter[] = ['all', 'road', 'building', 'powerline', 'pipe'];
+      const order: DemolishFilter[] = ['all', 'road', 'building', 'prop', 'powerline', 'pipe'];
       this.setFilter(order[(order.indexOf(this.filter) + 1) % order.length]);
       return true;
     }

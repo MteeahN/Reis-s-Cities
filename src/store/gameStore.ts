@@ -17,6 +17,9 @@ import type {
   ZoneToolState,
   DemolishFilter,
   TrafficToolState,
+  TerrainToolState,
+  PaintToolState,
+  DecorToolState,
 } from '../game/core/events';
 import type { PopulationStats } from '../game/simulation/CitySimulation';
 import type { Demand } from '../game/simulation/Demand';
@@ -27,6 +30,7 @@ import type { CellInfo } from '../game/world/WorldGrid';
 import type { CitySaveData, SaveMeta } from '../game/save/CitySave';
 import type { AchievementView } from '../game/systems/Achievements';
 import type { FeedPost } from '../game/systems/CitizenFeed';
+import type { RoadSurface } from '../game/data/roads';
 import type { StatsSample } from '../game/systems/StatsHistory';
 
 export type Screen = 'menu' | 'loading' | 'playing' | 'error';
@@ -55,6 +59,7 @@ export interface GameUIState {
   tool: ToolId;
   roadType: string;
   roadElevation: number;
+  roadSurface: RoadSurface;
   roadMode: RoadMode;
   buildingType: string;
   grid: boolean;
@@ -67,6 +72,9 @@ export interface GameUIState {
   demolishTarget: DemolishTarget | null;
   demolishFilter: DemolishFilter;
   trafficTool: TrafficToolState;
+  terrainTool: TerrainToolState;
+  paintTool: PaintToolState;
+  decorTool: DecorToolState;
   cityStats: CityStats | null;
   zoneTool: ZoneToolState;
   demand: Demand;
@@ -125,6 +133,7 @@ export const INITIAL_GAME_STATE = {
   tool: 'select' as ToolId,
   roadType: 'street',
   roadElevation: 0,
+  roadSurface: 'asphalt' as RoadSurface,
   roadMode: 'straight' as RoadMode,
   buildingType: 'city_hall',
   hover: null,
@@ -134,6 +143,9 @@ export const INITIAL_GAME_STATE = {
   demolishTarget: null,
   demolishFilter: 'all' as DemolishFilter,
   trafficTool: { mode: 'oneway', target: null } as TrafficToolState,
+  terrainTool: { op: 'raise', size: 'M', strength: 0.5 } as TerrainToolState,
+  paintTool: { paint: 1, radius: 4 } as PaintToolState,
+  decorTool: { defId: 'bench', rot: 0, error: null } as DecorToolState,
   cityStats: null,
   zoneTool: { zone: 1, mode: 'fill', brush: 1, depth: 4, style: 'modern', wealth: 0, height: 0 } as ZoneToolState,
   demand: { residential: 70, commercial: 0, industrial: 0, office: 0 } as Demand,

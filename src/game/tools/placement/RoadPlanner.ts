@@ -1,5 +1,5 @@
 import { CELL_SIZE, GRID_CELLS, WATER_LEVEL, WORLD_SIZE } from '../../core/config';
-import { getRoadType, type RoadTypeDef } from '../../data/roads';
+import { getRoadType, type RoadSurface, type RoadTypeDef } from '../../data/roads';
 import {
   bezierLength,
   bezierPoint,
@@ -45,6 +45,8 @@ export interface EdgeSplit {
 
 export interface RoadPlan {
   typeId: string;
+  /** Paving of the new road (absent: asphalt). */
+  surface?: RoadSurface;
   start: Anchor;
   end: Anchor;
   curve: QuadBezier;
@@ -430,7 +432,9 @@ export function commitRoad(graph: RoadGraph, plan: RoadPlan): { edges: number[];
       if (a.node === b.node) continue;
       const sub = subBezier(plan.curve, a.t, b.t);
       const share = (b.t - a.t) * plan.cost;
-      created.push(graph.addEdge(a.node, b.node, plan.typeId, sub.p1, share).id);
+      const edge = graph.addEdge(a.node, b.node, plan.typeId, sub.p1, share);
+      if (plan.surface && plan.surface !== 'asphalt') edge.surface = plan.surface;
+      created.push(edge.id);
     }
     return { edges: created, endNode: nodeFor.get('end')! };
   });
@@ -440,6 +444,8 @@ export interface UpgradePlan {
   edgeId: number;
   fromTypeId: string;
   toTypeId: string;
+  /** Paving after the change. */
+  toSurface: RoadSurface;
   cost: number;
   refund: number;
   netCost: number;
@@ -447,16 +453,22 @@ export interface UpgradePlan {
   errors: string[];
 }
 
-/** Changing an existing road's type: new construction minus 50% refund of the old road. */
-export function planUpgrade(graph: RoadGraph, edge: RoadEdge, type: RoadTypeDef, world: PlannerWorld, budget: number): UpgradePlan {
+/**
+ * Changing an existing road's type: new construction minus 50% refund of the
+ * old road. Keeping the type and changing only the paving (resurfacing)
+ * costs 30% of building it new, with no refund.
+ */
+export function planUpgrade(graph: RoadGraph, edge: RoadEdge, type: RoadTypeDef, world: PlannerWorld, budget: number, surface: RoadSurface = 'asphalt'): UpgradePlan {
   const errors: string[] = [];
-  if (edge.typeId === type.id) errors.push('Yol zaten bu türde');
+  const repave = edge.typeId === type.id;
+  if (repave && (edge.surface ?? 'asphalt') === surface) errors.push('Yol zaten bu türde ve bu kaplamada');
   if (getRoadType(edge.typeId).playerBuildable === false || type.playerBuildable === false) errors.push('Şehir girişi değiştirilemez');
   const m = evaluatePath(graph.curveOf(edge), type, world, graph.nodes.get(edge.a)?.y ?? 0, graph.nodes.get(edge.b)?.y ?? 0);
   errors.push(...m.errors.filter((e) => !e.startsWith('Satın alınmamış')));
-  const cost = roadCost(type, m.length, m.bridgeLength + m.elevatedLength);
-  const refund = Math.round(edge.cost * 0.5);
+  const full = roadCost(type, m.length, m.bridgeLength + m.elevatedLength);
+  const cost = repave ? Math.round(full * 0.3) : full;
+  const refund = repave ? 0 : Math.round(edge.cost * 0.5);
   const netCost = Math.max(0, cost - refund);
   if (netCost > budget) errors.push('Yetersiz bütçe');
-  return { edgeId: edge.id, fromTypeId: edge.typeId, toTypeId: type.id, cost, refund, netCost, valid: errors.length === 0, errors };
+  return { edgeId: edge.id, fromTypeId: edge.typeId, toTypeId: type.id, toSurface: surface, cost, refund, netCost, valid: errors.length === 0, errors };
 }

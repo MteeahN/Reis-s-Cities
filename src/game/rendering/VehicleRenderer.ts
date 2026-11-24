@@ -366,7 +366,7 @@ export class VehicleRenderer {
     // Drive on the right.
     const oneWay = this.roads.direction(e) !== 0;
     const lanes = type.lanes;
-    const laneW = Math.max(2.6, (type.width - 2 * type.sidewalk - type.median) / lanes);
+    const laneW = Math.max(2.6, (type.width - 2 * type.sidewalk - type.median - 2 * (type.parking ?? 0)) / lanes);
     const offset = oneWay ? (lane + 0.5 - lanes / 2) * laneW : type.median / 2 + (lane + 0.5) * laneW;
     out.x = this.pt.x - dz * offset;
     out.y = this.pt.y;

@@ -185,7 +185,13 @@ export class BuildingRenderer {
 
   static modelMatrix(b: PlacedBuilding, out = new Matrix4(), scale = new Vector3(1, 1, 1)): Matrix4 {
     const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), (b.rot * Math.PI) / 2);
-    return out.compose(new Vector3((b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0), b.baseY, (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0)), q, scale);
+    const seat = b.seat;
+    if (seat && (seat.gx !== 0 || seat.gz !== 0)) {
+      // Tilt so the lot lies on the slope: local up becomes the ground normal.
+      const n = new Vector3(-seat.gx, 1, -seat.gz).normalize();
+      q.premultiply(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), n));
+    }
+    return out.compose(new Vector3((b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0), seat ? seat.y : b.baseY, (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0)), q, scale);
   }
 
   /** Which look (colour/roof variant) a building uses — stable per building. */
@@ -242,14 +248,19 @@ export class BuildingRenderer {
         for (const pool of set?.all ?? []) pool.add(b.id, m, color);
         if (this.litFn) set?.facade?.setLit(b.id, this.litFn(b));
       }
-      // Foundation plinth from the lowest ground corner up to the base.
-      const depth = b.baseY - b.minY + 0.6;
-      const f = new Matrix4().compose(
-        new Vector3((b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0), b.baseY - depth + 0.05, (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0)),
-        new Quaternion(),
-        new Vector3(b.w * CELL_SIZE - 0.4, depth, b.d * CELL_SIZE - 0.4),
-      );
-      this.foundation.add(b.id, f, WHITE);
+      // Foundation plinth from the lowest ground corner up to the base (none when the building
+      // tilts with the slope or is set into it down to its lowest corner).
+      const base = b.seat ? b.seat.y : b.baseY;
+      const tilted = !!b.seat && (b.seat.gx !== 0 || b.seat.gz !== 0);
+      if (!tilted && base - b.minY > 0.05) {
+        const depth = base - b.minY + 0.6;
+        const f = new Matrix4().compose(
+          new Vector3((b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0), base - depth + 0.05, (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0)),
+          new Quaternion(),
+          new Vector3(b.w * CELL_SIZE - 0.4, depth, b.d * CELL_SIZE - 0.4),
+        );
+        this.foundation.add(b.id, f, WHITE);
+      }
     }
   }
 

@@ -2,7 +2,9 @@ import type { Vector3 } from 'three';
 import { CELL_SIZE } from '../core/config';
 import type { RoadMode, RoadPlanView } from '../core/events';
 import { MouseButton, type PointerInfo } from '../core/Input';
-import { ROAD_TYPES, getRoadType, isRoadTypeUnlocked, type RoadTypeDef } from '../data/roads';
+import { ROAD_TYPES, getRoadType, isRoadTypeUnlocked, type RoadSurface, type RoadTypeDef } from '../data/roads';
+import type { RoutePiece } from '../systems/HighwayRoute';
+import { arcPieces, freehandPieces } from './placement/pathShapes';
 import { sampleBezier, type P2 } from '../entities/road/curve';
 import { ELEVATION_STEP, MAX_ELEVATION, NODE_SNAP, OVERPASS_CLEARANCE, anchorElevation, planRoad, type Anchor, type RoadPlan, type UpgradePlan } from './placement/RoadPlanner';
 import { RoadPreview } from './placement/RoadPreview';
@@ -15,7 +17,12 @@ const DRAG_PX = 12;
  * Road construction.
  *  - Straight: click start → click end (or press-drag-release). Keeps chaining from the end.
  *  - Curve: click start → click control point → click end (quadratic spline).
- *  - Upgrade: click an existing road to convert it to the selected type.
+ *  - Freehand: press and drag along the way the road should go; it becomes a
+ *    chain of smooth curves (too tight bends are evened out).
+ *  - Arc: click start → click end → move to bend the circular arc and click.
+ *  - Upgrade: click an existing road to convert it to the selected type, or —
+ *    same type — to repave it with the selected surface.
+ * New roads get the selected paving (asphalt, cobbles, bricks, concrete).
  * Endpoints snap to existing junctions and roads (creating junctions), otherwise
  * to the cell grid; straight segments snap to 15° steps relative to the road
  * being continued. Ctrl disables grid/angle snapping.
@@ -41,6 +48,14 @@ export class RoadTool implements Tool {
   private rightDownY = 0;
   private lastGround: Vector3 | null = null;
   private elevation = 0;
+  private surface: RoadSurface = 'asphalt';
+  /** Freehand stroke being drawn. */
+  private stroke: P2[] | null = null;
+  /** Arc mode: the chosen end, while the bend is being picked. */
+  private arcEnd: Anchor | null = null;
+  /** Pieces of the freehand / arc road under the cursor. */
+  private pieces: RoutePiece[] | null = null;
+  private pathErrors: string[] = [];
 
   constructor(private readonly ctx: ToolContext) {
     ctx.overlay.add(this.preview.group);
@@ -75,6 +90,16 @@ export class RoadTool implements Tool {
     this.refresh();
   }
 
+  get roadSurface(): RoadSurface {
+    return this.surface;
+  }
+
+  setSurface(s: RoadSurface): void {
+    this.surface = s;
+    this.ctx.events.emit('roadSurface', s);
+    this.refresh();
+  }
+
   setMode(mode: RoadMode): void {
     this.mode = mode;
     this.cancel();
@@ -91,12 +116,15 @@ export class RoadTool implements Tool {
 
   /** Drops the road being drawn (after undo / redo changed the network under it). */
   reset(): void {
-    if (this.start || this.control) this.cancel();
+    if (this.start || this.control || this.stroke) this.cancel();
   }
 
   private cancel(): void {
     this.start = null;
     this.control = null;
+    this.stroke = null;
+    this.arcEnd = null;
+    this.pieces = null;
     this.plan = null;
     this.upgrade = null;
     this.dragging = false;
@@ -171,6 +199,10 @@ export class RoadTool implements Tool {
       return;
     }
     this.cursor = this.resolveAnchor(ground, true);
+    if ((this.mode === 'free' || this.mode === 'arc') && this.start) {
+      this.refreshPath(ground);
+      return;
+    }
     if (!this.start) {
       this.plan = null;
       this.preview.hidePath();
@@ -199,7 +231,7 @@ export class RoadTool implements Tool {
       return;
     }
     const e = hit.edge;
-    this.upgrade = this.ctx.city.planUpgrade(e.id, this.type);
+    this.upgrade = this.ctx.city.planUpgrade(e.id, this.type, this.surface);
     const pts = sampleBezier(this.ctx.city.roads.curveOf(e), 3).points;
     this.preview.showPath(pts, this.type.width, this.upgrade?.valid ? 'upgrade' : 'invalid', h);
     if (!this.upgrade) return;
@@ -218,6 +250,86 @@ export class RoadTool implements Tool {
       errors: this.upgrade.errors,
     };
     this.ctx.events.emit('roadPlan', view);
+  }
+
+  /** The freehand stroke or arc under the cursor, as pieces. */
+  private currentPieces(ground: Vector3): RoutePiece[] {
+    const end = this.cursor!.point;
+    if (this.mode === 'free') return freehandPieces([...(this.stroke ?? [this.start!.point]), end], this.type.minRadius);
+    if (this.arcEnd) return arcPieces(this.start!.point, this.arcEnd.point, { x: ground.x, z: ground.z });
+    return [{ a: this.start!.point, b: end, c: { x: (this.start!.point.x + end.x) / 2, z: (this.start!.point.z + end.z) / 2 } }];
+  }
+
+  /**
+   * Preview of a freehand / arc road: every piece planned against the
+   * network as it is (the exact check runs again, piece by piece, when building).
+   */
+  private refreshPath(ground: Vector3): void {
+    const h = this.ctx.world.heightAt;
+    const city = this.ctx.city;
+    const pieces = (this.pieces = this.currentPieces(ground));
+    const endAnchor = this.arcEnd ?? this.cursor!;
+    let cost = 0;
+    let length = 0;
+    let maintenance = 0;
+    let bridge = 0;
+    let grade = 0;
+    const errors = new Set<string>();
+    const pts: P2[] = [];
+    pieces.forEach((q, k) => {
+      const from: Anchor = k === 0 ? this.start! : { kind: 'free', point: q.a, elev: this.elevation };
+      const to: Anchor = k === pieces.length - 1 ? endAnchor : { kind: 'free', point: q.b, elev: this.elevation };
+      const plan = planRoad(city.roads, from, to, q.c, this.type, city.plannerWorld, Infinity);
+      cost += plan.cost;
+      length += plan.length;
+      maintenance += plan.weeklyMaintenance;
+      bridge += plan.bridgeLength;
+      grade = Math.max(grade, plan.maxGrade);
+      for (const e of plan.errors) errors.add(e);
+      pts.push(...(pts.length ? plan.points.slice(1) : plan.points));
+    });
+    if (pieces.length === 0) errors.add('Yol çok kısa');
+    if (cost > city.treasury.balance) errors.add('Yetersiz bütçe');
+    this.pathErrors = [...errors];
+    const valid = this.pathErrors.length === 0;
+    this.preview.showPath(pts.length > 1 ? pts : [this.start!.point, this.cursor!.point], this.type.width, valid ? 'valid' : 'invalid', h, () => this.elevation);
+    const markers = this.arcEnd ? [this.start!.point, this.arcEnd.point, { x: ground.x, z: ground.z }] : [this.start!.point, this.cursor!.point];
+    this.preview.setMarkers(markers, this.type.width * 0.6, h);
+    this.ctx.events.emit('roadPlan', {
+      mode: this.mode,
+      typeId: this.type.id,
+      length,
+      bridgeLength: bridge,
+      maxGrade: grade,
+      cost,
+      weeklyMaintenance: maintenance,
+      junctions: 0,
+      valid,
+      errors: this.pathErrors,
+    });
+  }
+
+  /** Builds the freehand / arc road under the cursor as one action. */
+  private commitPath(endAnchor: Anchor): void {
+    const pieces = this.pieces;
+    if (!pieces || !this.start) return;
+    if (this.pathErrors.length) {
+      this.ctx.events.emit('toast', { kind: 'error', text: this.pathErrors[0] });
+      return;
+    }
+    const res = this.ctx.city.buildRoadPath(this.type, pieces, this.start, endAnchor, this.surface, this.elevation);
+    if (res.error || res.endNode === null) {
+      this.ctx.events.emit('toast', { kind: 'error', text: res.error ?? 'Yol inşa edilemedi' });
+      return;
+    }
+    this.ctx.events.emit('sfx', 'road');
+    const n = this.ctx.city.roads.nodes.get(res.endNode)!;
+    this.stroke = null;
+    this.arcEnd = null;
+    this.pieces = null;
+    // Arcs keep going from where they ended; a freehand stroke starts afresh.
+    this.start = this.mode === 'arc' ? { kind: 'node', nodeId: n.id, point: { x: n.x, z: n.z } } : null;
+    this.refresh();
   }
 
   private emitPlan(): void {
@@ -242,6 +354,7 @@ export class RoadTool implements Tool {
   private commit(): void {
     const plan = this.plan;
     if (!plan) return;
+    plan.surface = this.surface;
     if (!plan.valid) {
       this.ctx.events.emit('toast', { kind: 'error', text: plan.errors[0] });
       return;
@@ -264,6 +377,11 @@ export class RoadTool implements Tool {
   onPointerMove(p: PointerInfo, ground: Vector3 | null): void {
     this.free = p.ctrl;
     this.lastGround = ground ? ground.clone() : null;
+    // Freehand: extend the stroke while the button is held.
+    if (this.mode === 'free' && this.stroke && this.dragging && ground) {
+      const last = this.stroke[this.stroke.length - 1];
+      if (Math.hypot(ground.x - last.x, ground.z - last.z) >= 6) this.stroke.push({ x: ground.x, z: ground.z });
+    }
     this.refresh();
   }
 
@@ -291,6 +409,20 @@ export class RoadTool implements Tool {
       return;
     }
 
+    if (this.mode === 'free') {
+      this.start = this.resolveAnchor(ground, false);
+      this.stroke = [this.start.point];
+      this.dragging = true;
+      this.refresh();
+      return;
+    }
+    if (this.mode === 'arc') {
+      if (!this.start) this.start = this.resolveAnchor(ground, false);
+      else if (!this.arcEnd) this.arcEnd = this.resolveAnchor(ground, true);
+      else this.commitPath(this.arcEnd);
+      this.refresh();
+      return;
+    }
     if (!this.start) {
       this.start = this.resolveAnchor(ground, false);
       this.downX = p.x;
@@ -316,6 +448,15 @@ export class RoadTool implements Tool {
     }
     if (p.button !== MouseButton.Left || !this.dragging) return;
     this.dragging = false;
+    if (this.mode === 'free') {
+      if (this.stroke && this.lastGround) {
+        this.refresh();
+        if (this.stroke.length >= 2 || (this.cursor && Math.hypot(this.cursor.point.x - this.stroke[0].x, this.cursor.point.z - this.stroke[0].z) > 12)) this.commitPath(this.cursor!);
+        else this.cancel();
+      }
+      if (this.stroke) this.cancel();
+      return;
+    }
     if (Math.hypot(p.x - this.downX, p.y - this.downY) > DRAG_PX) this.commit();
   }
 
@@ -324,7 +465,7 @@ export class RoadTool implements Tool {
       this.setElevation(this.elevation + (code === 'PageUp' ? ELEVATION_STEP : -ELEVATION_STEP));
       return true;
     }
-    if (code === 'Escape' && (this.start || this.control)) {
+    if (code === 'Escape' && (this.start || this.control || this.stroke)) {
       this.cancel();
       return true;
     }

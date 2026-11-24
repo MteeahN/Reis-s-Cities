@@ -5,7 +5,9 @@ import type { GeneratedWorld } from './generation/generateWorld';
 import { TerrainShape } from './generation/TerrainShape';
 import { Heightfield } from './Heightfield';
 import { OuterGrid } from './OuterGrid';
-import { buildOuterTerrain, buildTerrainChunks } from './TerrainMeshes';
+import { buildChunkGeometry, buildOuterTerrain, buildTerrainChunks } from './TerrainMeshes';
+import type { Mesh } from 'three';
+import { CHUNK_CELLS } from '../core/config';
 import { UnlockMap } from './UnlockMap';
 import { Vegetation } from './Vegetation';
 import { Water } from './Water';
@@ -27,6 +29,7 @@ export class World {
   readonly water = new Water();
   readonly vegetation = new Vegetation();
   readonly root = new Group();
+  private readonly chunks: Group;
 
   constructor(data: GeneratedWorld) {
     this.seed = data.seed;
@@ -37,13 +40,34 @@ export class World {
     this.terrainMaterial = new TerrainMaterial(this.unlock);
 
     this.root.name = 'world';
-    this.root.add(buildTerrainChunks(this.field, this.shape, this.terrainMaterial));
+    this.chunks = buildTerrainChunks(this.field, this.shape, this.terrainMaterial);
+    this.root.add(this.chunks);
     this.root.add(buildOuterTerrain(this.outer, this.shape, this.terrainMaterial));
     this.root.add(this.water.mesh);
     // 256 m cells: fine-grained LOD switching and frustum/shadow culling.
     this.vegetation.addSet(data.vegetation, 256, true, true);
     this.vegetation.addSet(data.outerVegetation, 1400, false);
     this.root.add(this.vegetation.group);
+  }
+
+  /**
+   * After the heightfield changed over cells i0..i1 × j0..j1: re-classifies
+   * those cells (water, slope, buildable) and rebuilds the terrain chunks that
+   * show them (one cell of margin for the shared normals).
+   */
+  refreshTerrain(i0: number, j0: number, i1: number, j1: number): void {
+    this.grid.refresh(i0 - 1, j0 - 1, i1 + 1, j1 + 1);
+    const c0x = Math.max(0, Math.floor((i0 - 1) / CHUNK_CELLS));
+    const c0z = Math.max(0, Math.floor((j0 - 1) / CHUNK_CELLS));
+    const c1x = Math.floor((i1 + 1) / CHUNK_CELLS);
+    const c1z = Math.floor((j1 + 1) / CHUNK_CELLS);
+    for (const child of this.chunks.children) {
+      const mesh = child as Mesh;
+      const c = mesh.userData.chunk as { cx: number; cz: number };
+      if (c.cx < c0x || c.cx > c1x || c.cz < c0z || c.cz > c1z) continue;
+      mesh.geometry.dispose();
+      mesh.geometry = buildChunkGeometry(this.field, this.shape, c.cx, c.cz);
+    }
   }
 
   addTo(scene: Scene): void {

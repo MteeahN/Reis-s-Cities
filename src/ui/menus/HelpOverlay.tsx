@@ -41,7 +41,11 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
     rows: [
       ['Space', 'Duraklat / devam et'],
       ['1 / 2 / 3', 'Normal / 2x / 3x hız'],
-      ['K', 'Trafik düzenleme (tek yön, lamba, dur levhası; Tab: mod)'],
+      ['K', 'Trafik düzenleme (tek yön, lamba, dur levhası, döner kavşak; Tab: mod)'],
+      ['E', 'Arazi: yükselt, alçalt, düzle, yumuşat, gölet ( [ / ] fırça)'],
+      ['Q', 'Zemin kaplama (parke, karo, tuğla, çakıl, kum, çim, ahşap)'],
+      ['N', 'Süsler: bank, çardak, havuz, oyun alanı… (R: döndür)'],
+      ['PageUp / PageDown', 'Yol aracında yolu yükselt / alçalt'],
       ['Ctrl+S', 'Şehri kaydet'],
       ['H / F1', 'Bu pencere'],
     ],

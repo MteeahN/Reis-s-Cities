@@ -41,8 +41,14 @@ export class WorldGrid {
     readonly field: Heightfield,
     readonly unlock: UnlockMap,
   ) {
-    for (let j = 0; j < GRID_CELLS; j++) {
-      for (let i = 0; i < GRID_CELLS; i++) {
+    this.refresh(0, 0, GRID_CELLS - 1, GRID_CELLS - 1);
+  }
+
+  /** Re-classifies cells i0..i1 × j0..j1 (inclusive) from the heightfield. */
+  refresh(i0: number, j0: number, i1: number, j1: number): void {
+    const field = this.field;
+    for (let j = Math.max(0, j0); j <= Math.min(GRID_CELLS - 1, j1); j++) {
+      for (let i = Math.max(0, i0); i <= Math.min(GRID_CELLS - 1, i1); i++) {
         const k = j * GRID_CELLS + i;
         const s = field.cellSlope(i, j);
         const minH = field.cellMinHeight(i, j);

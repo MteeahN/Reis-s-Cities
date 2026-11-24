@@ -290,6 +290,11 @@ export class TrafficModel {
     this.edgeLinks.clear();
     for (const e of this.roads.edges.values()) {
       const t = getRoadType(e.typeId);
+      // Pedestrian streets carry no vehicles.
+      if (t.pedestrian) {
+        this.edgeLinks.set(e.id, [-1, -1]);
+        continue;
+      }
       const v = t.speedKmh / 3.6;
       const a = this.nodeIndex.get(e.a)!;
       const b = this.nodeIndex.get(e.b)!;
@@ -388,7 +393,7 @@ export class TrafficModel {
       x /= cells.length;
       z /= cells.length;
       // Buildings are reached from streets at ground level, not from raised roads.
-      const hit = this.roads.nearestEdge(x, z, ATTACH_RADIUS, true, (e) => !this.roads.isElevated(e));
+      const hit = this.roads.nearestEdge(x, z, ATTACH_RADIUS, true, (e) => !this.roads.isElevated(e) && !getRoadType(e.typeId).pedestrian);
       if (hit) {
         result = { edge: hit.edge.id, s: hit.t };
         break;

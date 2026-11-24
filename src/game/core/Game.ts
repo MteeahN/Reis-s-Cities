@@ -18,12 +18,13 @@ import { StatsHistory, type StatsSample } from '../systems/StatsHistory';
 import type { PopulationStats } from '../simulation/CitySimulation';
 import type { Demand } from '../simulation/Demand';
 import { CitizenFeed } from '../systems/CitizenFeed';
-import { getRoadType, isRoadTypeUnlocked } from '../data/roads';
+import { getRoadType, isRoadTypeUnlocked, type RoadSurface } from '../data/roads';
 import { hasRoadAccess } from '../entities/building/BuildingPlacement';
 import { BuildingRenderer } from '../rendering/BuildingRenderer';
 import { RoadRenderer } from '../rendering/roads/RoadRenderer';
 import { City } from '../systems/City';
 import { ZoneOverlay } from '../rendering/ZoneOverlay';
+import { DecorRenderer } from '../rendering/DecorRenderer';
 import { PowerLineRenderer } from '../rendering/PowerLineRenderer';
 import { PipeRenderer } from '../rendering/PipeRenderer';
 import { PedestrianRenderer } from '../rendering/PedestrianRenderer';
@@ -63,7 +64,7 @@ import { pickGround } from '../world/TerrainPicker';
 import { World } from '../world/World';
 import { APP_VERSION, CELL_SIZE, GRID_CELLS, START_MINUTE_OFFSET, WATER_LEVEL, WORLD_SIZE, type GameSpeed } from './config';
 import { EventBus } from './EventBus';
-import type { BuildingInfo, GameEvents, RoadInfo, RoadMode, ToolId } from './events';
+import type { BuildingInfo, DecorToolState, GameEvents, PaintToolState, RoadInfo, RoadMode, TerrainToolState, ToolId } from './events';
 import { Input, type PointerInfo } from './Input';
 
 export interface GameOptions {
@@ -117,6 +118,8 @@ export class Game {
   private userLayer: InfoLayerId | null = null;
   private toolLayer: InfoLayerId | null = null;
   private zoneOverlay!: ZoneOverlay;
+  /** Ground paint and decorations. */
+  decor!: DecorRenderer;
   private selectionRefresh = 1;
   private roadRenderer!: RoadRenderer;
   private buildingRenderer!: BuildingRenderer;
@@ -208,6 +211,8 @@ export class Game {
     this.furniture = new StreetFurniture(this.city.roads, this.roadRenderer, this.world.heightAt);
     this.scene.add(this.roadRenderer.group, this.buildingRenderer.group, this.furniture.group);
     this.zoneOverlay = new ZoneOverlay(this.city, this.world.terrainMaterial);
+    this.decor = new DecorRenderer(this.city, this.world.terrainMaterial, this.world.heightAt);
+    this.scene.add(this.decor.group);
     this.powerLineRenderer = new PowerLineRenderer(this.city.powerLines, this.world.heightAt);
     this.pipeRenderer = new PipeRenderer(this.city.pipes, this.world.heightAt);
     this.scene.add(this.pipeRenderer.group);
@@ -556,6 +561,7 @@ export class Game {
     this.vehicles.update(dt, this.sim.speed, this.cameraCtl.target.x, this.cameraCtl.target.z, this.cameraCtl.distance);
     this.pedestrians.update(dt, this.sim.speed, this.minuteOfDay() / 60, this.cameraCtl.target.x, this.cameraCtl.target.z, this.cameraCtl.distance);
     this.zoneOverlay.update();
+    this.decor.update();
     this.city.refreshUtilities();
     // Keep the inspector's live numbers (residents, construction…) fresh.
     this.selectionRefresh -= dt;
@@ -761,6 +767,15 @@ export class Game {
         break;
       case 'KeyJ':
         this.setTool('services');
+        break;
+      case 'KeyE':
+        this.setTool('terrain');
+        break;
+      case 'KeyQ':
+        this.setTool('paint');
+        break;
+      case 'KeyN':
+        this.setTool('decor');
         break;
       case 'KeyK':
         this.setTool('traffic');
@@ -1025,6 +1040,22 @@ export class Game {
     this.tools.road.setElevation(m);
   }
 
+  setPaintTool(patch: Partial<PaintToolState>): void {
+    this.tools.paint.setState(patch);
+  }
+
+  setDecorTool(patch: Partial<DecorToolState>): void {
+    this.tools.decor.setState(patch);
+  }
+
+  setTerrainTool(patch: Partial<TerrainToolState>): void {
+    this.tools.terrain.setState(patch);
+  }
+
+  setRoadSurface(s: RoadSurface): void {
+    this.tools.road.setSurface(s);
+  }
+
   setRoadMode(mode: RoadMode): void {
     this.tools.road.setMode(mode);
     this.events.emit('roadMode', mode);
@@ -1251,6 +1282,7 @@ export class Game {
     this.pedestrians?.dispose();
     this.buildingRenderer?.dispose();
     this.zoneOverlay?.dispose();
+    this.decor?.dispose();
     this.trafficOverlay?.dispose();
     this.trafficControls?.dispose();
     this.vehicles?.dispose();

@@ -23,6 +23,11 @@
 14. ✅ Yollar, bölgeleme, hatlar ve trafik düzenlemeleri için geri al / yinele; Kent Sesi vatandaş akışı;
     aynı türden yolların açılı eklemlerinde gönye
 15. ✅ Binaların kaldırıma yaslanması, yol kenarı bölgelemenin tek yolda kalması ve başka bölgenin sınırında durması
+16. ✅ Cadde kenarı yolları (park şeridi ve park eden araçlar, ağaçlı kaldırımlar, geniş kaldırımlar), kavşak
+    dışında kalan sokak lambaları, eğime göre eğilen ya da yamaca oturan binalar
+17. ✅ Serbest ve yay yol çizimi, yol kaplamaları (parke, tuğla, beton) ve yeniden kaplama, yaya yolu, otoyol rampası,
+    arazi aracı (yükselt, alçalt, düzle, yumuşat, gölet)
+18. ✅ Zemin kaplama boyası (8 malzeme) ve 20 süs eşyası (yerleştirme, döndürme, yıkım, geri alma, kayıt)
 
 ## Bilinen sınırlar (dürüst durum)
 
@@ -39,7 +44,10 @@
 - Kent Sesi kayda yazılmaz; yüklenen şehirde akış boş başlar ve şehrin o anki durumundan yazılır.
 - Toplu taşıma (otobüs hatları, metro, tren) yok.
 - Tünel ve araç girmeyen yaya yolu yok.
-- Peyzaj aracı (arazi düzenleme, su, bahçe) yok; menüde kilitli ve nedeni yazılı.
+- Arazi aracında kanal, plaj, tepe / dağ şablonları ve zemin kaplama boyası yok; mini harita arazi düzenlemelerini
+  göstermez. Kavşak yüzeyleri her zaman asfalttır.
+- Toplu taşıma henüz yok. Kaplama ve süsler yalnızca görünümdür; simülasyona etkileri yoktur. Kaplama 2 m
+  karelerle boyanır (kenarlar kademelidir).
 - Afetler ve danışmanlar yok.
 - Günlük (tekrarlanan) görevler yok; tüm görevler kalıcı.
 - Katalog bugün 84 bina tanımı içerir (her biri birçok stil ve varyantla çizilir); 600 hedefine ulaşılmadı.

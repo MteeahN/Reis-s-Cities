@@ -58,8 +58,8 @@ test('creates a city, renders the world and drives the HUD', async ({ page }) =>
   await page.keyboard.press('h');
   await expect(page.getByTestId('help')).toBeVisible();
 
-  // Locked future tools are disabled, not fake.
-  await expect(page.getByTestId('tool-landscape')).toBeDisabled();
+  // The terrain tool (once a locked placeholder) is available.
+  await expect(page.getByTestId('tool-terrain')).toBeEnabled();
 
   // Phase 5: power picker, line tool and info layers.
   await page.keyboard.press('h');

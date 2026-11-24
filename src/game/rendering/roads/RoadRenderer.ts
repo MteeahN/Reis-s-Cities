@@ -11,7 +11,7 @@ import {
   Vector3,
 } from 'three';
 import { CHUNK_SIZE } from '../../core/config';
-import { getRoadType, ROAD_TYPES } from '../../data/roads';
+import { getRoadType, ROAD_TYPES, type RoadSurface } from '../../data/roads';
 import { directedAngle } from '../../entities/road/curve';
 import type { RoadChange, RoadGraph } from '../../entities/road/RoadGraph';
 import { createRoadMaterial } from './RoadMaterial';
@@ -127,11 +127,13 @@ export class RoadRenderer {
   }
 
   /** Material group of an edge: its type, or the type's one-way variant. */
-  private materialKey(e: { typeId: string; oneWay?: 1 | -1 }): string {
+  private materialKey(e: { typeId: string; oneWay?: 1 | -1; surface?: RoadSurface }): string {
     const type = getRoadType(e.typeId);
-    if (!e.oneWay || type.oneWay) return type.id;
-    const key = type.id + ONE_WAY_SUFFIX;
-    if (!this.materials.has(key)) this.materials.set(key, createRoadMaterial({ ...type, oneWay: true, centerLine: 'none' }));
+    const oneWay = !!e.oneWay && !type.oneWay;
+    const surface = e.surface ?? 'asphalt';
+    if (!oneWay && surface === 'asphalt') return type.id;
+    const key = type.id + (oneWay ? ONE_WAY_SUFFIX : '') + (surface === 'asphalt' ? '' : `#${surface}`);
+    if (!this.materials.has(key)) this.materials.set(key, createRoadMaterial(oneWay ? { ...type, oneWay: true, centerLine: 'none' } : type, surface));
     return key;
   }
 

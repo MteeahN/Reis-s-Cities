@@ -46,12 +46,16 @@ export async function startGame(container: HTMLElement): Promise<void> {
   ev.on('tool', (tool) => set({ tool, roadPlan: null, buildingPlan: null, demolishTarget: null, linePlan: null }));
   ev.on('roadType', (roadType) => set({ roadType }));
   ev.on('roadElevation', (roadElevation) => set({ roadElevation }));
+  ev.on('roadSurface', (roadSurface) => set({ roadSurface }));
   ev.on('roadMode', (roadMode) => set({ roadMode }));
   ev.on('buildingType', (buildingType) => set({ buildingType }));
   ev.on('buildingPlan', (buildingPlan) => set({ buildingPlan }));
   ev.on('demolishTarget', (demolishTarget) => set({ demolishTarget }));
   ev.on('demolishFilter', (demolishFilter) => set({ demolishFilter }));
   ev.on('trafficTool', (trafficTool) => set({ trafficTool }));
+  ev.on('terrainTool', (terrainTool) => set({ terrainTool }));
+  ev.on('paintTool', (paintTool) => set({ paintTool }));
+  ev.on('decorTool', (decorTool) => set({ decorTool }));
   ev.on('budget', (budget) => set({ budget }));
   ev.on('cityStats', (cityStats) => set({ cityStats }));
   ev.on('zoneTool', (zoneTool) => set({ zoneTool }));

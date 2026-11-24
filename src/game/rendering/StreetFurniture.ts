@@ -20,12 +20,26 @@ import { getRoadType, type RoadTypeDef } from '../data/roads';
 import type { RoadGraph } from '../entities/road/RoadGraph';
 import { broadleafHigh } from '../entities/TreeModels';
 import { patchSway } from './foliage';
+import { CAR_COLORS, carModels, vehicleMaterial } from './VehicleModels';
 import { patchInk } from './ink';
 import { nightUniform } from './nightUniform';
 import { sampleProfile, type RoadRenderer, type SurfacePoint } from './roads/RoadRenderer';
 
 /** Keep lamps and trees out of junction areas. */
 const END_CLEARANCE = 8;
+/** Length of a parking bay (m). */
+const BAY = 6;
+
+export interface CarSpot {
+  x: number;
+  y: number;
+  z: number;
+  /** Unit direction the car faces. */
+  dx: number;
+  dz: number;
+  model: number;
+  color: number;
+}
 const LAMP_HEIGHT = 7.2;
 const POOL_SIZE = 30;
 
@@ -79,6 +93,11 @@ export class StreetFurniture {
   private readonly pt: SurfacePoint = { x: 0, y: 0, z: 0, tx: 1, tz: 0 };
   lampSpots: LampSpot[] = [];
   treeSpots: TreeSpot[] = [];
+  carSpots: CarSpot[] = [];
+  /** Parked cars: one instanced mesh per car model. */
+  private readonly carGeos: BufferGeometry[];
+  private readonly carMat: MeshStandardMaterial;
+  private parked: InstancedMesh[];
   private postsVisible = true;
 
   constructor(
@@ -119,6 +138,9 @@ export class StreetFurniture {
     this.pools = this.mesh(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), this.poolMat, 64, false);
     this.pools.renderOrder = 3;
     this.trees = this.mesh(this.treeGeo, this.treeMat, 32, true);
+    this.carGeos = carModels();
+    this.carMat = vehicleMaterial();
+    this.parked = this.carGeos.map((g) => this.carMesh(g, 32));
     this.unsub = roads.onChange(() => (this.dirty = true));
   }
 
@@ -130,6 +152,40 @@ export class StreetFurniture {
     m.receiveShadow = shadow;
     this.group.add(m);
     return m;
+  }
+
+  private carMesh(geo: BufferGeometry, capacity: number): InstancedMesh {
+    const m = this.mesh(geo, this.carMat, capacity, true);
+    m.setColorAt(0, new Color(1, 1, 1));
+    return m;
+  }
+
+  /** Parked cars, grouped by model. */
+  private placeCars(cars: CarSpot[]): void {
+    const m = new Matrix4();
+    const q = new Quaternion();
+    const up = new Vector3(0, 1, 0);
+    const p = new Vector3();
+    const one = new Vector3(1, 1, 1);
+    const color = new Color();
+    this.parked = this.parked.map((mesh, model) => {
+      const mine = cars.filter((c) => c.model === model);
+      let im = mesh;
+      if (im.instanceMatrix.count < mine.length) {
+        this.group.remove(im);
+        im.dispose();
+        im = this.carMesh(this.carGeos[model], Math.max(mine.length, im.instanceMatrix.count * 2));
+      }
+      mine.forEach((c, i) => {
+        q.setFromAxisAngle(up, Math.atan2(c.dx, c.dz));
+        im.setMatrixAt(i, m.compose(p.set(c.x, c.y, c.z), q, one));
+        im.setColorAt(i, color.setHex(CAR_COLORS[c.color]));
+      });
+      im.count = mine.length;
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      return im;
+    });
   }
 
   private static lampGeometry(): BufferGeometry {
@@ -168,22 +224,37 @@ export class StreetFurniture {
     return new CanvasTexture(c);
   }
 
-  /** Lamp and tree positions for the current network (pure placement, no rendering). */
-  layout(): { lamps: LampSpot[]; trees: TreeSpot[] } {
+  /** Is the point on the driving surface (carriageway or junction) of any road? */
+  private onCarriageway(x: number, z: number): boolean {
+    for (const e of this.roads.edgesInBox(x - 20, z - 20, x + 20, z + 20)) {
+      const t = getRoadType(e.typeId);
+      const r = this.roads.closestOnEdge(e, { x, z });
+      if (r.dist < (t.sidewalk > 0 ? t.width / 2 - t.sidewalk + 0.3 : t.width / 2 - 1.2)) return true;
+    }
+    return false;
+  }
+
+  /** Lamp, tree and parked-car positions for the current network (pure placement, no rendering). */
+  layout(): { lamps: LampSpot[]; trees: TreeSpot[]; cars: CarSpot[] } {
     const lamps: LampSpot[] = [];
     const trees: TreeSpot[] = [];
+    const cars: CarSpot[] = [];
     const pt = this.pt;
     for (const e of this.roads.edges.values()) {
       const prof = this.roadRenderer.edgeProfile(e.id);
-      if (!prof || prof.length < END_CLEARANCE * 2 + 4) continue;
+      if (!prof) continue;
       const type = getRoadType(e.typeId);
+      // Stay clear of the junction surfaces at both ends (wide crossings set roads back further).
+      const from = Math.max(END_CLEARANCE, this.roadRenderer.setbackAt(e.a, e.id) + 3);
+      const to = prof.length - Math.max(END_CLEARANCE, this.roadRenderer.setbackAt(e.b, e.id) + 3);
+      const usable = to - from;
+      if (usable < 4) continue;
       const { spacing, offsets } = lampLayout(type);
       const edgeLamps = lamps.length;
-      const usable = prof.length - END_CLEARANCE * 2;
       const n = Math.max(1, Math.floor(usable / spacing) + 1);
       const step = n > 1 ? usable / (n - 1) : 0;
       for (let k = 0; k < n; k++) {
-        const u = END_CLEARANCE + (n > 1 ? k * step : usable / 2);
+        const u = from + (n > 1 ? k * step : usable / 2);
         sampleProfile(prof, u, pt);
         // Normal to the right of a → b.
         const nx = -pt.tz;
@@ -197,31 +268,67 @@ export class StreetFurniture {
           }
           const x = pt.x + nx * off;
           const z = pt.z + nz * off;
+          // Never inside another road's driving surface (curved or crossing roads nearby).
+          if (this.onCarriageway(x, z)) return;
           const s = Math.sign(off);
           lamps.push({ x, y: pt.y, z, ix: -nx * s, iz: -nz * s });
         });
       }
-      // Trees: boulevard medians and wide sidewalks, never on bridges.
-      const treeOffsets = type.median >= 2 ? [0] : type.sidewalk >= 2.5 && type.width >= 16 ? [type.width / 2 - type.sidewalk / 2, -(type.width / 2 - type.sidewalk / 2)] : [];
-      if (treeOffsets.length === 0) continue;
-      const tn = Math.floor(usable / 15);
-      for (let k = 0; k < tn; k++) {
-        const u = END_CLEARANCE + 7.5 + k * 15;
-        if (u > prof.length - END_CLEARANCE) break;
-        sampleProfile(prof, u, pt);
-        if (pt.y - this.groundAt(pt.x, pt.z) > 1.2) continue; // bridge
-        for (const off of treeOffsets) {
-          const x = pt.x - pt.tz * off;
-          const z = pt.z + pt.tx * off;
-          let clash = false;
-          for (let i = edgeLamps; i < lamps.length && !clash; i++) clash = Math.hypot(lamps[i].x - x, lamps[i].z - z) < 4.5;
-          if (clash) continue;
-          const h = (Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
-          trees.push({ x, y: pt.y, z, rot: Math.abs(h) * Math.PI * 2, scale: 0.5 + Math.abs(h) * 0.15 });
+      // Trees: medians, roads with tree walks and wide sidewalks, never on bridges.
+      const walk = type.width / 2 - type.sidewalk / 2;
+      const treeOffsets = [
+        ...(type.median >= 2 ? [0] : []),
+        ...(type.trees || (type.median < 2 && type.sidewalk >= 2.5 && type.width >= 16) ? [walk, -walk] : []),
+      ];
+      const treeStep = type.trees ? 11 : 15;
+      if (treeOffsets.length) {
+        const tn = Math.floor(usable / treeStep);
+        for (let k = 0; k < tn; k++) {
+          const u = from + treeStep / 2 + k * treeStep;
+          if (u > to) break;
+          sampleProfile(prof, u, pt);
+          if (pt.y - this.groundAt(pt.x, pt.z) > 1.2) continue; // bridge
+          for (const off of treeOffsets) {
+            const x = pt.x - pt.tz * off;
+            const z = pt.z + pt.tx * off;
+            let clash = false;
+            for (let i = edgeLamps; i < lamps.length && !clash; i++) clash = Math.hypot(lamps[i].x - x, lamps[i].z - z) < 4.5;
+            if (clash || (off !== 0 && this.onCarriageway(x, z))) continue;
+            const h = (Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
+            trees.push({ x, y: pt.y, z, rot: Math.abs(h) * Math.PI * 2, scale: 0.5 + Math.abs(h) * 0.15 });
+          }
+        }
+      }
+      // Parked cars in the parking strips (about two bays in three taken), facing the traffic beside them.
+      const park = type.parking ?? 0;
+      if (park > 0) {
+        const lane = type.width / 2 - type.sidewalk - park / 2;
+        const bays = Math.floor(usable / BAY);
+        for (let k = 0; k < bays; k++) {
+          const u = from + BAY / 2 + k * BAY;
+          sampleProfile(prof, u, pt);
+          if (pt.y - this.groundAt(pt.x, pt.z) > 1.2) continue;
+          for (const side of [1, -1]) {
+            const x = pt.x - pt.tz * lane * side;
+            const z = pt.z + pt.tx * lane * side;
+            const h = Math.abs((Math.sin(x * 7.13 + z * 3.71) * 24634.6345) % 1);
+            if (h < 0.34 || this.onOtherCarriageway(x, z, e.id)) continue;
+            cars.push({ x, y: pt.y, z, dx: pt.tx * side, dz: pt.tz * side, model: Math.floor(h * 97) % 4, color: Math.floor(h * 1013) % CAR_COLORS.length });
+          }
         }
       }
     }
-    return { lamps, trees };
+    return { lamps, trees, cars };
+  }
+
+  /** On the driving surface of a road other than `edgeId` (parked cars stop short of crossings). */
+  private onOtherCarriageway(x: number, z: number, edgeId: number): boolean {
+    for (const e of this.roads.edgesInBox(x - 20, z - 20, x + 20, z + 20)) {
+      if (e.id === edgeId) continue;
+      const t = getRoadType(e.typeId);
+      if (this.roads.closestOnEdge(e, { x, z }).dist < (t.sidewalk > 0 ? t.width / 2 - t.sidewalk + 1 : t.width / 2)) return true;
+    }
+    return false;
   }
 
   private ensure(which: 'lamps' | 'pools' | 'trees', n: number): InstancedMesh {
@@ -237,7 +344,9 @@ export class StreetFurniture {
   }
 
   private rebuild(): void {
-    const { lamps, trees } = this.layout();
+    const { lamps, trees, cars } = this.layout();
+    this.carSpots = cars;
+    this.placeCars(cars);
     this.lampSpots = lamps;
     this.treeSpots = trees;
     const lm = this.ensure('lamps', lamps.length);
@@ -283,12 +392,14 @@ export class StreetFurniture {
     if (posts !== this.postsVisible) {
       this.postsVisible = posts;
       this.lamps.visible = posts;
+      for (const c of this.parked) c.visible = posts;
     }
   }
 
   setShadows(on: boolean): void {
     this.lamps.castShadow = on;
     this.trees.castShadow = on;
+    for (const c of this.parked) c.castShadow = on;
   }
 
   dispose(): void {
@@ -299,6 +410,8 @@ export class StreetFurniture {
     this.poolMat.dispose();
     this.treeGeo.dispose();
     this.treeMat.dispose();
+    for (const g of this.carGeos) g.dispose();
+    this.carMat.dispose();
     this.pools.geometry.dispose();
   }
 }

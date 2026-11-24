@@ -27,6 +27,8 @@ export interface TerrainUniforms {
   uInfoMode: IUniform<number>;
   /** 0 day … 1 night: dims the self-lit overlays so they don't glow in the dark. */
   uNight: IUniform<number>;
+  /** Ground paint (one texel per PAINT_STEP m; R = paint id). */
+  uPaintTex: IUniform<DataTexture>;
 }
 
 /**
@@ -57,6 +59,7 @@ export class TerrainMaterial extends MeshStandardMaterial {
       uInfoTex: { value: emptyZoneTex() },
       uInfoMode: { value: 0 },
       uNight: nightUniform,
+      uPaintTex: { value: emptyZoneTex() },
     };
     this.syncUnlockMask();
     unlock.onChange(() => this.syncUnlockMask());
@@ -72,7 +75,7 @@ export class TerrainMaterial extends MeshStandardMaterial {
         .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAGMENT_COLOR}`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAGMENT_EMISSIVE}`);
     };
-    this.customProgramCacheKey = () => 'reis-terrain-v3';
+    this.customProgramCacheKey = () => 'reis-terrain-v4';
   }
 
   private syncUnlockMask(): void {
@@ -115,6 +118,7 @@ uniform vec3 uPreviewColor;
 uniform sampler2D uInfoTex;
 uniform float uInfoMode;
 uniform float uNight;
+uniform sampler2D uPaintTex;
 const float WORLD = ${WORLD_SIZE.toFixed(1)};
 const float CELL = ${CELL_SIZE.toFixed(1)};
 const float CHUNK = ${(CELL_SIZE * CHUNK_CELLS).toFixed(1)};
@@ -135,6 +139,40 @@ float rcUnlocked(vec2 p) {
   if (p.x < 0.0 || p.y < 0.0 || p.x > WORLD || p.y > WORLD) return 0.0;
   return texture2D(uUnlockMask, p / WORLD).r;
 }
+/** Ground paint patterns in world space (ids as in data/decor PAINTS). */
+vec3 rcPaint(float id, vec2 p) {
+  float g = rcNoise(p * 3.1) * 0.5 + rcNoise(p * 0.6) * 0.5;
+  if (id > 3.5 && id < 5.5) {
+    // Gravel (4) and sand (5): speckled.
+    vec3 base = id < 4.5 ? vec3(0.36, 0.31, 0.23) : vec3(0.55, 0.47, 0.30);
+    return base * (0.82 + 0.3 * rcNoise(p * 9.0) + 0.1 * g);
+  }
+  if (id > 5.5 && id < 6.5) {
+    // Lawn: mowing stripes.
+    float stripe = step(0.5, fract(p.x / 3.0));
+    return vec3(0.12, 0.27, 0.06) * (0.85 + 0.18 * stripe + 0.15 * g);
+  }
+  if (id > 7.5) return vec3(0.05, 0.052, 0.056) * (0.85 + 0.3 * g);
+  if (id > 6.5) {
+    // Wood deck: boards along x.
+    float row = floor(p.y / 0.22);
+    float seam = 1.0 - smoothstep(0.0, 0.02 + fwidth(p.y), min(fract(p.y / 0.22), 1.0 - fract(p.y / 0.22)) * 0.22);
+    float tone = rcHash(vec2(row, floor((p.x + row * 1.7) / 2.4)));
+    return mix(vec3(0.30, 0.17, 0.08) * (0.8 + 0.35 * tone), vec3(0.08, 0.05, 0.03), seam);
+  }
+  vec2 size = id < 1.5 ? vec2(0.45) : id < 2.5 ? vec2(1.0) : vec2(0.5, 0.25);
+  vec2 q = p / size;
+  if (id < 1.5 || id > 2.5) q.x += step(1.0, mod(floor(q.y), 2.0)) * 0.5;
+  vec2 f = fract(q);
+  float edge = min(min(f.x, 1.0 - f.x) * size.x, min(f.y, 1.0 - f.y) * size.y);
+  float stone = smoothstep(0.012, 0.03 + fwidth(p.x), edge);
+  float tone = rcHash(floor(q));
+  vec3 face = id < 1.5 ? vec3(0.19, 0.185, 0.17) * (0.75 + 0.5 * tone)
+    : id < 2.5 ? (mod(floor(q.x) + floor(q.y), 2.0) < 0.5 ? vec3(0.42, 0.40, 0.36) : vec3(0.34, 0.31, 0.27)) * (0.95 + 0.1 * g)
+    : vec3(0.30, 0.11, 0.07) * (0.75 + 0.45 * tone);
+  return mix(vec3(0.07, 0.066, 0.06), face, stone);
+}
+
 float rcGridLine(vec2 coord) {
   vec2 w = fwidth(coord);
   vec2 l = abs(fract(coord - 0.5) - 0.5) / max(w, vec2(1e-4));
@@ -147,6 +185,10 @@ const FRAGMENT_COLOR = /* glsl */ `
   vec2 p = vWorldPos.xz;
   float n = rcNoise(p * 0.42) * 0.35 + rcNoise(p * 0.11) * 0.35 + rcNoise(p * 0.023) * 0.3;
   diffuseColor.rgb *= 0.84 + 0.3 * n;
+  if (p.x >= 0.0 && p.y >= 0.0 && p.x <= WORLD && p.y <= WORLD) {
+    float pid = floor(texture2D(uPaintTex, p / WORLD).r * 255.0 + 0.5);
+    if (pid > 0.5) diffuseColor.rgb = rcPaint(pid, p);
+  }
 
   float ul = rcUnlocked(p);
   float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));

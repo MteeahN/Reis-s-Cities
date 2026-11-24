@@ -45,6 +45,15 @@ export interface PlacedBuilding {
    */
   ox?: number;
   oz?: number;
+  /** How the building sits on sloping ground (visual only): tilt with the slope (gentle, low-rise) or set into it. */
+  seat?: GroundSeat;
+}
+
+/** Visual seating on the terrain: drawn base height, and the ground slope (dh/dx, dh/dz) to tilt with, if any. */
+export interface GroundSeat {
+  y: number;
+  gx: number;
+  gz: number;
 }
 
 export interface BuildingChange {
@@ -80,12 +89,17 @@ export class BuildingRegistry {
   private listeners = new Set<(c: BuildingChange) => void>();
   /** Where a new building is drawn relative to its cells (set by the city: towards the road). */
   snapper: ((i: number, j: number, w: number, d: number, rot: Rotation) => { x: number; z: number } | null) | null = null;
+  /** How a new building sits on the ground (set by the city from the terrain). */
+  seater: ((defId: string, i: number, j: number, w: number, d: number) => GroundSeat | null) | null = null;
 
-  private snap<T extends { i: number; j: number; w: number; d: number; rot: Rotation }>(b: T): T & { ox?: number; oz?: number } {
+  private snap<T extends { defId: string; i: number; j: number; w: number; d: number; rot: Rotation }>(b: T): T & { ox?: number; oz?: number; seat?: GroundSeat } {
     const s = this.snapper?.(b.i, b.j, b.w, b.d, b.rot);
-    const out = { ...b } as T & { ox?: number; oz?: number };
+    const out = { ...b } as T & { ox?: number; oz?: number; seat?: GroundSeat };
     delete out.ox;
     delete out.oz;
+    delete out.seat;
+    const seat = this.seater?.(b.defId, b.i, b.j, b.w, b.d);
+    if (seat) out.seat = seat;
     if (s && (s.x !== 0 || s.z !== 0)) {
       out.ox = s.x;
       out.oz = s.z;
@@ -136,6 +150,12 @@ export class BuildingRegistry {
     if (!b) return;
     const before = { ...b };
     Object.assign(b, patch);
+    // A new template (level up) may be taller: re-seat it on the ground.
+    if (patch.defId && this.seater) {
+      const seat = this.seater(b.defId, b.i, b.j, b.w, b.d);
+      if (seat) b.seat = seat;
+      else delete b.seat;
+    }
     this.emit({ added: [b], removed: [before] });
   }
 

@@ -210,12 +210,16 @@ function RoadPlanCard() {
       ? 'Başlangıç için tıklayın, bitiş için tekrar tıklayın ya da sürükleyip bırakın. Yol, bittiği yerden devam eder.'
       : mode === 'curve'
         ? 'Başlangıç → kontrol noktası → bitiş noktasına tıklayın.'
-        : 'Dönüştürmek istediğiniz yolun üzerine gelip tıklayın.';
+        : mode === 'free'
+          ? 'Basılı tutup yolun gideceği yeri çizin, bırakınca yol kurulur. Keskin dönüşler yumuşatılır.'
+          : mode === 'arc'
+            ? 'Başlangıca, sonra bitişe tıklayın; imleçle yayı bükün ve tıklayın.'
+            : 'Dönüştürmek istediğiniz yolun üzerine gelip tıklayın. Aynı türdeki yola tıklamak onu seçili kaplamayla yeniden kaplar.';
   return (
     <section className="panel inspector" data-testid="inspector-road">
       <div className="panel-header">
         <h3><Icon name="road" size={16} /> {type.name}</h3>
-        <span className="chip">{mode === 'straight' ? 'Düz' : mode === 'curve' ? 'Kavisli' : 'Yenile'}</span>
+        <span className="chip">{({ straight: 'Düz', curve: 'Kavisli', free: 'Serbest', arc: 'Yay', upgrade: 'Yenile' } as const)[mode]}</span>
       </div>
       <p className="muted small">{type.description}</p>
       <KV k="Genişlik / Şerit" v={`${type.width} m · ${type.lanes}${type.oneWay ? ' (tek yön)' : ''}`} />

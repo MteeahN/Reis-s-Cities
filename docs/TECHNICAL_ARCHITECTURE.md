@@ -48,9 +48,29 @@ React HUD (src/ui)  ←  Zustand store (src/store)  ←  EventBus olayları  ←
 - Döner kavşak: `tools/placement/Roundabout.ts` kolları yarıçapta `splitEdge` ile keser, eski kavşağa uzanan
   parçaları siler ve kesim noktalarını tek yönlü (`oneway2`) çember yaylarıyla bağlar (150°'den geniş aralara ara
   düğüm). Yön, sağdan trafik için ortası solda kalacak biçimdedir.
+- Serbest / yay yol: `tools/placement/pathShapes.ts` çizgiyi seyreltir, sadeleştirir, dar köşeleri atar ve B-spline
+  parçalarına çevirir (yay: üç noktadan geçen çember, en çok 60°'lik parçalar). `City.buildRoadPath` parçaları sırayla
+  planlayıp kurar; biri geçersizse ağı `applySnapshot` ile ve parayı geri koyar.
+- Kaplama: `RoadEdge.surface` (kayıtta `sf`), bölünmede korunur; yol malzemesi anahtarı türe, tek yöne ve kaplamaya
+  göredir, desen dünya koordinatında çizilir.
+- Arazi: `City.editTerrain` yükseklik alanını fırçayla değiştirir (yol/bina/kilitli hücrelere değen köşeler sabit),
+  `World.refreshTerrain` hücreleri yeniden sınıflar ve etkilenen parçaların geometrisini yeniden kurar. Değişen
+  köşelerin son yükseklikleri `terrainEdits` olarak kaydedilir ve yüklemede yollardan önce uygulanır; her basış
+  bir `terrain` geri alma girdisidir.
+- Zemin kaplama: `City.paint` 2 m'lik ızgarada (1024²) malzeme kimliği tutar; `DecorRenderer` bu diziyi doğrudan
+  arazi malzemesine doku olarak verir, desen arazi shader'ında dünya koordinatında çizilir. Kayıtta RLE.
+- Süsler: `data/decor.ts` ilkel parçalardan modeller; `DecorRenderer` tür başına bir InstancedMesh kullanır.
+  `City.props` kimlikli listedir; bina ya da yol üzerine kurulunca ilgili süsler silinir.
 - Bina hizası: `City.roadSnap` önündeki düz yol ile parselin ön kenarı arasındaki boşluğu (en fazla 1,25 hücre)
   ölçer; `BuildingRegistry` bunu binaya `ox/oz` olarak yazar, `BuildingRenderer` modeli o kadar kaydırır.
   Doluluk hücreleri değişmez; `City.buildingAtWorld` seçme ve yıkmada kaydırılmış yeri dikkate alır.
+- Cadde kenarı: `RoadTypeDef.parking` (park şeridi genişliği) ve `trees`. Yol malzemesi park şeridini ve cepleri
+  çizer; araç şerit genişliği park şeridini dışarıda bırakır. `StreetFurniture.layout` park eden araçları
+  (`carModels`, model başına bir InstancedMesh), lambaları ve ağaçları kavşak geri çekilmesinden (`setbackAt` + 3 m)
+  sonra ve hiçbir yolun araç yüzeyinde olmayacak şekilde yerleştirir.
+- Bina oturuşu: `City.groundSeat` köşe yüksekliklerinden eğimi bulur; `BuildingRegistry` bunu `seat` olarak yazar
+  (seviye atlayınca yeniden hesaplanır). `BuildingRenderer` alçak binaları zemin normaline göre eğer, diğerlerini
+  `seat.y` yüksekliğine indirir; kaide yalnızca gerektiğinde çizilir.
 - Yol kenarı bölgeleme (`ZoneTool`): aday hücreler yolun o tarafındaki, en yakın yolu bu yol olan hücrelerdir;
   bir hücreden yola giden doğru başka türde bölgelenmiş bir hücreden geçiyorsa hücre seçilmez.
 - Yol doluluğu: hücrenin merkezi yola yakınsa ya da karesinin herhangi bir yeri yol yüzeyine değiyorsa hücre yol

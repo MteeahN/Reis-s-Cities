@@ -16,6 +16,37 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   sorun sürdükçe birkaç günde bir tekrar yazılır, çözülünce teşekkür gelir. "Göster" kamerayı sorunun yerine
   götürür. Okunmamış gönderi sayısı simgede görünür. Akış kayda yazılmaz; yüklenen şehirde şehrin o anki
   durumundan yeniden başlar.
+- **Zemin kaplama (Q):** parke taşı, karo, tuğla, çakıl, kum, biçilmiş çim, ahşap döşeme, asfalt ve silgi; 2 / 4 / 8 m
+  fırça, basılı tutup boyanır. Meydan, avlu, patika için; yalnızca şehre ait kuru arazi. m² fiyatı ₺1–5, silmek
+  ücretsiz. Her basış tek Ctrl+Z ile geri alınır; kayda yazılır. Görünüm içindir (arazi değeri, mutluluk değişmez).
+- **Süsler (N):** 20 süs eşyası, 5 grupta: banklar, piknik masası, kafe masası, şezlong; çardak, pergola, çiçek tarhı,
+  çit, saksıda ağaç, bahçe kulübesi; süs havuzu, heykel, müzik köşkü; kaydırak, salıncak, kum havuzu; gazete
+  köşkü, çiçekçi tezgâhı, bisiklet parkı, çöp kutusu. Yeşil / kırmızı önizleme, R ile 45° döndürme; yol, bina, su
+  ve başka süsün üzerine konmaz. Yıkım aracı (yeni "Süsler" süzgeci) yarı fiyatını iade eder; üzerine yol ya da bina
+  yapılınca kalkar. Geri alınır, kayda yazılır. Görünüm içindir.
+- **Yeni yol çizimleri:** Serbest (basılı tutup çizin; titrek çizgi geniş kavislere dönüşür) ve Yay (başlangıç →
+  bitiş → büküm, dairesel yay). Parçalar tek işlem olarak kurulur ve tek Ctrl+Z ile geri alınır; bir parça
+  kurulamıyorsa hiçbiri kurulmaz, para ödenmez.
+- **Yol kaplaması:** asfalt, parke taşı, tuğla, beton. Yeni yollar seçili kaplamayla kurulur; Yenile modunda aynı
+  türdeki yola tıklamak onu yeniden kaplar (yeni yapım bedelinin %30'u). Kaplama kayda yazılır. Kavşak yüzeyleri
+  asfalt kalır.
+- **Yaya Yolu:** baştan başa taş döşeli, araç girmeyen yol (trafik ağına girmez; binalar araç için yakındaki başka
+  bir yola bağlanır). **Rampa:** otoyola tek şeritli tek yön bağlantı (5.000 nüfus).
+- **Arazi aracı (E):** yükselt, alçalt, düzle (basmaya başlanan yüksekliğe), yumuşat, gölet (su seviyesinin altına
+  kazar, çukur suyla dolar). Fırça S/M/L (12/24/40 m, [ / ]), güç ayarı. Yol, bina, satın alınmamış arazi ve
+  harita kenarı değişmez. Taşınan toprak m³ başına ₺0,5; her basış tek Ctrl+Z ile geri alınır. Düzenlenen zemindeki
+  ağaçlar kalkar, su altında kalan boş bölgeler silinir. Düzenlenmiş arazi kayda yazılır. Mini harita
+  düzenlemeleri göstermez.
+- **Cadde kenarı yolları (yeni sekme):** Otoparklı Sokak, Ağaçlı Sokak, Geniş Kaldırımlı Sokak, Çarşı Caddesi
+  (park şeridi + ağaç + geniş kaldırım, 300 nüfus), Otoparklı Cadde (800) ve Ağaçlı Bulvar (1.500). Park şeritleri
+  her 6 m'de çizgili ceplerle çizilir ve ceplerin yaklaşık üçte ikisinde park etmiş araç durur; trafik şeritleri park
+  şeridi kadar daralır. Ağaçlı yollarda iki kaldırım boyunca ağaç dizisi var. Katalog kartları park eden araçları ve
+  ağaçları da çizer.
+- **Sokak lambaları kavşakta değil:** lambalar ve ağaçlar kavşak yüzeyinin bittiği yerden sonra başlar ve hiçbir
+  yolun araç yüzeyine (kesişen ya da kıvrılan yol dahil) konmaz.
+- **Eğimli arazide binalar:** dört kata kadar binalar %12'ye kadar eğimde araziyle birlikte eğilir (parsel zemine
+  oturur, kaide görünmez). Daha yüksek binalar ve dik eğimler dik durur, en alçak köşeye kadar yamaca gömülür
+  (yukarı tarafta en fazla 2,5 m; fazlasını kaide tamamlar). Görüntüdür; hücreler ve oyun kuralları değişmez.
 - **Yola yaslanan binalar:** önündeki düz yolla arasında çim şerit kalan binalar kaldırım kenarına kadar
   çekilerek çizilir (yalnızca görüntü; hücreleri yerinde kalır, seçme / yıkma / taşıma çizildiği yerden çalışır).
   Kavisli ya da çapraz yollarda ve arada başka bir bina varsa kaydırılmaz.

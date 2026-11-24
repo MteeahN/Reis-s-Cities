@@ -2,6 +2,8 @@ import { APP_VERSION, GRID_CELLS, TILES_PER_SIDE, type GameSpeed } from '../core
 import { ALL_BUILDINGS } from '../data/buildings';
 import { ROAD_TYPES } from '../data/roads';
 import { ARCH_STYLES, isArchStyle } from '../data/styles';
+import { PAINTS } from '../data/decor';
+import type { PlacedProp } from '../systems/UndoHistory';
 import { HEIGHT_LIMITS } from '../data/buildings';
 import { ZoneType } from '../data/zones';
 import type { PlacedBuilding } from '../entities/building/BuildingRegistry';
@@ -40,6 +42,12 @@ export interface CityState {
   /** District height limit per cell, run-length encoded; absent = none. */
   heights?: number[];
   roads: RoadGraphData;
+  /** Reshaped land: pairs of heightfield vertex index and height (absent: as generated). */
+  terrain?: number[];
+  /** Ground paint (run-length encoded [paint, count, …]; absent: none). */
+  paint?: number[];
+  /** Decorations. */
+  props?: { nextId: number; items: PlacedProp[] };
   buildings: { nextId: number; items: SavedBuilding[] };
   /** Run-length encoded zone per cell: [value, count, …]. */
   zones: number[];
@@ -113,6 +121,7 @@ export function serializeCity(city: City, sim: CitySimulation): CityState {
   });
   return {
     roads: city.roads.serialize(),
+    ...(city.terrainEdits.size ? { terrain: [...city.terrainEdits].flatMap(([k, h]) => [k, Math.round(h * 100) / 100]) } : {}),
     buildings: {
       nextId: city.buildings.nextIdValue,
       items: [...city.buildings.items.values()].map(({ cells: _cells, ...rest }) => ({ ...rest })),
@@ -128,6 +137,8 @@ export function serializeCity(city: City, sim: CitySimulation): CityState {
     styles: rle(city.districtStyle),
     wealth: rle(city.districtWealth),
     heights: rle(city.districtHeight),
+    ...(city.paint.some((v) => v !== 0) ? { paint: rle(city.paint) } : {}),
+    ...(city.props.size ? { props: { nextId: city.nextPropIdValue, items: [...city.props.values()].map((x) => ({ ...x })) } } : {}),
     ...(city.entries.length ? { entries: city.entries.map((e) => ({ x: e.x, z: e.z })) } : {}),
     ...(city.entryLink ? { entryLink: { x: city.entryLink.x, z: city.entryLink.z } } : {}),
   };
@@ -141,6 +152,8 @@ export function serializeCity(city: City, sim: CitySimulation): CityState {
 export function restoreCity(city: City, sim: CitySimulation, s: CityState, tick: number, gameMinutes: number): void {
   const tiles = s.unlockTiles;
   for (let z = 0; z < TILES_PER_SIDE; z++) for (let x = 0; x < TILES_PER_SIDE; x++) if (tiles[z * TILES_PER_SIDE + x] === 1) city.world.unlock.unlockTile(x, z);
+  // The land first: roads and buildings sit on it.
+  if (Array.isArray(s.terrain)) city.applyTerrainEdits(s.terrain);
   city.roads.load(s.roads);
   // Styles that no longer exist (e.g. the retired futuristic style) fall back to modern.
   const items = s.buildings.items.map((b) => (b.style && !isArchStyle(b.style) ? { ...b, style: undefined } : b));
@@ -163,6 +176,11 @@ export function restoreCity(city: City, sim: CitySimulation, s: CityState, tick:
   if (Array.isArray(s.styles)) unrle(s.styles, city.districtStyle, ARCH_STYLES.length);
   if (Array.isArray(s.wealth)) unrle(s.wealth, city.districtWealth, 4);
   if (Array.isArray(s.heights)) unrle(s.heights, city.districtHeight, HEIGHT_LIMITS.length);
+  if (Array.isArray(s.paint)) {
+    unrle(s.paint, city.paint, PAINTS.length + 1);
+    city.paintVersion++;
+  }
+  if (s.props && Array.isArray(s.props.items)) city.restoreProps(s.props.items, Number(s.props.nextId) || 1);
   city.migrateGrowableZones();
   city.economy.restore(s.economy);
   city.population.restore(s.population, (id) => city.buildings.items.get(id)?.zone === ZoneType.Residential);

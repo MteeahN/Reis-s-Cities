@@ -1,5 +1,7 @@
 import { DoubleSide, MeshStandardMaterial } from 'three';
-import type { RoadTypeDef } from '../../data/roads';
+import type { RoadSurface, RoadTypeDef } from '../../data/roads';
+
+const SURFACE_INDEX: Record<RoadSurface, number> = { asphalt: 0, cobble: 1, brick: 2, concrete: 3 };
 
 /**
  * Asphalt + sidewalks + lane markings drawn procedurally from the road's
@@ -7,7 +9,7 @@ import type { RoadTypeDef } from '../../data/roads';
  * every road type in the catalogue gets correct markings automatically.
  * `type === null` produces the plain asphalt used for junction caps.
  */
-export function createRoadMaterial(type: RoadTypeDef | null): MeshStandardMaterial {
+export function createRoadMaterial(type: RoadTypeDef | null, surface: RoadSurface = 'asphalt'): MeshStandardMaterial {
   const mat = new MeshStandardMaterial({
     color: 0xffffff,
     roughness: 0.92,
@@ -22,6 +24,8 @@ export function createRoadMaterial(type: RoadTypeDef | null): MeshStandardMateri
     uSidewalk: { value: type?.sidewalk ?? 0 },
     uMedian: { value: type?.median ?? 0 },
     uLanes: { value: type?.lanes ?? 2 },
+    uParking: { value: type?.parking ?? 0 },
+    uSurface: { value: SURFACE_INDEX[surface] },
     uOneWay: { value: type?.oneWay ? 1 : 0 },
     uCenter: { value: type ? (type.centerLine === 'double' ? 2 : type.centerLine === 'dashed' ? 1 : 0) : 0 },
     uJunction: { value: type ? 0 : 1 },
@@ -38,7 +42,7 @@ export function createRoadMaterial(type: RoadTypeDef | null): MeshStandardMateri
       .replace('#include <common>', `#include <common>\n${HEADER}`)
       .replace('#include <map_fragment>', BODY);
   };
-  mat.customProgramCacheKey = () => (type ? 'reis-road' : 'reis-junction');
+  mat.customProgramCacheKey = () => (type ? 'reis-road-v2' : 'reis-junction-v2');
   return mat;
 }
 
@@ -49,6 +53,8 @@ uniform float uWidth;
 uniform float uSidewalk;
 uniform float uMedian;
 uniform float uLanes;
+uniform float uParking;
+uniform float uSurface;
 uniform float uOneWay;
 uniform float uCenter;
 uniform float uJunction;
@@ -66,6 +72,22 @@ const BODY = /* glsl */ `
   vec2 wp = vRoadWorld.xz;
   float grain = rdNoise(wp * 2.3) * 0.5 + rdNoise(wp * 0.35) * 0.5;
   vec3 asphalt = vec3(0.052, 0.054, 0.058) * (0.85 + 0.3 * grain);
+  if (uSurface > 0.5) {
+    // Paving laid in world space: cobbles, bricks (running bond) or concrete slabs.
+    vec2 size = uSurface < 1.5 ? vec2(0.45) : uSurface < 2.5 ? vec2(0.5, 0.25) : vec2(3.0);
+    vec2 q = wp / size;
+    if (uSurface < 2.5) q.x += step(1.0, mod(floor(q.y), 2.0)) * 0.5;
+    vec2 f = fract(q);
+    float edge = min(min(f.x, 1.0 - f.x) * size.x, min(f.y, 1.0 - f.y) * size.y);
+    float fwq = max(fwidth(wp.x), 0.01);
+    float stone = smoothstep(0.015, 0.015 + fwq + 0.03, edge);
+    float tone = rdHash(floor(q));
+    vec3 face = uSurface < 1.5 ? vec3(0.17, 0.165, 0.155) * (0.75 + 0.5 * tone)
+      : uSurface < 2.5 ? vec3(0.30, 0.11, 0.07) * (0.75 + 0.45 * tone)
+      : vec3(0.28, 0.28, 0.27) * (0.9 + 0.15 * tone + 0.1 * grain);
+    vec3 gap = uSurface < 2.5 ? vec3(0.06, 0.058, 0.055) : vec3(0.16, 0.16, 0.155);
+    asphalt = mix(gap, face, stone);
+  }
   vec3 col = asphalt;
   if (uJunction > 0.5 && vRoadUv.y < -2.5) {
     // Zebra crossing: white bars across the carriageway.
@@ -96,8 +118,19 @@ const BODY = /* glsl */ `
       float curb = rdLine(x, sw, 0.22, fw) + rdLine(x, uWidth - sw, 0.22, fw);
       col = mix(col, vec3(0.42, 0.41, 0.39), clamp(curb, 0.0, 1.0));
     }
-    float carriage = uWidth - 2.0 * sw;
-    float cx = x - sw;
+    // Parking strips between the kerb and the lanes: bays marked every 6 m.
+    float bay = uWidth - 2.0 * sw;
+    float bx = x - sw;
+    if (uParking > 0.0 && bx > 0.0 && bx < bay && (bx < uParking || bx > bay - uParking)) {
+      col = asphalt * 1.12;
+      float inner = bx < uParking ? uParking : bay - uParking;
+      float edge = rdLine(bx, inner, 0.12, fw);
+      float tick = rdLine(fract(y / 6.0) * 6.0, 0.0, 0.12, fwidth(y)) * step(min(bx, bay - bx), uParking);
+      float wear = 0.75 + 0.25 * rdNoise(wp * 1.1);
+      col = mix(col, vec3(0.72, 0.72, 0.70), clamp(edge + tick, 0.0, 1.0) * wear);
+    }
+    float carriage = bay - 2.0 * uParking;
+    float cx = bx - uParking;
     if (cx > 0.0 && cx < carriage) {
       float mid = carriage * 0.5;
       float white = 0.0;

@@ -157,6 +157,18 @@ function withTile(g: BufferGeometry, tile: number): BufferGeometry {
   return g;
 }
 
+/** One vertex-coloured, ink-edged geometry from primitive parts (decorations). */
+export function partsGeometry(parts: BuildingPart[]): BufferGeometry {
+  const geos = parts.map((p) => {
+    const g = colorize(partGeometry(p), p.color);
+    g.deleteAttribute('uv');
+    return g;
+  });
+  const merged = inkEdges(mergeGeometries(geos)!);
+  merged.computeBoundingSphere();
+  return merged;
+}
+
 /** A part is a "detail" if it is small in every dimension (the LOD drops these far away). */
 export const DETAIL_SIZE = 2.6;
 export function isDetailPart(part: BuildingPart): boolean {
