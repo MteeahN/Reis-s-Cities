@@ -76,6 +76,10 @@ export async function startGame(container: HTMLElement): Promise<void> {
     if (game === g && g.isStarted && (before.autosave !== after.autosave || before.autosaveMinutes !== after.autosaveMinutes)) startAutosave();
   });
   ev.on('achievements', (achievements) => set({ achievements }));
+  ev.on('feed', ({ posts, fresh }) => {
+    const s = useGameStore.getState();
+    set({ feed: posts, feedUnread: s.popup === 'feed' ? 0 : s.feedUnread + fresh });
+  });
   ev.on('history', (history) => set({ history }));
   ev.on('fatal', (reason) => {
     // Keep the city: write the autosave slot, then show the error.

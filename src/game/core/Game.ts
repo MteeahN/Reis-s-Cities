@@ -16,6 +16,8 @@ import { SAVE_FORMAT, SAVE_VERSION, newId, restoreCity, serializeCity, type City
 import { Achievements, cityLevel, rewardOf, xpOf, type AchievementContext } from '../systems/Achievements';
 import { StatsHistory, type StatsSample } from '../systems/StatsHistory';
 import type { PopulationStats } from '../simulation/CitySimulation';
+import type { Demand } from '../simulation/Demand';
+import { CitizenFeed } from '../systems/CitizenFeed';
 import { getRoadType, isRoadTypeUnlocked } from '../data/roads';
 import { hasRoadAccess } from '../entities/building/BuildingPlacement';
 import { BuildingRenderer } from '../rendering/BuildingRenderer';
@@ -37,6 +39,8 @@ import { CitySimulation } from '../simulation/CitySimulation';
 import type { ZoneToolState, DemolishFilter, TrafficToolMode } from './events';
 import { buildingCapacity } from '../data/buildings';
 import { undoLabel } from '../systems/UndoHistory';
+
+const nameOfBuilding = (defId: string) => getBuilding(defId).name;
 import { ZoneType } from '../data/zones';
 import type { TaxKind } from '../data/economy';
 import { Lighting } from '../rendering/Lighting';
@@ -83,6 +87,9 @@ export class Game {
   readonly events = new EventBus<GameEvents>();
   readonly cityName: string;
   readonly seed: number;
+  /** Kent Sesi — the citizens' feed. */
+  private feed!: CitizenFeed;
+  private feedPrimed = false;
   /** Stable id of this city across saves. */
   readonly cityId: string;
   private readonly achievements = new Achievements();
@@ -157,6 +164,7 @@ export class Game {
   ) {
     this.cityName = options.save?.name ?? options.cityName;
     this.seed = options.save?.seed ?? options.seed;
+    this.feed = new CitizenFeed(this.seed ^ 0x5eed);
     this.cityId = options.save?.cityId ?? newId();
     const s = options.settings ?? DEFAULT_SETTINGS;
     this.settings = { graphics: { ...s.graphics }, audio: { ...s.audio }, gameplay: { ...s.gameplay } };
@@ -224,6 +232,7 @@ export class Game {
         this.refreshOverlays();
         this.events.emit('population', stats);
         this.events.emit('demand', demand);
+        this.updateFeed(stats, demand);
         this.events.emit('maxPopulation', this.citySim.maxPopulation);
         this.trackProgress();
       },
@@ -868,18 +877,79 @@ export class Game {
     this.tools.setTool(id);
   }
 
-  /** Undoes the last building action (place, bulldoze, move). */
+  /** Citizens react to the city's real state (Kent Sesi). */
+  private updateFeed(stats: PopulationStats, demand: Demand): void {
+    if (!this.feedPrimed) {
+      // A loaded city does not re-announce milestones it passed long ago.
+      this.feed.skipMilestonesBelow(stats.total);
+      this.feedPrimed = true;
+    }
+    const fresh = this.feed.update({
+      minute: this.sim.gameMinutes,
+      stats,
+      demand,
+      taxRates: { ...this.city.economy.taxRates },
+      inDebt: this.city.economy.inDebt,
+      spot: (topic) => this.feedSpot(topic),
+    });
+    if (fresh.length) this.events.emit('feed', { posts: [...this.feed.posts], fresh: fresh.length });
+  }
+
+  /** A place in the city that shows a feed topic (the camera goes there when a post is clicked). */
+  private feedSpot(topic: string): { x: number; z: number } | null {
+    const city = this.city;
+    const u = city.utilities;
+    const centre = (cells: number[]) => {
+      let x = 0;
+      let z = 0;
+      for (const k of cells) {
+        x += ((k % GRID_CELLS) + 0.5) * CELL_SIZE;
+        z += (Math.floor(k / GRID_CELLS) + 0.5) * CELL_SIZE;
+      }
+      return { x: x / Math.max(1, cells.length), z: z / Math.max(1, cells.length) };
+    };
+    if (topic === 'traffic') {
+      const worst = city.traffic.stats.worst[0];
+      const e = worst ? city.roads.edges.get(worst.edge) : undefined;
+      if (!e) return null;
+      const p = e.poly.points[Math.floor(e.poly.points.length / 2)];
+      return { x: p.x, z: p.z };
+    }
+    for (const b of city.buildings.items.values()) {
+      const def = getBuilding(b.defId);
+      const hit =
+        (topic === 'fire' && b.state === 'burning') ||
+        (topic === 'abandoned' && b.state === 'abandoned') ||
+        (b.state === 'active' &&
+          ((topic === 'power' && def.electricity > 0 && !def.utility?.power && !u.power.has(b.id)) ||
+            (topic === 'water' && def.water > 0 && !def.utility && !u.water.has(b.id)) ||
+            (topic === 'sewage' && def.water > 0 && !def.utility && !u.sewage.has(b.id)) ||
+            (topic === 'garbage' && !!b.zone && city.services.average('garbage', b.cells) < 0.3)));
+      if (hit) return centre(b.cells);
+    }
+    return null;
+  }
+
+  /** Camera to a feed post's place. */
+  focusPoint(x: number, z: number): void {
+    this.cameraCtl.focusOn(x, z, 180);
+  }
+
+  /** Undoes the last action (buildings, roads, zoning, lines). */
   undo(): void {
+    // A road being drawn may start on a junction the undo removes.
+    this.tools.road.reset();
     const e = this.city.undo.peekUndo();
-    const label = e ? undoLabel(e, getBuilding(e.defId).name) : '';
+    const label = e ? undoLabel(e, nameOfBuilding) : '';
     const err = this.city.undoLast();
     this.events.emit('toast', err ? { kind: 'warning', text: err } : { kind: 'info', text: `Geri alındı: ${label}` });
     if (!err) this.events.emit('sfx', 'place');
   }
 
   redo(): void {
+    this.tools.road.reset();
     const e = this.city.undo.peekRedo();
-    const label = e ? undoLabel(e, getBuilding(e.defId).name) : '';
+    const label = e ? undoLabel(e, nameOfBuilding) : '';
     const err = this.city.redoLast();
     this.events.emit('toast', err ? { kind: 'warning', text: err } : { kind: 'info', text: `Yinelendi: ${label}` });
     if (!err) this.events.emit('sfx', 'place');
@@ -889,8 +959,8 @@ export class Game {
     const u = this.city.undo.peekUndo();
     const r = this.city.undo.peekRedo();
     this.events.emit('undoState', {
-      undo: u ? undoLabel(u, getBuilding(u.defId).name) : null,
-      redo: r ? undoLabel(r, getBuilding(r.defId).name) : null,
+      undo: u ? undoLabel(u, nameOfBuilding) : null,
+      redo: r ? undoLabel(r, nameOfBuilding) : null,
     });
   }
 

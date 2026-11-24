@@ -157,7 +157,7 @@ export class TrafficTool implements Tool {
       const dir = roads.direction(e);
       const native = getRoadType(e.typeId).oneWay;
       const next = native ? (dir === 1 ? -1 : 1) : dir === 0 ? 1 : dir === 1 ? -1 : 0;
-      roads.setOneWay(e.id, next);
+      city.editRoads(next === 0 ? 'Çift yön' : 'Tek yön', () => roads.setOneWay(e.id, next));
       this.ctx.events.emit('sfx', 'click');
       this.ctx.events.emit('toast', { kind: 'info', text: next === 0 ? 'Yol çift yönlü yapıldı' : 'Yol tek yönlü yapıldı' });
     } else if (this.hoverNode !== null && this.state.mode === 'roundabout') {
@@ -180,11 +180,15 @@ export class TrafficTool implements Tool {
         return;
       }
       const cost = want === 'lights' ? LIGHTS_COST : want === 'stop' ? STOP_COST : 0;
-      if (cost > 0 && !city.treasury.spend(cost, 'infra')) {
+      if (cost > 0 && !city.treasury.canAfford(cost)) {
         this.ctx.events.emit('toast', { kind: 'error', text: 'Yetersiz bütçe' });
         return;
       }
-      roads.setControl(n.id, want);
+      // Junction controls are road equipment (paid and refunded on the road ledger).
+      city.editRoads(want === 'lights' ? 'Trafik lambası' : want === 'stop' ? 'Dur levhası' : 'Kavşak kontrolü kaldırma', () => {
+        if (cost > 0) city.treasury.spend(cost, 'roads');
+        roads.setControl(n.id, want);
+      });
       this.ctx.events.emit('sfx', want ? 'place' : 'demolish');
       this.ctx.events.emit('toast', { kind: 'info', text: want === 'lights' ? 'Trafik lambası kuruldu' : want === 'stop' ? 'Dur levhaları kondu' : 'Kavşak kontrolü kaldırıldı' });
     }

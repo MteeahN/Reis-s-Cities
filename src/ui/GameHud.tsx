@@ -2,6 +2,7 @@ import { useEffect, type CSSProperties } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { saveCity } from '../store/saveManager';
 import { AchievementsPanel } from './panels/AchievementsPanel';
+import { FeedPanel } from './panels/FeedPanel';
 import { StatsPanel } from './panels/StatsPanel';
 import { DemandMeter } from './hud/DemandMeter';
 import { LayerLegend } from './hud/LayerLegend';
@@ -35,6 +36,7 @@ export function GameHud() {
       <SettingsMenu />
       <StatsPanel />
       <AchievementsPanel />
+      <FeedPanel />
       <Toasts />
       <Tutorial />
       <LayerLegend />

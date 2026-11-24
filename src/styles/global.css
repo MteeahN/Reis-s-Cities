@@ -2091,3 +2091,118 @@ kbd {
 .elev-value.raised {
   color: var(--accent);
 }
+
+/* Kent Sesi — citizens' feed */
+.count-badge.alert {
+  background: #e5484d;
+  color: #fff;
+}
+.feed-panel {
+  width: 380px;
+  max-height: calc(100vh - 150px);
+  display: flex;
+  flex-direction: column;
+}
+.feed-panel .panel-header .muted {
+  margin-left: auto;
+  margin-right: 8px;
+}
+.feed-filters {
+  margin-top: 8px;
+}
+.feed-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.feed-post {
+  display: flex;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  border-left: 3px solid var(--border);
+}
+.feed-post.kind-complaint { border-left-color: #e5484d; }
+.feed-post.kind-request { border-left-color: #e0a321; }
+.feed-post.kind-praise { border-left-color: #3fd1a0; }
+.feed-post.kind-news { border-left-color: #4c8dff; }
+.feed-avatar {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+}
+.feed-body {
+  min-width: 0;
+  flex: 1;
+}
+.feed-head {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+}
+.feed-author {
+  font-weight: 700;
+  color: var(--text);
+}
+.feed-handle,
+.feed-time {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.feed-text {
+  margin: 3px 0 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.feed-foot {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 10.5px;
+}
+.feed-kind {
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+}
+.feed-kind.kind-complaint { color: #ff8a8d; }
+.feed-kind.kind-request { color: #f0c05a; }
+.feed-kind.kind-praise { color: #3fd1a0; }
+.feed-kind.kind-news { color: #7fb0ff; }
+.feed-affected {
+  color: var(--muted);
+}
+.feed-show {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 10.5px;
+}
+.feed-show:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}

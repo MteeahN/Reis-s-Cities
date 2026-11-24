@@ -26,6 +26,7 @@ import type { InfoLayerId } from '../game/rendering/InfoLayers';
 import type { CellInfo } from '../game/world/WorldGrid';
 import type { CitySaveData, SaveMeta } from '../game/save/CitySave';
 import type { AchievementView } from '../game/systems/Achievements';
+import type { FeedPost } from '../game/systems/CitizenFeed';
 import type { StatsSample } from '../game/systems/StatsHistory';
 
 export type Screen = 'menu' | 'loading' | 'playing' | 'error';
@@ -103,8 +104,11 @@ export interface GameUIState {
   lastSavedAt: number | null;
   achievements: AchievementView[];
   history: StatsSample[];
-  /** Open HUD popup (achievements or statistics). */
-  popup: 'achievements' | 'stats' | null;
+  /** Open HUD popup (achievements, statistics or the citizens' feed). */
+  popup: 'achievements' | 'stats' | 'feed' | null;
+  feed: FeedPost[];
+  /** Feed posts that arrived since the feed was last opened. */
+  feedUnread: number;
 
   set: (partial: Partial<GameUIState>) => void;
   pushToast: (kind: ToastKind, text: string) => void;
@@ -148,6 +152,8 @@ export const INITIAL_GAME_STATE = {
   achievements: [] as AchievementView[],
   history: [] as StatsSample[],
   popup: null as GameUIState['popup'],
+  feed: [] as FeedPost[],
+  feedUnread: 0,
 };
 
 export const useGameStore = create<GameUIState>((set) => ({

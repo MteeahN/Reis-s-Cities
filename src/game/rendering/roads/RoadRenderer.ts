@@ -205,6 +205,27 @@ export class RoadRenderer {
     return out;
   }
 
+  /**
+   * Shared direction where a road continues into one other road of the same
+   * type without a junction surface (a slight bend), so both ribbons meet on
+   * one mitre line instead of leaving a wedge-shaped gap. Along a → b of the
+   * edge; undefined where the joint gets a junction surface.
+   */
+  private mitreAt(nodeId: number, edgeId: number, atA: boolean): P2 | undefined {
+    const n = this.graph.nodes.get(nodeId);
+    if (!n || n.edges.length !== 2 || this.needsCap(nodeId)) return undefined;
+    const e = this.graph.edges.get(edgeId)!;
+    const other = this.graph.edges.get(n.edges[0] === edgeId ? n.edges[1] : n.edges[0])!;
+    const de = this.graph.directionFrom(e, nodeId);
+    const dOther = this.graph.directionFrom(other, nodeId);
+    let x = de.x - dOther.x;
+    let z = de.z - dOther.z;
+    const l = Math.hypot(x, z) || 1;
+    x /= l;
+    z /= l;
+    return atA ? { x, z } : { x: -x, z: -z };
+  }
+
   /** Metres a road stops short of a junction (where the junction surface and its crosswalks begin). */
   setbackAt(nodeId: number, edgeId: number): number {
     return this.setbacks(nodeId).get(edgeId) ?? 0;
@@ -288,6 +309,8 @@ export class RoadRenderer {
         trimB: this.setbackAt(e.b, eid),
         wallA: degA === 1,
         wallB: degB === 1,
+        joinA: this.mitreAt(e.a, eid, true),
+        joinB: this.mitreAt(e.b, eid, false),
       });
       this.edges.set(eid, { chunk, typeId: this.materialKey(e), a: e.a, b: e.b, data });
       this.dirty.add(chunk);

@@ -89,6 +89,11 @@ export class RoadTool implements Tool {
     this.preview.hide();
   }
 
+  /** Drops the road being drawn (after undo / redo changed the network under it). */
+  reset(): void {
+    if (this.start || this.control) this.cancel();
+  }
+
   private cancel(): void {
     this.start = null;
     this.control = null;

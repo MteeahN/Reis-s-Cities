@@ -37,7 +37,8 @@ oyunlarından gelir; isim, görsel, model ve kod tamamen özgündür.
 | Trafik | Sefer üretimi, çekim modeli, rota ataması, BPR gecikmesi; araç ve yaya görselleri | `simulation/traffic/` |
 | Ekonomi | Vergi oranları, günlük rapor, 14 günlük geçmiş, krediler | `systems/Economy.ts`, `Treasury.ts` |
 | Görevler | 26 görev; ödül parası ve XP, şehir seviyesi | `systems/Achievements.ts` |
-| Geri al | Elle konan binaların yerleştirme / yıkım / taşıma işlemleri | `systems/UndoHistory.ts`, `City.ts` |
+| Geri al | Binalar, yollar (yapım, yenileme, yıkım, tek yön, kavşak kontrolü, döner kavşak), bölgeleme, hatlar | `systems/UndoHistory.ts`, `City.ts` |
+| Kent Sesi | Vatandaş gönderileri; yalnızca şehrin gerçek verisinden (sorunlar, talep, kapsama, trafik, vergi, mutluluk) | `systems/CitizenFeed.ts` |
 
 ## İlerleme
 

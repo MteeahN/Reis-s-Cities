@@ -121,6 +121,13 @@ export interface EdgeMeshOptions {
   /** Close the ribbon end with a wall (dead ends). */
   wallA?: boolean;
   wallB?: boolean;
+  /**
+   * Mitre direction at an untrimmed end where the road continues into another
+   * road of the same type at a slight bend (unit vector, along a → b). The end
+   * row is turned to it and widened so both ribbons share the same edge line.
+   */
+  joinA?: P2;
+  joinB?: P2;
 }
 
 interface Row {
@@ -189,13 +196,28 @@ export function buildEdgeMesh(
     trimB *= k;
   }
   const rows = trimRows(prof, trimA, len - trimB);
+  // Mitred ends: turn the end row to the shared direction and widen it by 1 / cos(half the bend).
+  const widen = rows.map(() => 1);
+  const mitre = (idx: number, m: P2 | undefined) => {
+    if (!m) return;
+    const r = rows[idx];
+    const c = r.t.x * m.x + r.t.z * m.z;
+    if (c < 0.5) return;
+    rows[idx] = { ...r, t: { x: m.x, z: m.z } };
+    widen[idx] = 1 / c;
+  };
+  if (trimA === 0) mitre(0, opts.joinA);
+  if (trimB === 0) mitre(rows.length - 1, opts.joinB);
   const out: EdgeMeshData = { positions: [], normals: [], uvs: [], indices: [], pillars: [] };
-  const half = width / 2;
-  const sw = Math.min(opts.sidewalk ?? 0, half * 0.45);
-  const curb = sw > 0 ? CURB_HEIGHT : 0;
-  const us = sw / width;
-  for (const r of rows) {
+  const baseHalf = width / 2;
+  const baseSw = Math.min(opts.sidewalk ?? 0, baseHalf * 0.45);
+  const curb = baseSw > 0 ? CURB_HEIGHT : 0;
+  const us = baseSw / width;
+  for (let ri = 0; ri < rows.length; ri++) {
+    const r = rows[ri];
     const { p, t } = r;
+    const half = baseHalf * widen[ri];
+    const sw = baseSw * widen[ri];
     const nx = -t.z;
     const nz = t.x;
     const y = r.h + lift;

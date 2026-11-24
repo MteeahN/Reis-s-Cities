@@ -20,6 +20,8 @@
     kavisli yolda binaların yola taşmaması, araçların birbirine girmemesi, daha seyrek araç ve yaya
 13. ✅ Şehrin dışından geçen kavisli şehirlerarası yol ve tek bağlantı yolu, yükseltilmiş yollar ve üst geçitler,
     döner kavşak, yüksek katlı oteller ve kumarhaneler; fütüristik stil kaldırıldı
+14. ✅ Yollar, bölgeleme, hatlar ve trafik düzenlemeleri için geri al / yinele; Kent Sesi vatandaş akışı;
+    aynı türden yolların açılı eklemlerinde gönye
 
 ## Bilinen sınırlar (dürüst durum)
 
@@ -31,7 +33,9 @@
 - Döner kavşakta araçlar halkaya girerken içerideki araca ayrıca yol vermez; kavşak beklemesi trafik modelinde
   ışıksız kavşak gibi hesaplanır.
 
-- Geri al yalnızca elle konan binaları kapsar; yollar, bölgeler ve hatlar geri alınmaz.
+- Geri al kapsamı: binalar, yollar, bölgeleme, hatlar ve trafik düzenlemeleri. Arazi satın alma, vergi ve kredi
+  geri alınmaz; bölgelemeyi geri almak o bölgeleme yüzünden yıkılan büyüyen binaları geri getirmez.
+- Kent Sesi kayda yazılmaz; yüklenen şehirde akış boş başlar ve şehrin o anki durumundan yazılır.
 - Toplu taşıma (otobüs hatları, metro, tren) yok.
 - Tünel ve araç girmeyen yaya yolu yok.
 - Peyzaj aracı (arazi düzenleme, su, bahçe) yok; menüde kilitli ve nedeni yazılı.

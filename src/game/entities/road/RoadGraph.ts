@@ -68,6 +68,8 @@ export class RoadGraph {
   private controlListeners = new Set<() => void>();
   /** Bumped when one-way settings or junction controls change. */
   controlsVersion = 0;
+  /** Bumped by every change to the network (topology, types, controls). */
+  version = 0;
   private batchDepth = 0;
   private pending: RoadChange = { added: [], removed: [] };
 
@@ -86,6 +88,7 @@ export class RoadGraph {
 
   private controlsChanged(): void {
     this.controlsVersion++;
+    this.version++;
     this.controlListeners.forEach((l) => l());
   }
 
@@ -141,6 +144,7 @@ export class RoadGraph {
   }
 
   private record(kind: 'added' | 'removed', id: number): void {
+    this.version++;
     this.pending[kind].push(id);
     if (this.batchDepth === 0) this.flush();
   }
@@ -357,6 +361,64 @@ export class RoadGraph {
     let totalLength = 0;
     for (const e of this.edges.values()) totalLength += e.length;
     return { edges: this.edges.size, nodes: this.nodes.size, junctions, deadEnds, totalLength };
+  }
+
+  /**
+   * Makes the network equal to saved data, touching only what differs (one
+   * change set): undo / redo of road edits. Ids are never reused, so an edge
+   * with the same id has the same geometry.
+   */
+  applySnapshot(data: RoadGraphData): void {
+    const want = new Map(data.edges.map((e) => [e.id, e]));
+    let controls = false;
+    this.batch(() => {
+      for (const e of [...this.edges.values()]) {
+        const w = want.get(e.id);
+        if (!w || w.a !== e.a || w.b !== e.b) this.removeEdge(e.id, true);
+        else if (w.typeId !== e.typeId) this.setEdgeType(e.id, w.typeId, 0);
+      }
+      for (const n of data.nodes) {
+        let cur = this.nodes.get(n.id);
+        if (!cur) {
+          cur = { id: n.id, x: n.x, z: n.z, edges: [], ...(typeof n.el === 'number' && n.el > 0 ? { y: n.el } : {}) };
+          this.nodes.set(n.id, cur);
+        }
+        const ctl = n.ctl === 'lights' || n.ctl === 'stop' ? n.ctl : undefined;
+        if (cur.control !== ctl) {
+          if (ctl) cur.control = ctl;
+          else delete cur.control;
+          controls = true;
+        }
+      }
+      for (const w of data.edges) {
+        let e = this.edges.get(w.id);
+        if (!e) e = this.addEdge(w.a, w.b, w.typeId, { x: w.cx, z: w.cz }, w.cost, w.id);
+        e.cost = w.cost;
+        const ow = w.ow === 1 || w.ow === -1 ? w.ow : undefined;
+        if (e.oneWay !== ow) {
+          if (ow) e.oneWay = ow;
+          else delete e.oneWay;
+          controls = true;
+        }
+      }
+      for (const [id, n] of this.nodes) if (n.edges.length === 0) this.nodes.delete(id);
+      this.nextId = Math.max(this.nextId, data.nextId);
+    });
+    if (controls) this.controlsChanged();
+  }
+
+  /** Edges in `data` that this network does not have yet (what applySnapshot would build). */
+  missingEdges(data: RoadGraphData): QuadBezier[] {
+    const nodes = new Map(data.nodes.map((n) => [n.id, n]));
+    const out: QuadBezier[] = [];
+    for (const w of data.edges) {
+      const e = this.edges.get(w.id);
+      if (e && e.a === w.a && e.b === w.b) continue;
+      const a = nodes.get(w.a);
+      const b = nodes.get(w.b);
+      if (a && b) out.push({ p0: { x: a.x, z: a.z }, p1: { x: w.cx, z: w.cz }, p2: { x: b.x, z: b.z } });
+    }
+    return out;
   }
 
   serialize(): RoadGraphData {

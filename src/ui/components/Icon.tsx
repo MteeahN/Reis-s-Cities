@@ -53,6 +53,8 @@ const PATHS = {
   chevronLeft: 'M15 18l-6-6 6-6',
   chevronRight: 'M9 18l6-6-6-6',
   chevronUp: 'M6 15l6-6 6 6',
+  chat: 'M4 5h16v11H9l-5 4zM8 9h8M8 12h5',
+  heart: 'M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z',
   chevronDown: 'M6 9l6 6 6-6',
   elevated: 'M2 9h20M2 12h20M6 12v9M18 12v9M12 12v9',
   roundabout: 'M12 7a5 5 0 105 5M17 12l-2-2M17 12l2-2M12 2v5M12 17v5M2 12h5M17 12h5',

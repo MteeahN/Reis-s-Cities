@@ -4,9 +4,20 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
 **Mevcut durum: Aşama 8 — Kayıt, başarımlar, yayın (v0.8.0)** — 8 aşamalık planın tamamı bitti.
 
 ### Son eklemeler: oynanış araçları
-- **Geri al / yinele (Ctrl+Z / Ctrl+Y):** elle konan binaların yerleştirme, yıkım ve taşıma işlemleri geri alınır
-  (son 50 işlem). Yerleştirmeyi geri almak tüm parayı geri verir; yıkımı geri almak ödenen iadeyi geri alır. Yer
-  artık doluysa işlem yapılmaz ve nedeni yazılır. Yollar, bölgeler ve hatlar şimdilik geri alınmaz.
+- **Geri al / yinele (Ctrl+Z / Ctrl+Y, son 50 işlem):** elle konan binalar (yerleştirme, yıkım, taşıma), yollar
+  (yapım, yenileme, yıkım, tek yön, trafik lambası / dur levhası, döner kavşak), bölgeleme ve elektrik hattı / su
+  borusu (yapım, yıkım). Para da geri döner: yapımı geri almak ödenen bedeli iade eder, yıkımı geri almak alınan
+  iadeyi geri öder. Geri gelen yolun yerinde artık bir bina varsa ya da para yetmiyorsa işlem yapılmaz ve nedeni
+  yazılır. Bölgelemeyi geri almak, o bölgeleme yüzünden yıkılan büyüyen binaları geri getirmez.
+- **Kent Sesi (sohbet simgesi):** vatandaşların gönderi akışı. Gönderiler şehrin gerçek verisinden yazılır:
+  elektriksiz / susuz / kanalizasyonsuz binalar, çöp, yangın, işsizlik, eleman açığı, konut ve dükkân talebi,
+  trafik yoğunluğu, uzun yol süresi, polis / itfaiye / sağlık / okul kapsaması, suç, sağlık, gürültü, terk edilmiş
+  binalar, yüksek vergi, mutluluk, borç ve nüfus eşikleri. Her gönderide gerçek sayı yazar ("4 bina elektriksiz");
+  sorun sürdükçe birkaç günde bir tekrar yazılır, çözülünce teşekkür gelir. "Göster" kamerayı sorunun yerine
+  götürür. Okunmamış gönderi sayısı simgede görünür. Akış kayda yazılmaz; yüklenen şehirde şehrin o anki
+  durumundan yeniden başlar.
+- **Yol eklemleri:** aynı türden iki yol hafif açıyla birleştiğinde uçları ortak bir gönye çizgisinde buluşur;
+  araya yırtık gibi görünen boşluk girmez.
 - **Taşı (M):** simge, hizmet ve altyapı binaları ücretsiz taşınır; binaya tıklayın, R ile döndürün, yeni yere tıklayın.
   Bölgede büyüyen binalar taşınmaz.
 - **Katalog:** her bina menüsünde arama, sıralama (ad, fiyat, boyut) ve favoriler (★, tarayıcıda saklanır).

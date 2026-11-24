@@ -146,7 +146,8 @@ export function TopBar() {
   const popup = useGameStore((s) => s.popup);
   const saving = useGameStore((s) => s.saving);
   const earned = useGameStore((s) => s.achievements.filter((a) => a.earnedAt !== null).length);
-  const togglePopup = (p: 'achievements' | 'stats') => set({ popup: popup === p ? null : p, settingsOpen: false, helpOpen: false });
+  const unread = useGameStore((s) => s.feedUnread);
+  const togglePopup = (p: 'achievements' | 'stats' | 'feed') => set({ popup: popup === p ? null : p, settingsOpen: false, helpOpen: false, ...(p === 'feed' ? { feedUnread: 0 } : {}) });
 
   return (
     <header className="topbar panel">
@@ -179,6 +180,10 @@ export function TopBar() {
         <div className="divider" />
         <button className={`icon-btn ${saving ? 'active' : ''}`} onClick={() => void saveCity('manual')} disabled={saving} title="Kaydet (Ctrl+S)" data-testid="btn-save">
           <Icon name="save" size={18} />
+        </button>
+        <button className={`icon-btn badge-btn ${popup === 'feed' ? 'active' : ''}`} onClick={() => togglePopup('feed')} title="Kent Sesi — vatandaşların istekleri ve şikâyetleri" data-testid="btn-feed">
+          <Icon name="chat" size={18} />
+          {unread > 0 && <span className="count-badge alert" data-testid="feed-unread">{unread > 99 ? '99+' : unread}</span>}
         </button>
         <button className={`icon-btn ${popup === 'stats' ? 'active' : ''}`} onClick={() => togglePopup('stats')} title="İstatistikler" data-testid="btn-stats">
           <Icon name="chart" size={18} />

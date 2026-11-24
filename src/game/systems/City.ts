@@ -3,7 +3,7 @@ import { growablePrice, type DistrictRules } from '../data/buildings';
 import { CELL_SIZE, GRID_CELLS, START_TILES, TILE_CELLS, WORLD_SIZE, TILES_PER_SIDE } from '../core/config';
 import { LINE_TYPES, type LineKind } from '../data/infrastructure';
 import { UtilityLines } from '../entities/infra/UtilityLines';
-import type { P2 } from '../entities/road/curve';
+import { sampleBezier, type P2 } from '../entities/road/curve';
 import { ServiceCoverage } from '../simulation/Services';
 import { computeUtilities, type UtilityResult } from '../simulation/Utilities';
 import { getBuilding } from '../data/buildings';
@@ -24,7 +24,7 @@ import type { World } from '../world/World';
 import { ZoneMap } from '../world/ZoneMap';
 import { Economy } from './Economy';
 import { Treasury } from './Treasury';
-import { UndoHistory, type Spot, type UndoEntry } from './UndoHistory';
+import { UndoHistory, type CellZoning, type Spot, type UndoEntry } from './UndoHistory';
 
 export const DEMOLISH_REFUND = 0.5;
 export const MIN_LINE_LENGTH = 8;
@@ -241,7 +241,10 @@ export class City {
   buildLine(plan: LinePlan): boolean {
     const fresh = this.planLine(plan.kind, plan.a, plan.b);
     if (!fresh.valid || !this.treasury.spend(fresh.cost, 'infra')) return false;
-    this.linesOf(plan.kind).add(fresh.a, fresh.b, fresh.cost);
+    const l = this.linesOf(plan.kind).add(fresh.a, fresh.b, fresh.cost);
+    if (this.recording) {
+      this.undo.push({ kind: 'line', label: `${LINE_TYPES[plan.kind].name} yapımı`, lineKind: plan.kind, op: 'add', line: { id: l.id, a: l.a, b: l.b, cost: l.cost }, net: -fresh.cost });
+    }
     return true;
   }
 
@@ -252,18 +255,39 @@ export class City {
 
   demolishLine(kind: LineKind, id: number): number {
     const refund = this.lineRefund(kind, id);
-    if (!this.linesOf(kind).remove(id)) return 0;
+    const l = this.linesOf(kind).remove(id);
+    if (!l) return 0;
     this.treasury.refund(refund, 'infra');
+    if (this.recording) {
+      this.undo.push({ kind: 'line', label: `${LINE_TYPES[kind].name} yıkımı`, lineKind: kind, op: 'remove', line: { id: l.id, a: l.a, b: l.b, cost: l.cost }, net: refund });
+    }
     return refund;
   }
 
   // ---------------------------------------------------------------- roads
 
+  /**
+   * Runs a player edit of the road network and records it for undo: the
+   * network before and after, and what it cost. Nothing is recorded if the
+   * network did not change.
+   */
+  editRoads<T>(label: string, fn: () => T): T {
+    if (!this.recording) return fn();
+    const before = this.roads.serialize();
+    const version = this.roads.version;
+    const balance = this.treasury.balance;
+    const out = fn();
+    if (this.roads.version !== version) this.undo.push({ kind: 'roads', label, before, after: this.roads.serialize(), net: this.treasury.balance - balance });
+    return out;
+  }
+
   /** Builds a validated plan; returns the end node id (for chaining) or null. */
   buildRoad(plan: RoadPlan): number | null {
     if (!plan.valid || !this.treasury.canAfford(plan.cost)) return null;
-    this.treasury.spend(plan.cost, 'roads');
-    return commitRoad(this.roads, plan).endNode;
+    return this.editRoads(`${getRoadType(plan.typeId).name} yapımı`, () => {
+      this.treasury.spend(plan.cost, 'roads');
+      return commitRoad(this.roads, plan).endNode;
+    });
   }
 
   planRoundabout(nodeId: number): RoundaboutPlan {
@@ -273,9 +297,12 @@ export class City {
   /** Builds a validated roundabout (pays for the ring); false if it can no longer be built. */
   buildRoundabout(plan: RoundaboutPlan): boolean {
     const fresh = this.planRoundabout(plan.nodeId);
-    if (!fresh.valid || !this.treasury.spend(fresh.cost, 'roads')) return false;
-    commitRoundabout(this.roads, fresh);
-    return true;
+    if (!fresh.valid || !this.treasury.canAfford(fresh.cost)) return false;
+    return this.editRoads('Döner kavşak', () => {
+      this.treasury.spend(fresh.cost, 'roads');
+      commitRoundabout(this.roads, fresh);
+      return true;
+    });
   }
 
   planUpgrade(edgeId: number, type: RoadTypeDef): UpgradePlan | null {
@@ -285,10 +312,13 @@ export class City {
 
   upgradeRoad(plan: UpgradePlan): boolean {
     if (!plan.valid || !this.roads.edges.has(plan.edgeId)) return false;
-    if (!this.treasury.spend(plan.netCost, 'roads')) return false;
-    const e = this.roads.edges.get(plan.edgeId)!;
-    this.roads.setEdgeType(plan.edgeId, plan.toTypeId, plan.cost - e.cost);
-    return true;
+    if (!this.treasury.canAfford(plan.netCost)) return false;
+    return this.editRoads(`${getRoadType(plan.toTypeId).name} olarak yenileme`, () => {
+      this.treasury.spend(plan.netCost, 'roads');
+      const e = this.roads.edges.get(plan.edgeId)!;
+      this.roads.setEdgeType(plan.edgeId, plan.toTypeId, plan.cost - e.cost);
+      return true;
+    });
   }
 
   roadRefund(edgeId: number): number {
@@ -298,10 +328,13 @@ export class City {
 
   demolishRoad(edgeId: number): number {
     const refund = this.roadRefund(edgeId);
-    if (!this.roads.edges.has(edgeId)) return 0;
-    this.roads.removeEdge(edgeId);
-    this.treasury.refund(refund, 'roads');
-    return refund;
+    const e = this.roads.edges.get(edgeId);
+    if (!e) return 0;
+    return this.editRoads(`${getRoadType(e.typeId).name} yıkımı`, () => {
+      this.roads.removeEdge(edgeId);
+      this.treasury.refund(refund, 'roads');
+      return refund;
+    });
   }
 
   // ---------------------------------------------------------------- outside connection
@@ -488,6 +521,43 @@ export class City {
    * buildings already standing there take the new style).
    */
   setZone(cells: Iterable<number>, type: ZoneType, style?: ArchStyle, rules?: DistrictRules): number {
+    if (!this.recording) return this.applyZone(cells, type, style, rules);
+    const list = [...cells];
+    const snap = (k: number): CellZoning => ({ k, zone: this.zones.zone[k], style: this.districtStyle[k], wealth: this.districtWealth[k], height: this.districtHeight[k] });
+    const before = list.map(snap);
+    const n = this.applyZone(list, type, style, rules);
+    const changed = before.filter((b) => {
+      const a = snap(b.k);
+      return a.zone !== b.zone || a.style !== b.style || a.wealth !== b.wealth || a.height !== b.height;
+    });
+    if (changed.length) {
+      const label = type === ZoneType.None ? 'Bölge kaldırma' : `${getZone(type).name} bölgeleme`;
+      this.undo.push({ kind: 'zone', label, before: changed, after: changed.map((b) => snap(b.k)) });
+    }
+    return n;
+  }
+
+  /** Puts cells back to recorded zoning (undo / redo of a zoning stroke). */
+  private restoreZoning(cells: CellZoning[]): void {
+    const byZone = new Map<number, number[]>();
+    for (const c of cells) {
+      const list = byZone.get(c.zone) ?? [];
+      list.push(c.k);
+      byZone.set(c.zone, list);
+      this.districtWealth[c.k] = c.wealth;
+      this.districtHeight[c.k] = c.height;
+    }
+    for (const [zone, list] of byZone) this.applyZone(list, zone as ZoneType);
+    const byStyle = new Map<number, number[]>();
+    for (const c of cells) {
+      const list = byStyle.get(c.style) ?? [];
+      list.push(c.k);
+      byStyle.set(c.style, list);
+    }
+    for (const [s, list] of byStyle) this.paintStyle(list, archStyleAt(s));
+  }
+
+  private applyZone(cells: Iterable<number>, type: ZoneType, style?: ArchStyle, rules?: DistrictRules): number {
     const valid: number[] = [];
     const restyle: number[] = [];
     const bulldoze = new Set<number>();
@@ -778,9 +848,47 @@ export class City {
     return err;
   }
 
+  /** Applies a treasury change again (redo) or reverses it (undo); false if it cannot be paid. */
+  private settle(net: number, dir: 'undo' | 'redo', ledger: 'roads' | 'infra'): boolean {
+    const delta = dir === 'undo' ? -net : net;
+    if (delta < 0) return this.treasury.spend(-delta, ledger);
+    if (delta > 0) this.treasury.refund(delta, ledger);
+    return true;
+  }
+
   private replay(e: UndoEntry, dir: 'undo' | 'redo'): string | null {
     this.recording = false;
     try {
+      if (e.kind === 'roads') {
+        const target = dir === 'undo' ? e.before : e.after;
+        // Roads that come back must not run through buildings put up since.
+        for (const curve of this.roads.missingEdges(target)) {
+          for (const p of sampleBezier(curve, 4).points) {
+            const i = Math.floor(p.x / CELL_SIZE);
+            const j = Math.floor(p.z / CELL_SIZE);
+            if (i >= 0 && j >= 0 && i < GRID_CELLS && j < GRID_CELLS && this.occupancy.building[j * GRID_CELLS + i] !== 0) return 'Yolun yerinde artık bir bina var';
+          }
+        }
+        if (!this.treasury.canAfford(Math.max(0, dir === 'undo' ? e.net : -e.net))) return 'Yetersiz bütçe';
+        this.settle(e.net, dir, 'roads');
+        this.roads.applySnapshot(target);
+        return null;
+      }
+      if (e.kind === 'zone') {
+        this.restoreZoning(dir === 'undo' ? e.before : e.after);
+        return null;
+      }
+      if (e.kind === 'line') {
+        const lines = this.linesOf(e.lineKind);
+        const add = (e.op === 'add') === (dir === 'redo');
+        if (!this.treasury.canAfford(Math.max(0, dir === 'undo' ? e.net : -e.net))) return 'Yetersiz bütçe';
+        if (add) {
+          if (lines.lines.has(e.line.id)) return 'Hat zaten var';
+          lines.add(e.line.a, e.line.b, e.line.cost, e.line.id);
+        } else if (!lines.remove(e.line.id)) return 'Hat artık yok';
+        this.settle(e.net, dir, 'infra');
+        return null;
+      }
       if (e.kind === 'move') {
         const to = dir === 'undo' ? e.from : e.to;
         const moved = this.buildings.items.has(e.id) ? this.moveBuilding(e.id, to.i, to.j, to.rot) : null;

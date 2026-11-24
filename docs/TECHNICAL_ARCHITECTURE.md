@@ -54,7 +54,11 @@ React HUD (src/ui)  ←  Zustand store (src/store)  ←  EventBus olayları  ←
 ## Geri al / yinele
 
 `systems/UndoHistory.ts` yalnızca yığınları tutar; `City.undoLast / redoLast` işlemleri uygular. Kapsam:
-elle konan binaların yerleştirme, yıkım ve taşıma işlemleri. Geri alma sırasında kayıt kapalıdır
+elle konan binaların yerleştirme, yıkım ve taşıma işlemleri; yol ağı düzenlemeleri (`City.editRoads` ağın önceki
+ve sonraki `serialize()` halini ve hazine farkını saklar; `RoadGraph.applySnapshot` yalnızca farklı kenarları
+ekler / siler, kimlikler hiç yeniden kullanılmadığı için aynı kimlik aynı geometridir); bölgeleme (değişen
+hücrelerin bölge, stil, refah ve kat sınırı değerleri); hat yapımı / yıkımı (aynı kimlikle geri kurulur).
+Geri gelen yol bina olan bir hücreden geçecekse işlem yapılmaz. Geri alma sırasında kayıt kapalıdır
 (`recording = false`) ki işlem tekrar yığına girmesin. Yer doluysa giriş düşürülür ve oyuncuya neden gösterilir.
 
 ## Kayıt biçimi

@@ -1,4 +1,5 @@
 import type { ArchStyle } from '../data/styles';
+import type { FeedPost } from '../systems/CitizenFeed';
 import type { QualityLevel, QualitySetting } from '../rendering/QualityManager';
 import type { SfxId } from '../audio/AudioEngine';
 import type { Settings } from './settings';
@@ -254,6 +255,8 @@ export type GameEvents = {
   zoneTool: ZoneToolState;
   demand: Demand;
   population: PopulationStats;
+  /** Citizens' feed: every post (newest first) and how many arrived just now. */
+  feed: { posts: FeedPost[]; fresh: number };
   /** Highest population reached (drives unlocks). */
   maxPopulation: number;
   economy: EconomyStats;

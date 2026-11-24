@@ -1,5 +1,7 @@
 import type { Rotation } from '../entities/building/BuildingPlacement';
 import type { ArchStyle } from '../data/styles';
+import type { RoadGraphData } from '../entities/road/RoadGraph';
+import type { LineKind } from '../data/infrastructure';
 
 /** Where a player building stands. */
 export interface Spot {
@@ -8,15 +10,38 @@ export interface Spot {
   rot: Rotation;
 }
 
+/** Zone and district rules of one cell before / after a zoning stroke. */
+export interface CellZoning {
+  k: number;
+  zone: number;
+  style: number;
+  wealth: number;
+  height: number;
+}
+
+/** A power line or pipe segment as built. */
+export interface LineRecord {
+  id: number;
+  a: { x: number; z: number };
+  b: { x: number; z: number };
+  cost: number;
+}
+
 /**
- * One undoable player action. Only hand-placed buildings are covered:
- * placing, bulldozing and moving them. `id` is the building's current id and
- * is rewritten whenever undo/redo recreates it.
+ * One undoable player action: hand-placed buildings (placing, bulldozing,
+ * moving — `id` is the building's current id and is rewritten whenever
+ * undo/redo recreates it), road network edits (building, upgrading,
+ * demolishing, one-way, junction controls, roundabouts — the network before
+ * and after), zoning strokes and utility lines. `net` is the treasury
+ * change the action caused; undo reverses it, redo applies it again.
  */
 export type UndoEntry =
   | { kind: 'place'; id: number; defId: string; at: Spot; cost: number; style?: ArchStyle; tint: number }
   | { kind: 'demolish'; id: number; defId: string; at: Spot; cost: number; refund: number }
-  | { kind: 'move'; id: number; defId: string; from: Spot; to: Spot };
+  | { kind: 'move'; id: number; defId: string; from: Spot; to: Spot }
+  | { kind: 'roads'; label: string; before: RoadGraphData; after: RoadGraphData; net: number }
+  | { kind: 'zone'; label: string; before: CellZoning[]; after: CellZoning[] }
+  | { kind: 'line'; label: string; lineKind: LineKind; op: 'add' | 'remove'; line: LineRecord; net: number };
 
 export const UNDO_LIMIT = 50;
 
@@ -91,13 +116,16 @@ export class UndoHistory {
   }
 }
 
-export function undoLabel(e: UndoEntry, name: string): string {
+/** Player-facing name of an action; `nameOf` gives a building's name from its definition id. */
+export function undoLabel(e: UndoEntry, nameOf: (defId: string) => string): string {
   switch (e.kind) {
     case 'place':
-      return `${name} yerleştirme`;
+      return `${nameOf(e.defId)} yerleştirme`;
     case 'demolish':
-      return `${name} yıkımı`;
+      return `${nameOf(e.defId)} yıkımı`;
     case 'move':
-      return `${name} taşıma`;
+      return `${nameOf(e.defId)} taşıma`;
+    default:
+      return e.label;
   }
 }
