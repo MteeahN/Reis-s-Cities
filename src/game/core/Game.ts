@@ -44,6 +44,8 @@ import { QualityManager, SHADOW_MAP_SIZE, type QualityLevel, type QualitySetting
 import { DayNightCycle } from '../rendering/DayNight';
 import { StreetFurniture } from '../rendering/StreetFurniture';
 import { PostProcessing } from '../rendering/PostProcessing';
+import { Thumbnails } from '../rendering/Thumbnails';
+import type { ArchStyle } from '../data/styles';
 import { timeUniform } from '../rendering/nightUniform';
 import { windowLitShare } from '../rendering/windowLights';
 import { AudioEngine } from '../audio/AudioEngine';
@@ -377,6 +379,15 @@ export class Game {
       achievements: this.achievements.serialize(),
       history: this.history.serialize(),
     };
+  }
+
+  private thumbs: Thumbnails | null = null;
+
+  /** Catalogue picture of a building model (PNG data URL, cached). */
+  buildingThumbnail(defId: string, style: ArchStyle = 'modern'): string {
+    if (!this.renderer) return '';
+    this.thumbs ??= new Thumbnails(this.renderer);
+    return this.thumbs.get(defId, style);
   }
 
   /** Small JPEG of the current view for the load list ('' if the canvas can't be read). */
@@ -800,8 +811,7 @@ export class Game {
     this.vehicles.setMax(g.vehicles);
     this.furniture.setBrightness(g.streetLights);
     this.pedestrians.setMax(g.vehicles);
-    this.post.setBloom(g.bloom);
-    this.post.setStyle(g.artStyle);
+    this.post.setEnabled(g.bloom);
     this.dayNight.mode = g.dayNight;
     if (!initial) this.resize();
   }
@@ -1144,6 +1154,7 @@ export class Game {
     this.furniture?.dispose();
     this.dayNight?.dispose();
     this.post?.dispose();
+    this.thumbs?.dispose();
     this.roadRenderer?.dispose();
     this.powerLineRenderer?.dispose();
     this.pipeRenderer?.dispose();

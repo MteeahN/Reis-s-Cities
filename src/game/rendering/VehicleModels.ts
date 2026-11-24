@@ -1,5 +1,6 @@
 import { BoxGeometry, BufferAttribute, type BufferGeometry, CylinderGeometry, ExtrudeGeometry, MeshStandardMaterial, Shape } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { inkEdges, patchInk } from './ink';
 import { nightUniform } from './nightUniform';
 
 /** Lamp kinds and their emissive colours (linear RGB). */
@@ -57,7 +58,7 @@ function model(prisms: Prism[], parts: Part[], wheels: Wheel[]): BufferGeometry 
       push(new CylinderGeometry(wh.r * 0.58, wh.r * 0.58, wh.w + 0.03, 10).rotateZ(Math.PI / 2).translate(side * wh.x, wh.r, wh.z), RIM);
     }
   }
-  const g = mergeGeometries(geos)!;
+  const g = inkEdges(mergeGeometries(geos)!, 40);
   g.computeBoundingSphere();
   return g;
 }
@@ -218,7 +219,8 @@ export function truckModels(): BufferGeometry[] {
     const c = n.getAttribute('position').count;
     n.setAttribute('color', new BufferAttribute(new Float32Array(c * 3).fill(0.9), 3));
     n.setAttribute('aGlow', new BufferAttribute(new Float32Array(c * 3), 3));
-    const merged = mergeGeometries([g, n])!;
+    g.deleteAttribute('aInk');
+    const merged = inkEdges(mergeGeometries([g, n])!, 40);
     merged.computeBoundingSphere();
     return merged;
   });
@@ -240,6 +242,7 @@ export function vehicleMaterial(): MeshStandardMaterial {
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow * (0.12 + uNight * 4.0);');
   };
   mat.customProgramCacheKey = () => 'reis-vehicle-v2';
+  patchInk(mat, { fade: [250, 900], width: 1 });
   return mat;
 }
 

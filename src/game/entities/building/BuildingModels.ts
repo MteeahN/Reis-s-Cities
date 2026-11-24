@@ -18,6 +18,7 @@ import {
   type Texture,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { inkEdges, patchInk } from '../../rendering/ink';
 import type { BuildingDef, BuildingPart, FacadeStyle } from '../../data/buildings';
 import { HASH_GLSL, nightUniform } from '../../rendering/nightUniform';
 import { PROCEDURAL_VARIANTS, proceduralParts, variantSpec } from './ProceduralBuildings';
@@ -200,9 +201,9 @@ export function buildingGeometry(def: BuildingDef, variant = 0, splitDetail = tr
     height = Math.max(height, part.pos[1] + part.size[1]);
   }
   const result: BuildingGeometry = {
-    plain: plain.length ? mergeGeometries(plain) : null,
-    facade: facade.length ? mergeGeometries(facade) : null,
-    detail: detail.length ? mergeGeometries(detail) : null,
+    plain: plain.length ? inkEdges(mergeGeometries(plain)!) : null,
+    facade: facade.length ? inkEdges(mergeGeometries(facade)!) : null,
+    detail: detail.length ? inkEdges(mergeGeometries(detail)!) : null,
     height,
   };
   result.plain?.computeBoundingSphere();
@@ -417,10 +418,10 @@ export function buildingMaterials(): { plain: MeshStandardMaterial; facade: Mesh
     const atlas = createAtlases();
     const facade = new MeshStandardMaterial({ vertexColors: true, roughness: 0.68, metalness: 0.06, map: atlas.color });
     patchFacade(facade, atlas.glow);
-    materials = {
-      plain: new MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.02 }),
-      facade,
-    };
+    patchInk(facade);
+    const plain = new MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.02 });
+    patchInk(plain);
+    materials = { plain, facade };
   }
   return materials;
 }

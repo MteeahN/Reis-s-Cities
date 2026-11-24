@@ -13,13 +13,14 @@
 9. ✅ Ofis bölgesi, refah ve kat sınırı, 11 mimari stil
 10. ✅ Geri al / yinele, bina taşıma, katalog araması ve favoriler, görev ödülleri, şehir seviyesi, öğretici,
     arayüz boyutu
-11. ✅ Eskiz çizim stili (mürekkep çizgi, suluboya, tarama, kâğıt dokusu); Gerçekçi stile geçiş
+11. ✅ Resimli model görünümü (modellerde mürekkep kenar), katalogda 3B küçük resimler, yol kartı çizimleri,
+    yol sekmeleri, konutta kat sekmeleri, tek yönlü sokak ve cadde
 
 ## Bilinen sınırlar (dürüst durum)
 
 - Geri al yalnızca elle konan binaları kapsar; yollar, bölgeler ve hatlar geri alınmaz.
 - Toplu taşıma (otobüs hatları, metro, tren) yok.
-- Tünel ve yaya yolu yok.
+- Tünel ve araç girmeyen yaya yolu yok.
 - Peyzaj aracı (arazi düzenleme, su, bahçe) yok; menüde kilitli ve nedeni yazılı.
 - Afetler ve danışmanlar yok.
 - Günlük (tekrarlanan) görevler yok; tüm görevler kalıcı.

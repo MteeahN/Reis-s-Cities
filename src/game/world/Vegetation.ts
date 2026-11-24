@@ -11,6 +11,7 @@ import {
 } from 'three';
 import { broadleafHigh, broadleafLow, pineHigh, pineLow, poplarHigh, poplarLow, rock } from '../entities/TreeModels';
 import { patchSway } from '../rendering/foliage';
+import { patchInk } from '../rendering/ink';
 import { Species, VEG_STRIDE, type VegetationSet } from './generation/generateWorld';
 
 interface VegCell {
@@ -58,6 +59,7 @@ export class Vegetation {
   constructor() {
     this.group.name = 'vegetation';
     patchSway(this.material);
+    patchInk(this.material, { fade: [250, 900], strength: 0.6 });
     this.models = {
       pineHigh: pineHigh(),
       pineLow: pineLow(),

@@ -5,7 +5,7 @@ oyunlarından gelir; isim, görsel, model ve kod tamamen özgündür.
 
 ## Temel döngü
 
-1. **Yol çiz** — sokak, cadde, bulvar ve otoyol; düz veya kavisli, kavşaklar ve köprüler kendiliğinden oluşur.
+1. **Yol çiz** — sokak, tek yön sokak ve cadde, ana cadde, bulvar ve otoyol; düz veya kavisli, kavşaklar ve köprüler kendiliğinden oluşur.
 2. **Bölge çiz** — konut, ticaret, sanayi ve ofis. Bölgeye stil, refah ve kat sınırı verilir.
 3. **Altyapı kur** — santral + elektrik hatları, su pompası + borular, atık su arıtma.
 4. **Hizmet ver** — polis, itfaiye, sağlık, eğitim, çöp, parklar. Her birinin gerçek kapsama alanı vardır.
@@ -43,9 +43,10 @@ boyanır; büyüyen binaların çatısı, cephe süsleri ve renkleri değişir. 
 
 ## Görsel stil
 
-Varsayılan görünüm **Eskiz**dir: sahne mürekkep çizgileri, suluboya renkler, gölgelerde kalem taraması ve kâğıt
-dokusuyla elle çizilmiş gibi görünür. Gece kâğıt koyulaşır, ışıklı pencereler parlamaya devam eder. Ayarlar →
-Grafik → Çizim stili'nden **Gerçekçi** görünüme geçilebilir. Bu bir ekran efektidir; oyun verisini değiştirmez.
+Modeller resimli bir maket gibi görünür: binaların, araçların, yayaların ve ağaçların sert kenarları
+mürekkep çizgisiyle çizilir. Çizgiler modelin kendi malzemesindedir, ekran filtresi değildir; yakında belirgin,
+uzakta solar. Katalog kartları her binanın gerçek 3B modelinden çizilen küçük resimleri gösterir; yol kartları
+yolun genişliğini, şeritlerini, yönünü ve refüjünü çizer.
 
 ## Tasarım kuralları
 

@@ -1,5 +1,6 @@
 import { BoxGeometry, BufferAttribute, type BufferGeometry, CylinderGeometry, DynamicDrawUsage, Group, InstancedBufferAttribute, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, SphereGeometry, Vector3 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { inkEdges, patchInk } from './ink';
 import { CELL_SIZE, GRID_CELLS } from '../core/config';
 import { getRoadType } from '../data/roads';
 import type { BuildingRegistry } from '../entities/building/BuildingRegistry';
@@ -90,7 +91,7 @@ export function figure(body: Body, stride: number): BufferGeometry {
     n.setAttribute('aPart', new BufferAttribute(new Float32Array(c).fill(part), 1));
     return n;
   });
-  const g = mergeGeometries(geos)!;
+  const g = inkEdges(mergeGeometries(geos)!, 45);
   g.computeBoundingSphere();
   return g;
 }
@@ -111,6 +112,7 @@ function figureMaterial(): MeshStandardMaterial {
       );
   };
   mat.customProgramCacheKey = () => 'reis-pedestrian-v2';
+  patchInk(mat, { fade: [60, 220], width: 0.9, strength: 0.7 });
   return mat;
 }
 

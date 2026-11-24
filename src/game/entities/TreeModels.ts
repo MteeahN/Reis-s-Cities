@@ -8,6 +8,7 @@ import {
   IcosahedronGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { inkEdges } from '../rendering/ink';
 import { mulberry32 } from '../world/generation/rng';
 
 /**
@@ -59,8 +60,9 @@ function prepare(part: Part, seed: number): BufferGeometry {
 function build(parts: Part[], seed: number): BufferGeometry {
   const merged = mergeGeometries(parts.map((p, i) => prepare(p, seed + i * 17)));
   if (!merged) throw new Error('Tree model merge failed');
-  merged.computeBoundingSphere();
-  return merged;
+  const inked = inkEdges(merged, 55);
+  inked.computeBoundingSphere();
+  return inked;
 }
 
 const TRUNK_TOP = 0x6b4f36;

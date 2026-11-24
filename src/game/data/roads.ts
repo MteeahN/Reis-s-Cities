@@ -34,7 +34,17 @@ export interface RoadTypeDef {
   /** Whether land along this road can be zoned. */
   zoneable: boolean;
   previewColor: number;
+  /** Catalogue tab: neighbourhood streets, wide roads or highways. */
+  category: RoadCategory;
 }
+
+export type RoadCategory = 'street' | 'wide' | 'highway';
+
+export const ROAD_CATEGORIES: { id: RoadCategory; name: string }[] = [
+  { id: 'street', name: 'Sokaklar' },
+  { id: 'wide', name: 'Geniş yollar' },
+  { id: 'highway', name: 'Otoyol' },
+];
 
 export const ROAD_TYPES: readonly RoadTypeDef[] = [
   {
@@ -58,6 +68,7 @@ export const ROAD_TYPES: readonly RoadTypeDef[] = [
     unlockPopulation: 0,
     zoneable: true,
     previewColor: 0x5eead4,
+    category: 'street',
   },
   {
     id: 'city',
@@ -80,6 +91,7 @@ export const ROAD_TYPES: readonly RoadTypeDef[] = [
     unlockPopulation: 0,
     zoneable: true,
     previewColor: 0x60a5fa,
+    category: 'street',
   },
   {
     id: 'avenue',
@@ -102,6 +114,7 @@ export const ROAD_TYPES: readonly RoadTypeDef[] = [
     unlockPopulation: 2500,
     zoneable: true,
     previewColor: 0xa78bfa,
+    category: 'wide',
   },
   {
     id: 'boulevard',
@@ -124,6 +137,7 @@ export const ROAD_TYPES: readonly RoadTypeDef[] = [
     unlockPopulation: 2500,
     zoneable: true,
     previewColor: 0xf472b6,
+    category: 'wide',
   },
   {
     id: 'highway',
@@ -146,6 +160,54 @@ export const ROAD_TYPES: readonly RoadTypeDef[] = [
     unlockPopulation: 5000,
     zoneable: false,
     previewColor: 0xfbbf24,
+    category: 'highway',
+  },
+  // New types go at the end: the list order sets each type's small render lift.
+  {
+    id: 'oneway1',
+    name: 'Tek Yön Sokak',
+    description: 'Tek şeritli, tek yönlü dar sokak. Kavşaklarda daha az çakışma; çift yöne çevrilemez.',
+    lanes: 1,
+    oneWay: true,
+    width: 7,
+    sidewalk: 1.5,
+    median: 0,
+    centerLine: 'none',
+    costPerMeter: 10,
+    maintenancePerMeter: 0.2,
+    capacity: 450,
+    speedKmh: 40,
+    maxGrade: 0.14,
+    minRadius: 10,
+    allowsBridge: false,
+    bridgeCostMultiplier: 1,
+    unlockPopulation: 0,
+    zoneable: true,
+    previewColor: 0x34d399,
+    category: 'street',
+  },
+  {
+    id: 'oneway2',
+    name: 'Tek Yön Cadde',
+    description: 'İki şeritli, tek yönlü cadde. Aynı genişlikte çift yönlü yoldan daha yüksek akış.',
+    lanes: 2,
+    oneWay: true,
+    width: 10,
+    sidewalk: 2,
+    median: 0,
+    centerLine: 'none',
+    costPerMeter: 16,
+    maintenancePerMeter: 0.32,
+    capacity: 1300,
+    speedKmh: 50,
+    maxGrade: 0.12,
+    minRadius: 14,
+    allowsBridge: true,
+    bridgeCostMultiplier: 4,
+    unlockPopulation: 0,
+    zoneable: true,
+    previewColor: 0x38bdf8,
+    category: 'street',
   },
 ];
 

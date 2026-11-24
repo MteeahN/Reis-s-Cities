@@ -126,8 +126,9 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
 - **Sesler (Web Audio ile üretilir, ses dosyası yok):** ortam sesi kameranın çevresini dinler — yoldaki araç sayısına göre trafik
   uğultusu (oyun duraklayınca kesilir), bina yoğunluğuna göre şehir uğultusu, ağaçlık alanda gündüz kuşlar / gece cırcır böcekleri,
   uzaklaştıkça rüzgâr. Efektler: yol, bina, hat, yıkım, bölgeleme, hata, nüfus hedefi. Ses ilk tıklamada başlar (tarayıcı kuralı).
-- **Çizim stili:** varsayılan **Eskiz** görünümü (mürekkep çizgileri, suluboya renk, kalem taraması, kâğıt dokusu).
-  Ayarlar → Grafik → Çizim stili'nden **Gerçekçi** görünüme geçilir.
+- **Resimli modeller:** binalar, araçlar, yayalar ve ağaçlar mürekkep kenarlı maket görünümünde (ekran filtresi
+  değil, modelin kendi malzemesi). Katalog kartlarında binaların 3B küçük resimleri, yol kartlarında yol kesiti
+  çizimi; yollar Sokaklar / Geniş yollar / Otoyol, konutlar Hepsi / Evler / Az katlı / Yüksek sekmelerinde.
 - **Grafik ayarları:** ön ayar (otomatik/yüksek/orta/düşük) ve tek tek gölge kalitesi, çözünürlük ölçeği, ağaç ve bina detay
   mesafesi, en fazla araç, ışık parlaması (bloom), gündüz/gece. Bir değeri değiştirmek ön ayarı **Özel** yapar.
   **Ses ayarları:** ana ses, ortam, efekt, sessiz. Ayarlar tarayıcıda (localStorage) saklanır; şehir kaydı Aşama 8'de.
@@ -281,7 +282,7 @@ src/
     rendering/   … roads/ (roadGeometry, RoadMaterial, RoadRenderer), BuildingRenderer, PowerLineRenderer,
                  InfoLayers + InfoLayerView (bilgi katmanları), ProblemIcons, VehicleRenderer + VehicleModels (3D araçlar),
                  TrafficOverlay (trafik haritası), DayNight (gündüz/gece), StreetFurniture (lambalar, sokak ağaçları),
-                 PostProcessing (bloom + stil), SketchPass (eskiz), windowLights, foliage (rüzgâr), nightUniform
+                 PostProcessing (bloom), windowLights, foliage (rüzgâr), nightUniform
     audio/       AudioEngine (prosedürel ortam sesi ve efektler)
     simulation/  SimScheduler, CitySimulation (büyüme, nüfus, talep, seviye, terk), Population, Demand,
                  LandValue, LotFinder, Workforce (eğitim-iş eşleştirme), Utilities (elektrik/su/kanalizasyon şebekeleri),

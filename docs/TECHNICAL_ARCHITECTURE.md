@@ -42,12 +42,14 @@ elle konan binaların yerleştirme, yıkım ve taşıma işlemleri. Geri alma s�
 durumu, saat, kamera, görevler, istatistik geçmişi. Kayıt deterministiktir (aynı durum → aynı JSON).
 Eski kayıtlar yüklenirken taşınır (ör. ofis binalarının ofis bölgesine geçmesi).
 
-## Eskiz stili
+## Resimli görünüm
 
-`rendering/SketchPass.ts` tam ekran bir son işlem geçişidir. RenderPass'ın hemen ardından çalışır, sahne
-derinliğinden siluet çizgilerini, renk farkından iç çizgileri çıkarır; rengi suluboya gibi yumuşatır, koyu
-yerlere ekran uzayında tarama ve kâğıt dokusu ekler. Ton eşleme ve bloom sonradan uygulanır.
-`PostProcessing` stil ve bloom'u birlikte yönetir; ikisi de kapalıysa sahne doğrudan çizilir.
+`rendering/ink.ts` iki parçadır. `inkEdges` geometriye üçgen başına ağırlık merkezi koordinatı (`aInk`) yazar;
+neredeyse aynı düzlemdeki komşu üçgenlerin ortak kenarı (dörtgen köşegeni, yumuşak silindir) gizlenir.
+`patchInk` malzemenin mevcut shader yamasını koruyarak bu kenarlara ekranda sabit kalınlıkta çizgi çizer ve
+uzaklıkla soldurur. Örnekleme (instancing) ve araç/yaya/ağaç animasyonlarıyla birlikte çalışır; son işlem
+geçişi gerekmez. `rendering/Thumbnails.ts` katalog resimlerini oyunun kendi renderer'ıyla küçük bir hedefe
+çizer ve önbelleğe alır.
 
 ## Performans
 

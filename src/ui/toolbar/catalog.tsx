@@ -1,6 +1,42 @@
 import { useEffect, useState } from 'react';
 import { growablePrice, type BuildingDef } from '../../game/data/buildings';
+import type { ArchStyle } from '../../game/data/styles';
+import { getGame } from '../../store/gameBridge';
 import { Icon } from '../components/Icon';
+
+// Thumbnails are drawn one per frame so opening a long list never stalls the game.
+const thumbQueue: (() => void)[] = [];
+let pumping = false;
+function pump(): void {
+  if (pumping) return;
+  pumping = true;
+  const step = () => {
+    const job = thumbQueue.shift();
+    if (!job) {
+      pumping = false;
+      return;
+    }
+    job();
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/** 3D picture of a building model on a catalogue card. */
+export function Thumb({ id, style = 'modern' }: { id: string; style?: ArchStyle }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    let live = true;
+    thumbQueue.push(() => {
+      if (live) setUrl(getGame()?.buildingThumbnail(id, style) ?? '');
+    });
+    pump();
+    return () => {
+      live = false;
+    };
+  }, [id, style]);
+  return <span className="card-thumb" aria-hidden>{url ? <img src={url} alt="" draggable={false} /> : null}</span>;
+}
 
 export type CatalogSort = 'default' | 'name' | 'price' | 'size';
 

@@ -2,16 +2,17 @@ import { useState } from 'react';
 import type { DemolishFilter, RoadMode, ToolId, TrafficToolMode, ZoneToolState } from '../../game/core/events';
 import { LIGHTS_COST, STOP_COST } from '../../game/tools/TrafficTool';
 import { ZONES } from '../../game/data/zones';
-import { buildingsInGroup, growablePrice, ZONED_BUILDINGS, type BuildingDef } from '../../game/data/buildings';
+import { buildingsInGroup, growablePrice, storeysOf, ZONED_BUILDINGS, type BuildingDef } from '../../game/data/buildings';
 import { ARCH_STYLE_DEFS, ARCH_STYLES, type ArchStyle } from '../../game/data/styles';
 import { LINE_TYPES } from '../../game/data/infrastructure';
 import { INFO_LAYERS } from '../../game/rendering/InfoLayers';
-import { ROAD_TYPES, isRoadTypeUnlocked } from '../../game/data/roads';
+import { ROAD_CATEGORIES, ROAD_TYPES, isRoadTypeUnlocked, type RoadCategory } from '../../game/data/roads';
 import { getGame } from '../../store/gameBridge';
 import { useGameStore } from '../../store/gameStore';
 import { formatMoney, formatNumber } from '../../utils/format';
 import { Icon, type IconName } from '../components/Icon';
-import { FavStar, useCatalog } from './catalog';
+import { FavStar, Thumb, useCatalog } from './catalog';
+import { RoadSketch } from './RoadSketch';
 
 interface ToolEntry {
   id: string;
@@ -47,8 +48,25 @@ function RoadPicker() {
   const roadType = useGameStore((s) => s.roadType);
   const roadMode = useGameStore((s) => s.roadMode);
   const population = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
+  const [cat, setCat] = useState<RoadCategory>(() => ROAD_TYPES.find((t) => t.id === roadType)?.category ?? 'street');
   return (
     <div className="subtoolbar panel" data-testid="road-types">
+      <div className="mode-group" role="tablist" aria-label="Yol türleri">
+        {ROAD_CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            role="tab"
+            aria-selected={cat === c.id}
+            className={`mode-btn ${cat === c.id ? 'active' : ''}`}
+            onClick={() => setCat(c.id)}
+            data-testid={`road-cat-${c.id}`}
+          >
+            <span>{c.name}</span>
+            <span className="count">{ROAD_TYPES.filter((t) => t.category === c.id).length}</span>
+          </button>
+        ))}
+      </div>
+      <div className="divider vertical" />
       <div className="mode-group" role="group" aria-label="Çizim modu">
         {MODES.map((m) => (
           <button
@@ -64,13 +82,13 @@ function RoadPicker() {
         ))}
       </div>
       <div className="divider vertical" />
-      {ROAD_TYPES.map((t) => {
+      {ROAD_TYPES.filter((t) => t.category === cat).map((t) => {
         const unlocked = isRoadTypeUnlocked(t, population);
         const active = t.id === roadType;
         return (
           <button
             key={t.id}
-            className={`road-type ${active ? 'active' : ''} ${unlocked ? '' : 'locked'}`}
+            className={`road-type road-card ${active ? 'active' : ''} ${unlocked ? '' : 'locked'}`}
             disabled={!unlocked}
             onClick={() => getGame()?.setRoadType(t.id)}
             data-testid={`road-type-${t.id}`}
@@ -80,10 +98,11 @@ function RoadPicker() {
                 : `${formatNumber(t.unlockPopulation)} nüfusta açılır`
             }
           >
-            <span className="road-swatch" style={{ background: `#${t.previewColor.toString(16).padStart(6, '0')}` }}>
-              <span style={{ width: `${Math.min(100, t.width * 3.4)}%` }} />
-            </span>
+            <RoadSketch t={t} />
             <span className="road-name">{t.name}</span>
+            <span className="road-sub">
+              {t.oneWay ? 'tek yön' : 'çift yön'} · {t.lanes} şerit{t.median ? ' · refüj' : ''}
+            </span>
             <span className="road-meta">
               {unlocked ? (
                 `${formatMoney(t.costPerMeter)}/m`
@@ -331,6 +350,7 @@ function InfraPicker({ group, lineKind }: { group: 'power' | 'water' | 'service'
             title={locked ? `${formatNumber(b.unlockPopulation)} nüfusta açılır` : b.description}
             data-testid={`building-type-${b.id}`}
           >
+            <Thumb id={b.id} />
             <span className="road-name">{b.name}</span>
             <FavStar id={b.id} />
             <span className="road-meta">
@@ -380,13 +400,31 @@ const BUILD_TABS = [
   { id: 'off', name: 'Ofis', zone: 4 },
 ] as const;
 
+type HeightBand = 'all' | 'low' | 'mid' | 'high';
+
+const HEIGHT_BANDS: { id: HeightBand; name: string; hint: string }[] = [
+  { id: 'all', name: 'Hepsi', hint: 'Tüm binalar' },
+  { id: 'low', name: 'Alçak', hint: '1–2 kat' },
+  { id: 'mid', name: 'Az katlı', hint: '3–5 kat' },
+  { id: 'high', name: 'Yüksek', hint: '6 kat ve üzeri' },
+];
+
+function inBand(b: BuildingDef, band: HeightBand): boolean {
+  if (band === 'all') return true;
+  const s = storeysOf(b);
+  return band === 'low' ? s <= 2 : band === 'mid' ? s >= 3 && s <= 5 : s >= 6;
+}
+
 function BuildingPicker() {
   const buildingType = useGameStore((s) => s.buildingType);
   const maxPop = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
   const current = ZONED_BUILDINGS.find((b) => b.id === buildingType);
   const [tab, setTab] = useState<(typeof BUILD_TABS)[number]['id']>(current ? BUILD_TABS.find((t) => t.zone === current.zone)!.id : 'landmark');
   const zone = BUILD_TABS.find((t) => t.id === tab)!.zone;
-  const catalog = useCatalog(zone === 0 ? buildingsInGroup('landmark') : ZONED_BUILDINGS.filter((b) => b.zone === zone));
+  const style = useGameStore((s) => s.zoneTool.style);
+  const [height, setHeight] = useState<HeightBand>('all');
+  const zoneList = ZONED_BUILDINGS.filter((b) => b.zone === zone);
+  const catalog = useCatalog(zone === 0 ? buildingsInGroup('landmark') : zoneList.filter((b) => inBand(b, height)));
   const choose = (id: (typeof BUILD_TABS)[number]['id']) => {
     setTab(id);
     const z = BUILD_TABS.find((t) => t.id === id)!.zone;
@@ -402,6 +440,22 @@ function BuildingPicker() {
           </button>
         ))}
       </div>
+      {zone !== 0 && (
+        <div className="mode-group height-bands" role="group" aria-label="Kat sayısı">
+          {HEIGHT_BANDS.map((h) => (
+            <button
+              key={h.id}
+              className={`mode-btn ${height === h.id ? 'active' : ''}`}
+              onClick={() => setHeight(h.id)}
+              title={h.hint}
+              data-testid={`height-band-${h.id}`}
+            >
+              <span>{zone === 1 && h.id === 'low' ? 'Evler' : h.name}</span>
+              <span className="count">{zoneList.filter((b) => inBand(b, h.id)).length}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {catalog.controls}
       {catalog.empty}
       {zone === 0 ? (
@@ -421,6 +475,7 @@ function BuildingPicker() {
                   title={`${b.name} — ${b.level}. seviye, ${people}. Elle yerleştirilir, bölgesi kendiliğinden atanır.`}
                   data-testid={`building-type-${b.id}`}
                 >
+                  <Thumb id={b.id} style={style} />
                   <span className="road-name">{b.name}</span>
                   <FavStar id={b.id} />
                   <span className="road-meta">
@@ -448,6 +503,7 @@ function LandmarkCards({ buildingType, items }: { buildingType: string; items: B
           title={b.description}
           data-testid={`building-type-${b.id}`}
         >
+          <Thumb id={b.id} />
           <span className="road-name">{b.name}</span>
           <FavStar id={b.id} />
           <span className="road-meta">

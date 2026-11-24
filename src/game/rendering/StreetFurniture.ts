@@ -20,6 +20,7 @@ import { getRoadType, type RoadTypeDef } from '../data/roads';
 import type { RoadGraph } from '../entities/road/RoadGraph';
 import { broadleafHigh } from '../entities/TreeModels';
 import { patchSway } from './foliage';
+import { patchInk } from './ink';
 import { nightUniform } from './nightUniform';
 import { sampleProfile, type RoadRenderer, type SurfacePoint } from './roads/RoadRenderer';
 
@@ -113,6 +114,7 @@ export class StreetFurniture {
     this.treeGeo = broadleafHigh();
     this.treeMat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.88 });
     patchSway(this.treeMat);
+    patchInk(this.treeMat, { fade: [250, 900], strength: 0.6 });
     this.lamps = this.mesh(this.lampGeo, this.lampMat, 64, true);
     this.pools = this.mesh(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), this.poolMat, 64, false);
     this.pools.renderOrder = 3;
