@@ -24,7 +24,7 @@ export function walkingShare(hour: number): number {
 }
 
 /** Walkers drawn per person out walking near the camera (one figure stands for several people). */
-export const PEOPLE_PER_WALKER = 6;
+export const PEOPLE_PER_WALKER = 14;
 const WALK_SPEED = 1.35;
 
 /** Body builds; each comes in three walking poses. */

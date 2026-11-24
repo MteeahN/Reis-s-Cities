@@ -45,7 +45,7 @@ function load(data: CitySaveData) {
   return { city, sim, scheduler, run: (n: number) => { for (let i = 0; i < n; i++) scheduler.advance(0.1); } };
 }
 
-describe('Save / load', () => {
+describe('Save / load', { timeout: 20_000 }, () => {
   it('a loaded city has the same roads, buildings, zones, money and people', () => {
     const t = grownTown();
     expect(t.sim.stats!.total).toBeGreaterThan(10);

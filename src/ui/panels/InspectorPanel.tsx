@@ -226,6 +226,7 @@ function RoadPlanCard() {
           {plan.mode === 'upgrade' && plan.fromTypeId && <KV k="Mevcut yol" v={getRoadType(plan.fromTypeId).name} />}
           <KV k="Uzunluk" v={formatMeters(plan.length)} testId="plan-length" />
           {plan.bridgeLength > 0 && <KV k="Köprü" v={formatMeters(plan.bridgeLength)} />}
+          {((plan.elevA ?? 0) > 0 || (plan.elevB ?? 0) > 0) && <KV k="Yükseklik" v={`${plan.elevA ?? 0} m → ${plan.elevB ?? 0} m`} testId="plan-elevation" />}
           {plan.mode !== 'upgrade' && <KV k="En yüksek eğim" v={`%${(plan.maxGrade * 100).toFixed(0)}`} />}
           {plan.junctions > 0 && <KV k="Yeni kavşak" v={plan.junctions} />}
           {plan.refund !== undefined && <KV k="Eski yol iadesi" v={formatMoney(plan.refund)} />}
@@ -236,7 +237,7 @@ function RoadPlanCard() {
       ) : (
         <p className="hint">{hint}</p>
       )}
-      <p className="hint">Ctrl: serbest çizim · Sağ tık / ESC: iptal</p>
+      <p className="hint">Ctrl: serbest çizim · PageUp / PageDown: yükselt / alçalt · Sağ tık / ESC: iptal</p>
     </section>
   );
 }

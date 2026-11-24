@@ -31,13 +31,13 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   taraf); tıklayın veya sürükleyerek birden çok sokağı bölgeleyin.
 - **Mimari stiller:** Modern, Avrupa, Asya, Akdeniz, Osmanlı. Bölgeleme aracında stil seçilir; boyanan hücreler o
   stili alır ve orada büyüyen binalar o stilde çıkar. Aynı bölgeyi başka stille boyamak mevcut binaları da çevirir.
-  Stiller yalnızca renk değil yapı da değiştirir: kiremit ve mansart çatılar, panjurlar, ferforje balkonlar, çizgili
+  Stiller yalnızca renk değil gövde de değiştirir (kat kat, basamaklı, çıkmalı, kuleli); ayrıca: kiremit ve mansart çatılar, panjurlar, ferforje balkonlar, çizgili
   tenteler (Avrupa); geniş saçaklı uçları kalkık çatılar, pagoda tepeler, fenerler, neon tabelalar (Asya); beyaz
   badana, teras çatılar, pergolalar, kemerler, begonviller (Akdeniz); cumbalar, geniş saçaklar, kubbeli çarşılar
   (Osmanlı). Stil kayıtta saklanır. Altı stil daha: İskandinav (koyu kırmızı ahşap, beyaz pervazlar, dik ve çimen
   çatılar), Arap (kerpiç, mazgallı düz çatılar, meşrebiye kafesleri, rüzgâr kuleleri, kubbeler), Slav (pastel sıva,
   oymalı pencere süsleri, soğan kubbeler), Amerikan (verandalı ahşap evler, yangın merdivenleri, çatı su tankları),
-  Orta Çağ (yarım ahşap çatkı, çıkma katlar, köşe kuleleri), Fütüristik (ışık şeritleri, cam kubbeler, halkalar).
+  Orta Çağ (yarım ahşap çatkı, çıkma katlar, köşe kuleleri). Fütüristik stil kaldırıldı.
 - **Ofis bölgesi (O, 500 nüfusta açılır):** bürolar ve iş kuleleri artık ayrı bölgede büyür. Talebi şehrin eğitimli
   (lise ve üniversite) çalışan sayısına göre oluşur; ofisler kirlilik üretmez, ticaret oranından vergi öder. Eski
   kayıtlarda ticaret bölgesindeki ofis binaları yüklenirken ofis bölgesine taşınır.
@@ -55,6 +55,15 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   inşaattan sonra diğerleri gibi yaşar ve gelişir; yıkılırsa bedelin yarısı iade edilir.
 - **Yumuşak sokak lambaları:** gece lamba başlıkları ve yoldaki ışık halkası çok daha hafif ve yayvan; gece parlaması
   (bloom) azaltıldı. Ayarlar → Grafik → "Sokak lambası parlaklığı" ile ayarlanır.
+- **Yükseltilmiş yollar:** yol aracında PageUp / PageDown ya da çubuktaki oklarla 3 m adımlarla 24 m'ye kadar.
+  Yükseltilmiş yol ayaklar üzerinde durur, en az 6 m alçaktaki yolların üzerinden kavşak kurmadan geçer, köprü
+  fiyatına yapılır, kenarına bina yapılmaz ve binalar ona bağlanmaz. Yol ucu yalnızca kendi yüksekliğine yakın
+  yollara bağlanır. Dar sokaklar yükseltilemez.
+- **Döner kavşak:** trafik aracında "Döner kavşak" seçilip 3–6 yollu bir kavşağa tıklanır. Kollar kısalır, iki şeritli
+  tek yönlü bir halka kurulur; araçlar halkada ortası sollarında kalacak şekilde döner. Halka yol fiyatına yapılır;
+  arazi, bina, eğim ve kesişen yol denetlenir.
+- **Oteller ve kumarhaneler:** ticaretin 3. seviyesinde butik otel, otel, lüks otel kulesi, kumarhane ve kumarhane
+  oteli büyür (12–26 kat). Kat sınırlı semtlerde büyümezler.
 - **Trafik düzenleme (K):** yol parçalarını tek yön yapma / yönünü çevirme, kavşaklara trafik lambası (₺600) veya dur
   levhası (₺60). Tek yönlü yol tüm şeritleri tek yöne verir (kapasite iki katı), oklarla ve orta çizgisiz çizilir.
   Kavşak beklemesi trafik modelinde kontrole ve yoğunluğa bağlıdır: kontrolsüz kavşak sakinken hızlı, yoğunken tıkanır;
@@ -126,6 +135,10 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
 - **Sesler (Web Audio ile üretilir, ses dosyası yok):** ortam sesi kameranın çevresini dinler — yoldaki araç sayısına göre trafik
   uğultusu (oyun duraklayınca kesilir), bina yoğunluğuna göre şehir uğultusu, ağaçlık alanda gündüz kuşlar / gece cırcır böcekleri,
   uzaklaştıkça rüzgâr. Efektler: yol, bina, hat, yıkım, bölgeleme, hata, nüfus hedefi. Ses ilk tıklamada başlar (tarayıcı kuralı).
+- **Şehir girişi:** yeni şehir, haritayı baştan sona geçen ve şehrin arazisine girmeden yanından akan bir
+  şehirlerarası yolla başlar; yol geniş kavislerle döner, keskin zikzak yapmaz. Şehre tek yol girer: bir kavşaktan
+  ayrılan bağlantı yolu. Göçmenler, ziyaretçiler, ithal mallar ve ihracat bu yoldan geçer; ona
+  bağlı olmayan sokaklarda bina yapılmaz ve kimse taşınmaz.
 - **Resimli modeller:** binalar, araçlar, yayalar ve ağaçlar mürekkep kenarlı maket görünümünde (ekran filtresi
   değil, modelin kendi malzemesi). Katalog kartlarında binaların 3B küçük resimleri, yol kartlarında yol kesiti
   çizimi; yollar Sokaklar / Geniş yollar / Otoyol, konutlar Hepsi / Evler / Az katlı / Yüksek sekmelerinde.

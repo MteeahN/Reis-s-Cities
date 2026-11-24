@@ -1,7 +1,7 @@
 import { APP_VERSION, GRID_CELLS, TILES_PER_SIDE, type GameSpeed } from '../core/config';
 import { ALL_BUILDINGS } from '../data/buildings';
 import { ROAD_TYPES } from '../data/roads';
-import { ARCH_STYLES } from '../data/styles';
+import { ARCH_STYLES, isArchStyle } from '../data/styles';
 import { HEIGHT_LIMITS } from '../data/buildings';
 import { ZoneType } from '../data/zones';
 import type { PlacedBuilding } from '../entities/building/BuildingRegistry';
@@ -50,6 +50,12 @@ export interface CityState {
   simulation: SimulationSave;
   /** Owned land tiles (1 = owned), TILES_PER_SIDE². */
   unlockTiles: number[];
+  /** Where the intercity highway meets the map edges; absent in older saves (no connection rule). */
+  entries?: { x: number; z: number }[];
+  /** End of the highway link road into the city. */
+  entryLink?: { x: number; z: number };
+  /** Single entry point of saves made before the through highway. */
+  entry?: { x: number; z: number };
 }
 
 export interface CameraSave {
@@ -122,6 +128,8 @@ export function serializeCity(city: City, sim: CitySimulation): CityState {
     styles: rle(city.districtStyle),
     wealth: rle(city.districtWealth),
     heights: rle(city.districtHeight),
+    ...(city.entries.length ? { entries: city.entries.map((e) => ({ x: e.x, z: e.z })) } : {}),
+    ...(city.entryLink ? { entryLink: { x: city.entryLink.x, z: city.entryLink.z } } : {}),
   };
 }
 
@@ -134,7 +142,9 @@ export function restoreCity(city: City, sim: CitySimulation, s: CityState, tick:
   const tiles = s.unlockTiles;
   for (let z = 0; z < TILES_PER_SIDE; z++) for (let x = 0; x < TILES_PER_SIDE; x++) if (tiles[z * TILES_PER_SIDE + x] === 1) city.world.unlock.unlockTile(x, z);
   city.roads.load(s.roads);
-  city.restoreBuildings(s.buildings.items, s.buildings.nextId);
+  // Styles that no longer exist (e.g. the retired futuristic style) fall back to modern.
+  const items = s.buildings.items.map((b) => (b.style && !isArchStyle(b.style) ? { ...b, style: undefined } : b));
+  city.restoreBuildings(items, s.buildings.nextId);
   city.zones.restore(s.zones, (k) => city.occupancy.building[k] === 0 && city.occupancy.road[k] === 0);
   for (const [kind, lines] of [['power', s.lines.power], ['pipe', s.lines.pipe]] as const) {
     const target = city.linesOf(kind);
@@ -143,6 +153,13 @@ export function restoreCity(city: City, sim: CitySimulation, s: CityState, tick:
   }
   city.treasury.restore(s.treasury.balance, s.treasury.spent, s.treasury.refunded);
   if (s.sandbox === true) city.enableSandbox();
+  const pt = (p: unknown): p is { x: number; z: number } => !!p && typeof p === 'object' && Number.isFinite((p as { x: number }).x) && Number.isFinite((p as { z: number }).z);
+  const entries = Array.isArray(s.entries) ? s.entries.filter(pt) : pt(s.entry) ? [s.entry] : [];
+  if (entries.length) {
+    city.entries = entries.map((e) => ({ x: e.x, z: e.z }));
+    if (pt(s.entryLink)) city.entryLink = { x: s.entryLink.x, z: s.entryLink.z };
+    city.outsideEdges();
+  }
   if (Array.isArray(s.styles)) unrle(s.styles, city.districtStyle, ARCH_STYLES.length);
   if (Array.isArray(s.wealth)) unrle(s.wealth, city.districtWealth, 4);
   if (Array.isArray(s.heights)) unrle(s.heights, city.districtHeight, HEIGHT_LIMITS.length);

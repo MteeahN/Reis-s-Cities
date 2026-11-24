@@ -15,8 +15,21 @@
     arayüz boyutu
 11. ✅ Resimli model görünümü (modellerde mürekkep kenar), katalogda 3B küçük resimler, yol kartı çizimleri,
     yol sekmeleri, konutta kat sekmeleri, tek yönlü sokak ve cadde
+12. ✅ Haritayı baştan sona geçen şehirlerarası yol ve şehre bağlantı kavşağı (göç, inşaat, ithalat/ihracat ve
+    ziyaretçiler bu yoldan), trafik kilitlenmesinin çözülmesi, stile göre bina gövdesi,
+    kavisli yolda binaların yola taşmaması, araçların birbirine girmemesi, daha seyrek araç ve yaya
+13. ✅ Şehrin dışından geçen kavisli şehirlerarası yol ve tek bağlantı yolu, yükseltilmiş yollar ve üst geçitler,
+    döner kavşak, yüksek katlı oteller ve kumarhaneler; fütüristik stil kaldırıldı
 
 ## Bilinen sınırlar (dürüst durum)
+
+- Giriş yolundan önce kaydedilmiş şehirlerde giriş yolu yoktur; bu şehirlerde bağlantı kuralı uygulanmaz.
+- Şehirlerarası yol tektir; ikinci bir dış bağlantı (demiryolu, liman, ikinci otoyol) yok. Bağlantı kavşağı
+  hemzemindir; hazır katlı kavşak (yonca) yok, oyuncu yükseltilmiş yollarla üst geçit kurabilir.
+- Yükseltilmiş yolun güvertesi altındaki araziyi izler (yerden sabit yükseklikte); düz bir köprü çizgisi değildir.
+  Altına bina yapılmaz.
+- Döner kavşakta araçlar halkaya girerken içerideki araca ayrıca yol vermez; kavşak beklemesi trafik modelinde
+  ışıksız kavşak gibi hesaplanır.
 
 - Geri al yalnızca elle konan binaları kapsar; yollar, bölgeler ve hatlar geri alınmaz.
 - Toplu taşıma (otobüs hatları, metro, tren) yok.
@@ -24,7 +37,7 @@
 - Peyzaj aracı (arazi düzenleme, su, bahçe) yok; menüde kilitli ve nedeni yazılı.
 - Afetler ve danışmanlar yok.
 - Günlük (tekrarlanan) görevler yok; tüm görevler kalıcı.
-- Katalog bugün 79 bina tanımı içerir (her biri birçok stil ve varyantla çizilir); 600 hedefine ulaşılmadı.
+- Katalog bugün 84 bina tanımı içerir (her biri birçok stil ve varyantla çizilir); 600 hedefine ulaşılmadı.
 - Dokunmatik kontroller temel düzeyde.
 
 ## Sıradaki adımlar (öneri)

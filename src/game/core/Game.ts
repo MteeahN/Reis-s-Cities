@@ -281,6 +281,14 @@ export class Game {
     if (this.options.save) {
       progress(0.9, 'Şehir yükleniyor');
       this.restoreSave(this.options.save);
+    } else if (this.city.buildEntryRoad()) {
+      // Start looking at the highway junction and its link road, where the first streets go.
+      const end = this.city.entryLink!;
+      const c = this.cameraCtl;
+      c.setView(end.x, end.z, c.yaw, c.pitch, 420);
+    } else {
+      // No side of the map allows a straight road: the city plays without the connection rule.
+      console.warn('City entry road could not be laid on this terrain');
     }
     this.pipeRenderer.setSupply(this.city.utilities.pipeSupplied);
     renderer.domElement.addEventListener('webglcontextlost', this.onContextLost);
@@ -457,6 +465,8 @@ export class Game {
     const city = this.city;
     const st = this.citySim.stats;
     const roads = city.roads.stats();
+    // Missions count the player's own roads, not the entry road the game lays.
+    const own = [...city.roads.edges.values()].filter((e) => getRoadType(e.typeId).playerBuildable !== false);
     const zoned = city.zones.countZoned();
     const activeByZone = { residential: 0, commercial: 0, industrial: 0 };
     const services = new Set<ServiceKind>();
@@ -477,8 +487,8 @@ export class Game {
       population: st?.total ?? 0,
       happiness: st?.happiness ?? 0,
       unemploymentRate: st?.unemploymentRate ?? 0,
-      roadLength: roads.totalLength,
-      roadSegments: roads.edges,
+      roadLength: own.reduce((s, e) => s + e.length, 0),
+      roadSegments: own.length,
       junctions: roads.junctions,
       zonedCells: zoned[1] + zoned[2] + zoned[3],
       activeByZone,
@@ -752,6 +762,11 @@ export class Game {
       case 'Equal':
         this.tools.handleKey(code);
         break;
+      case 'PageUp':
+      case 'PageDown':
+        e.preventDefault();
+        this.tools.handleKey(code);
+        break;
       case 'KeyX':
       case 'Delete':
         this.setTool('demolish');
@@ -933,6 +948,11 @@ export class Game {
 
   setDemolishFilter(filter: DemolishFilter): void {
     this.tools.demolish.setFilter(filter);
+  }
+
+  /** Height the road tool builds at (m above the ground). */
+  setRoadElevation(m: number): void {
+    this.tools.road.setElevation(m);
   }
 
   setRoadMode(mode: RoadMode): void {

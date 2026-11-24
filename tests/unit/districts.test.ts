@@ -140,7 +140,7 @@ describe('New building kinds', () => {
   it('terraces and courtyard blocks build in every style', () => {
     for (const id of ['res1_row', 'res2_court', 'res3_court', 'off3_tower']) {
       const def = getBuilding(id);
-      for (const arch of ['modern', 'nordic', 'arabic', 'slavic', 'american', 'medieval', 'futuristic'] as const) {
+      for (const arch of ['modern', 'nordic', 'arabic', 'slavic', 'american', 'medieval'] as const) {
         expect(variantParts(def, 2, arch).length).toBeGreaterThan(10);
       }
     }

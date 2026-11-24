@@ -1,9 +1,9 @@
 import { CELL_SIZE } from '../../core/config';
 import type { BuildingPart } from '../../data/buildings';
 import { ARCH_STYLE_DEFS, type ArchStyle } from '../../data/styles';
-import { decorate, restyleSpec, styledHouseRoof, type Block } from './styleDecor';
+import { decorate, reshapeMassing, restyleSpec, styledHouseRoof, type Block } from './styleDecor';
 
-export type ProceduralStyle = 'house' | 'rowhouse' | 'courtyard' | 'apartment' | 'tower' | 'shop' | 'office' | 'mall' | 'warehouse' | 'factory';
+export type ProceduralStyle = 'house' | 'rowhouse' | 'courtyard' | 'apartment' | 'tower' | 'shop' | 'office' | 'mall' | 'hotel' | 'casino' | 'warehouse' | 'factory';
 
 /** Compact, data-file friendly description of a zoned building's look. */
 export interface ProceduralSpec {
@@ -480,6 +480,133 @@ export function proceduralParts(spec: ProceduralSpec, arch: ArchStyle = 'modern'
       block = { kind: 'mall', cx: 0, cz, bw, bd, h, top: h + 0.9, floors: s.floors, floorH: 4.5 };
       break;
     }
+    case 'hotel': {
+      // Two-storey podium (lobby, restaurants) with a slim guest-room tower set back on it.
+      const pw = W - 1.4;
+      const pd = D - 4.2;
+      const cz = front - 3.2 - pd / 2;
+      const podH = 7.2;
+      parts.push({ shape: 'box', size: [pw, podH, pd], pos: [0, 0.1, cz], color: s.wall, facade: 'shop' });
+      box(parts, [pw + 0.4, 0.45, pd + 0.4], [0, podH + 0.1, cz], s.accent);
+      const wide = W > 10;
+      const tw = pw * (wide ? 0.6 : 0.8);
+      const td = Math.min(pd * 0.55, 7);
+      const tcz = cz - pd * 0.1;
+      const fh = 3.1;
+      const th = s.floors * fh;
+      const y0 = podH + 0.55;
+      parts.push({ shape: 'box', size: [tw, th, td], pos: [0, y0, tcz], color: s.wall, facade: 'residential' });
+      const rounded = wide && v % 2 === 0;
+      if (rounded) {
+        // Rounded glass ends.
+        for (const sx of [-1, 1]) cyl(parts, td, th, [(sx * tw) / 2, y0, tcz], GLASS, 16);
+      } else {
+        // A full-height accent spine on the front.
+        box(parts, [1.4, th + 1.2, 0.6], [0, y0, tcz + td / 2 + 0.3], s.accent);
+      }
+      if (wide || v % 2 === 1) {
+        // Balcony bands every other floor.
+        for (let f = 1; f < s.floors; f += 2) box(parts, [tw * 0.86, 0.16, 0.8], [0, y0 + f * fh, tcz + td / 2 + 0.4], '#ebe7de');
+      } else {
+        // Bay windows stacked up the front, either side of the spine.
+        for (const sx of [-1, 1]) box(parts, [tw * 0.28, th - 1, 0.7], [sx * tw * 0.3, y0 + 0.5, tcz + td / 2 + 0.35], GLASS_DARK);
+      }
+      let top = y0 + th;
+      if (v % 3 === 1) {
+        // Set-back penthouse floors.
+        parts.push({ shape: 'box', size: [tw * 0.7, fh * 2, td * 0.75], pos: [0, top, tcz], color: s.wall, facade: 'residential' });
+        box(parts, [tw * 0.7 + 0.3, 0.3, td * 0.75 + 0.3], [0, top + fh * 2, tcz], s.accent);
+        top += fh * 2 + 0.3;
+      }
+      // Crown: a lit hotel sign, then a rooftop pool or a helipad.
+      box(parts, [tw + (rounded ? td : 0) + 0.3, 1.4, td + 0.3], [0, top, tcz], s.accent);
+      box(parts, [tw * 0.62, 1.8, 0.3], [0, top + 1.4, tcz + td / 2 - 0.1], s.accent);
+      box(parts, [tw * 0.54, 1.1, 0.06], [0, top + 1.75, tcz + td / 2 + 0.07], '#fff1c9');
+      if (wide && v % 3 === 0) {
+        cyl(parts, Math.min(tw, td) * 0.9, 0.3, [0, top + 1.4, tcz - 0.4], '#5e6367', 16);
+        box(parts, [0.4, 0.05, 2.4], [-0.6, top + 1.72, tcz - 0.4], '#e8e8e8');
+        box(parts, [0.4, 0.05, 2.4], [0.6, top + 1.72, tcz - 0.4], '#e8e8e8');
+        box(parts, [1.2, 0.05, 0.4], [0, top + 1.72, tcz - 0.4], '#e8e8e8');
+      } else {
+        box(parts, [tw * 0.6, 0.3, td * 0.45], [0, top + 1.4, tcz - td * 0.15], '#4fb3d9');
+        for (let k = 0; k < 3; k++) box(parts, [0.6, 0.25, 1.6], [-tw * 0.25 + k * tw * 0.25, top + 1.4, tcz + td * 0.25], '#f2efe8');
+      }
+      // Porte-cochère over the drop-off, glass doors, flags and planters.
+      const ccz = cz + pd / 2 + 1.5;
+      box(parts, [Math.min(9, pw * 0.62), 0.4, 3.2], [0, 4.0, ccz], s.accent);
+      for (const sx of [-1, 1]) cyl(parts, 0.45, 3.9, [sx * Math.min(4, pw * 0.27), 0.1, ccz + 1.1], '#ebe7de', 10);
+      box(parts, [3.2, 3, 0.2], [0, 0.1, cz + pd / 2 + 0.1], GLASS_DARK);
+      box(parts, [W - 1.2, 0.06, 3.1], [0, 0.12, front - 1.6], PATH);
+      const flagColors = ['#c0392b', '#2f6db5', '#e0a321'];
+      for (let k = 0; k < 3; k++) {
+        const fx = -pw / 2 + 0.6 + k * 0.9;
+        cyl(parts, 0.1, 7, [fx, 0.1, front - 0.5], '#d8d8d8', 4);
+        box(parts, [0.06, 1.0, 1.4], [fx, 5.8, front - 1.25], flagColors[(v + k) % 3]);
+      }
+      tree(parts, pw / 2 - 0.6, front - 0.8, 0.7);
+      break;
+    }
+    case 'casino': {
+      // A wide, gilded gaming hall with a domed entrance and a hotel tower behind it.
+      const pw = W - 1.2;
+      const pd = D - 5;
+      const cz = front - 3.6 - pd / 2;
+      const podH = 8;
+      const gold = '#d4af37';
+      parts.push({ shape: 'box', size: [pw, podH, pd], pos: [0, 0.1, cz], color: s.wall, facade: 'shop' });
+      box(parts, [pw + 0.3, 0.55, pd + 0.3], [0, podH, cz], gold);
+      box(parts, [pw + 0.3, 0.3, pd + 0.3], [0, 3.8, cz], gold);
+      // Hotel tower at the back of the lot.
+      const tw = pw * 0.56;
+      const td = Math.min(pd * 0.48, 6.5);
+      const tcz = cz - pd / 2 + td / 2 + 0.6;
+      const fh = 3.1;
+      const th = s.floors * fh;
+      const y0 = podH + 0.55;
+      parts.push({ shape: 'box', size: [tw, th, td], pos: [0, y0, tcz], color: v % 2 ? GLASS : s.wall, facade: v % 2 ? 'office' : 'residential' });
+      for (const sx of [-1, 1]) box(parts, [0.35, th + 2, 0.35], [(sx * tw) / 2, y0, tcz + td / 2], s.accent);
+      box(parts, [tw + 0.3, 0.8, td + 0.3], [0, y0 + th, tcz], gold);
+      // Crown: a gilded pyramid, a glass dome or stepped lanterns.
+      const crown = y0 + th + 0.8;
+      if (v % 3 === 0) parts.push({ shape: 'pyramid', size: [tw * 0.8, 4.5, td * 0.8], pos: [0, crown, tcz], color: gold });
+      else if (v % 3 === 1) parts.push({ shape: 'dome', size: [Math.min(tw, td) * 0.9, 3.2, Math.min(tw, td) * 0.9], pos: [0, crown, tcz], color: '#bfe3ee', segments: 18 });
+      else {
+        box(parts, [tw * 0.7, 2.4, td * 0.7], [0, crown, tcz], s.accent);
+        box(parts, [tw * 0.4, 2.4, td * 0.4], [0, crown + 2.4, tcz], gold);
+        cyl(parts, 0.25, 4, [0, crown + 4.8, tcz], gold, 6);
+      }
+      const ez = cz + pd / 2 - 3.2;
+      if (v % 2 === 0) {
+        // Domed entrance on a drum, with a spire.
+        cyl(parts, 6.2, 2.2, [0, podH + 0.5, ez], s.wall, 20);
+        parts.push({ shape: 'dome', size: [6, 3.4, 6], pos: [0, podH + 2.7, ez], color: gold, segments: 20 });
+        cyl(parts, 0.2, 2.6, [0, podH + 6, ez], gold, 6);
+      } else {
+        // A tall illuminated fascia over the entrance.
+        box(parts, [pw * 0.6, 4, 0.6], [0, podH + 0.5, cz + pd / 2 - 0.3], s.accent);
+        box(parts, [pw * 0.52, 2.6, 0.08], [0, podH + 1.2, cz + pd / 2 + 0.02], '#ffe27a');
+      }
+      // Arched glass portal and a row of marquee bulbs along the front.
+      box(parts, [6, 5, 1.2], [0, 0.1, cz + pd / 2 + 0.6], GLASS_DARK);
+      cyl(parts, 6, 1.2, [0, 5.1, cz + pd / 2 + 0.6], s.accent, 16, { rot: [90, 0, 0] });
+      const bulbs = Math.floor(pw / 1.1);
+      for (let k = 0; k <= bulbs; k++) cyl(parts, 0.32, 0.32, [-pw / 2 + (pw * k) / bulbs, podH + 0.55, cz + pd / 2 + 0.2], '#fff1a8', 6);
+      // Lit sign on posts by the road.
+      const mx = pw * 0.3;
+      for (const sx of [-1, 1]) cyl(parts, 0.35, 5, [mx + sx * 2.4, 0.1, front - 0.9], IRON_RAIL, 8);
+      box(parts, [5.6, 2.2, 0.5], [mx, 5, front - 0.9], s.accent);
+      box(parts, [5, 1.6, 0.08], [mx, 5.3, front - 0.62], '#ffe27a');
+      // Forecourt fountain and palms.
+      const fx = -pw * 0.3;
+      cyl(parts, 3.2, 0.5, [fx, 0.1, front - 1.9], '#cfcac0', 16);
+      cyl(parts, 2.7, 0.15, [fx, 0.6, front - 1.9], '#6fb7d9', 16);
+      cyl(parts, 0.3, 1.8, [fx, 0.6, front - 1.9], '#cfcac0', 8);
+      for (const px of [-pw / 2 + 0.6, pw / 2 - 0.6]) {
+        cyl(parts, 0.3, 4.2, [px, 0.1, front - 0.7], '#8a6a48', 6);
+        for (let k = 0; k < 5; k++) box(parts, [2.2, 0.12, 0.5], [px, 4.2, front - 0.7], GREEN, { rot: [0, k * 36, -18] });
+      }
+      break;
+    }
     case 'warehouse': {
       const bw = W - 2;
       const bd = D - 4;
@@ -560,7 +687,7 @@ export function proceduralParts(spec: ProceduralSpec, arch: ArchStyle = 'modern'
       break;
     }
   }
-  if (block) decorate(parts, arch, block, s, v);
+  if (block) decorate(parts, arch, reshapeMassing(parts, arch, block, s, v), s, v);
   return parts;
 }
 
@@ -589,6 +716,8 @@ const PALETTES: Record<ProceduralStyle, { wall: string[]; roof: string[]; accent
   tower: { wall: ['#e9edf0', '#dfe6ea', '#eef1f3', '#e6e2da', '#d8dee3', '#c7d3dc'], roof: ['#777'], accent: ['#5f6b75', '#4d5a64', '#3f4b55', '#6b5f55', '#7a6a58', '#2f3a44'] },
   shop: { wall: ['#efe7da', '#e6e1d8', '#f1ece2', '#e9dccb', '#dde3e6', '#e2d1bd', '#d6dccd'], roof: ['#777'], accent: ['#d9483b', '#2f7dd1', '#e0a321', '#2fa36b', '#8a4fc2', '#e06a2b', '#1f8f8f'] },
   office: { wall: ['#cfdbe4', '#b9cfdd', '#aac4d6', '#c9d2cf', '#d6d2c8', '#b8c2c9'], roof: ['#777'], accent: ['#5b6770', '#44515b', '#3d4a54', '#6b5f55', '#2f3a44'] },
+  hotel: { wall: ['#f2efe8', '#e9e2d4', '#e3e8ec', '#efe6d8', '#dfe3e0'], roof: ['#777'], accent: ['#7a2a2a', '#2f4a5a', '#3f4448', '#8a6a3c', '#2f5a4a'] },
+  casino: { wall: ['#f4ead8', '#efe2c8', '#e8e0f0', '#f2e6e0'], roof: ['#777'], accent: ['#b3261e', '#6a2a8a', '#1f5f8f', '#a0522d'] },
   mall: { wall: ['#e8e2d6', '#e1e6ea', '#ece4d4', '#dcd6cc'], roof: ['#777'], accent: ['#d9483b', '#2f7dd1', '#2fa36b', '#e0a321'] },
   warehouse: { wall: ['#b8b3a7', '#a3a8ad', '#c4b49a', '#9fa79b', '#c7c2b6', '#8f9aa6'], roof: ['#6d7378', '#5f666c', '#7a6e5e', '#5a6a72', '#4f6b5a', '#7d4e3c'], accent: ['#777'] },
   factory: { wall: ['#b8b3a7', '#a3a8ad', '#c4b49a', '#c9cdd1', '#a8a294', '#b5bcc2'], roof: ['#6b6f73', '#5a5f64', '#6f655a', '#4f5a52'], accent: ['#d8d2c6', '#e4e1da', '#cfd6dc'] },

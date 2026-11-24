@@ -45,6 +45,7 @@ export async function startGame(container: HTMLElement): Promise<void> {
   ev.on('roadPlan', (roadPlan) => set({ roadPlan }));
   ev.on('tool', (tool) => set({ tool, roadPlan: null, buildingPlan: null, demolishTarget: null, linePlan: null }));
   ev.on('roadType', (roadType) => set({ roadType }));
+  ev.on('roadElevation', (roadElevation) => set({ roadElevation }));
   ev.on('roadMode', (roadMode) => set({ roadMode }));
   ev.on('buildingType', (buildingType) => set({ buildingType }));
   ev.on('buildingPlan', (buildingPlan) => set({ buildingPlan }));

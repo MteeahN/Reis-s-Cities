@@ -9,7 +9,7 @@ import type { TrafficSignals } from '../simulation/traffic/Signals';
 
 /** Vehicles shown per vehicle actually on the road (Little's law) near the camera — game time runs
  *  hundreds of times faster than the cars drive, so the visible stream is thickened accordingly. */
-export const VISUAL_DENSITY = 12;
+export const VISUAL_DENSITY = 5;
 const CAR_GAP = 7.5;
 const TRUCK_GAP = 11;
 
@@ -30,7 +30,18 @@ interface Vehicle {
   stopWait: number;
   /** Junction this vehicle may now enter (stop sign served). */
   cleared: number;
+  /** Seconds waited for a junction that another vehicle is crossing. */
+  junctionWait: number;
+  /** Seconds standing still (any reason). */
+  stall: number;
 }
+
+/**
+ * A vehicle that has not moved for this long (game seconds) leaves the view.
+ * Shown vehicles are a sample of the aggregate flow, so a queue that locks in
+ * a loop around a block is broken up instead of staying frozen forever.
+ */
+export const STALL_LIMIT = 30;
 
 interface LanePoint {
   x: number;
@@ -185,6 +196,8 @@ export class VehicleRenderer {
         prevLane: lane,
         stopWait: 0,
         cleared: -1,
+        junctionWait: 0,
+        stall: 0,
       });
     }
   }
@@ -194,6 +207,27 @@ export class VehicleRenderer {
       if (v.path.links[v.idx] === link && v.lane === lane && Math.abs(v.s - s) < gap) return true;
     }
     return false;
+  }
+
+  /** Junction → incoming edge of the vehicle crossing it right now (rebuilt every step). */
+  private readonly inJunction = new Map<number, number>();
+
+  /** Marks junctions that vehicles are inside: past their stop line, or still in the mouth of the next road. */
+  private markJunctions(): void {
+    const t = this.traffic;
+    this.inJunction.clear();
+    for (const v of this.vehicles) {
+      const l = v.path.links[v.idx];
+      if (v.idx < v.path.links.length - 1) {
+        const node = t.linkToNode(l);
+        const edge = t.linkEdge[l];
+        if (v.s > t.linkLen[l] - this.roadRenderer.setbackAt(node, edge) - 1.1) this.inJunction.set(node, edge);
+      }
+      if (v.idx > 0) {
+        const node = t.linkFromNode(l);
+        if (v.s < this.roadRenderer.setbackAt(node, t.linkEdge[l]) + 1) this.inJunction.set(node, t.linkEdge[v.path.links[v.idx - 1]]);
+      }
+    }
   }
 
   /** Lanes per travel direction on an edge (a one-way road uses all of them). */
@@ -231,6 +265,16 @@ export class VehicleRenderer {
       } else hold = true;
     }
     if (!hold && (this.crosswalkBusy(node, edge) || this.crosswalkBusy(node, nextEdge))) hold = true;
+    // Junctions without lights: one stream at a time — wait while a vehicle from another road is crossing.
+    // (Lights already separate the streams. A long wait lets it go anyway, so a stalled crossing can never lock it.)
+    if (!hold && st !== 'green' && st !== 'amber' && v.s > stopLine - 6) {
+      const crossing = this.inJunction.get(node);
+      if (crossing !== undefined && crossing !== edge && v.junctionWait < 6) {
+        v.junctionWait += dt;
+        hold = true;
+      }
+    }
+    if (!hold) v.junctionWait = 0;
     return hold ? stopLine : Infinity;
   }
 
@@ -246,6 +290,7 @@ export class VehicleRenderer {
       list.push(v);
     }
     for (const list of byLane.values()) list.sort((a, b) => b.s - a.s);
+    this.markJunctions();
 
     const remove = new Set<Vehicle>();
     for (const list of byLane.values()) {
@@ -256,12 +301,24 @@ export class VehicleRenderer {
         if (i > 0) {
           const lead = list[i - 1];
           limit = Math.min(limit, lead.s - (lead.truck || v.truck ? TRUCK_GAP : CAR_GAP));
+        } else if (v.idx < v.path.links.length - 1) {
+          // First in its lane: keep the gap to the last vehicle on the road it turns into.
+          const next = v.path.links[v.idx + 1];
+          const nextLane = Math.min(v.lane, this.lanesPerDir(t.linkEdge[next]) - 1);
+          const ahead = byLane.get(next * 8 + nextLane);
+          const tail = ahead?.[ahead.length - 1];
+          if (tail) limit = Math.min(limit, t.linkLen[link] + tail.s - (tail.truck || v.truck ? TRUCK_GAP : CAR_GAP));
         }
         // Brake smoothly towards the limit (≈3 m/s²), accelerate gently towards the link speed.
         let want = t.linkSpeed(link);
         if (Number.isFinite(limit)) want = Math.min(want, Math.sqrt(Math.max(0, 2 * 3 * (limit - v.s))));
         v.speed += (want - v.speed) * Math.min(1, dt * (want < v.speed ? 4 : 1.2));
         if (v.speed < 0.05 && want < 0.05) v.speed = 0;
+        v.stall = v.speed < 0.3 ? v.stall + dt : 0;
+        if (v.stall > STALL_LIMIT) {
+          remove.add(v);
+          continue;
+        }
         v.s = Math.max(v.s, Math.min(v.s + v.speed * dt, limit));
         // Advance through links (the route chooses the turn at each junction).
         for (;;) {

@@ -6,7 +6,7 @@ import { buildingsInGroup, growablePrice, storeysOf, ZONED_BUILDINGS, type Build
 import { ARCH_STYLE_DEFS, ARCH_STYLES, type ArchStyle } from '../../game/data/styles';
 import { LINE_TYPES } from '../../game/data/infrastructure';
 import { INFO_LAYERS } from '../../game/rendering/InfoLayers';
-import { ROAD_CATEGORIES, ROAD_TYPES, isRoadTypeUnlocked, type RoadCategory } from '../../game/data/roads';
+import { BUILDABLE_ROAD_TYPES as ROAD_TYPES, ROAD_CATEGORIES, isRoadTypeUnlocked, type RoadCategory } from '../../game/data/roads';
 import { getGame } from '../../store/gameBridge';
 import { useGameStore } from '../../store/gameStore';
 import { formatMoney, formatNumber } from '../../utils/format';
@@ -47,6 +47,7 @@ const MODES: { id: RoadMode; label: string; icon: IconName; hint: string }[] = [
 function RoadPicker() {
   const roadType = useGameStore((s) => s.roadType);
   const roadMode = useGameStore((s) => s.roadMode);
+  const elevation = useGameStore((s) => s.roadElevation);
   const population = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
   const [cat, setCat] = useState<RoadCategory>(() => ROAD_TYPES.find((t) => t.id === roadType)?.category ?? 'street');
   return (
@@ -80,6 +81,18 @@ function RoadPicker() {
             <span>{m.label}</span>
           </button>
         ))}
+      </div>
+      <div className="divider vertical" />
+      <div className="mode-group elevation-group" role="group" aria-label="Yol yüksekliği" title="Yolu yükseltin (PageUp / PageDown). Yükseltilmiş yollar ayaklar üzerinde durur, en az 6 m alçaktaki yolların üzerinden kavşak kurmadan geçer; köprü fiyatına yapılır, kenarlarına bina yapılmaz.">
+        <button className="mode-btn" onClick={() => getGame()?.setRoadElevation(elevation + 3)} disabled={elevation >= 24} aria-label="Yükselt" data-testid="road-elev-up">
+          <Icon name="chevronUp" size={16} />
+        </button>
+        <span className={`elev-value ${elevation > 0 ? 'raised' : ''}`} data-testid="road-elevation">
+          <Icon name="elevated" size={14} /> {elevation === 0 ? 'Zemin' : `+${elevation} m`}
+        </span>
+        <button className="mode-btn" onClick={() => getGame()?.setRoadElevation(elevation - 3)} disabled={elevation <= 0} aria-label="Alçalt" data-testid="road-elev-down">
+          <Icon name="chevronDown" size={16} />
+        </button>
       </div>
       <div className="divider vertical" />
       {ROAD_TYPES.filter((t) => t.category === cat).map((t) => {
@@ -147,6 +160,7 @@ const TRAFFIC_MODES: { id: TrafficToolMode; name: string; hint: string; icon: Ic
   { id: 'oneway', name: 'Tek yön', hint: 'Bir yol parçasına tıklayın: tek yön → ters yön → çift yön', icon: 'road' },
   { id: 'lights', name: 'Trafik lambası', hint: `Kavşağa sinyal kurun (${formatMoney(LIGHTS_COST)}). Yoğun kavşakları akıcı tutar; yayalar kırmızıda geçer.`, icon: 'traffic' },
   { id: 'stop', name: 'Dur levhası', hint: `Kavşağın tüm girişlerine dur levhası (${formatMoney(STOP_COST)}). Sakin kavşaklar için.`, icon: 'warning' },
+  { id: 'roundabout', name: 'Döner kavşak', hint: 'En az 3 yolun birleştiği kavşağa tıklayın: kavşak tek yönlü bir halkaya dönüşür, araçlar kesişmeden döner. Halka yol fiyatına yapılır.', icon: 'roundabout' },
   { id: 'clear', name: 'Kaldır', hint: 'Kavşak kontrolünü kaldırın', icon: 'demolish' },
 ];
 

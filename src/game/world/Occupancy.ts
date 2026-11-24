@@ -10,6 +10,49 @@ function distToSegment(px: number, pz: number, a: P2, b: P2): number {
   return Math.hypot(px - (a.x + dx * t), pz - (a.z + dz * t));
 }
 
+/** Distance from segment AB to the axis-aligned square [x0, x1] × [z0, z1] (0 when they touch). */
+export function segmentSquareDistance(a: P2, b: P2, x0: number, z0: number, x1: number, z1: number): number {
+  // Liang–Barsky clip: does the segment cross the square?
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const clip = (p: number, q: number) => {
+    if (p === 0) return q >= 0;
+    const r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+    return true;
+  };
+  if (clip(-dx, a.x - x0) && clip(dx, x1 - a.x) && clip(-dz, a.z - z0) && clip(dz, z1 - a.z)) return 0;
+  const box = (p: P2) => Math.hypot(Math.max(x0 - p.x, 0, p.x - x1), Math.max(z0 - p.z, 0, p.z - z1));
+  return Math.min(box(a), box(b), distToSegment(x0, z0, a, b), distToSegment(x1, z0, a, b), distToSegment(x0, z1, a, b), distToSegment(x1, z1, a, b));
+}
+
+/** Cells whose square comes closer than `halfWidth` to the polyline (strictly). */
+export function rasterizePolylineSquares(points: P2[], halfWidth: number): number[] {
+  if (points.length < 2 || halfWidth <= 0) return [];
+  const cells: number[] = [];
+  for (const c of rasterizePolyline(points, halfWidth + CELL_SIZE * Math.SQRT1_2)) {
+    const i = c % GRID_CELLS;
+    const j = Math.floor(c / GRID_CELLS);
+    const x0 = i * CELL_SIZE;
+    const z0 = j * CELL_SIZE;
+    for (let k = 1; k < points.length; k++) {
+      if (segmentSquareDistance(points[k - 1], points[k], x0, z0, x0 + CELL_SIZE, z0 + CELL_SIZE) < halfWidth) {
+        cells.push(c);
+        break;
+      }
+    }
+  }
+  return cells;
+}
+
 /** Cells whose centre lies within `halfWidth` of the polyline. */
 export function rasterizePolyline(points: P2[], halfWidth: number): number[] {
   if (points.length === 0) return [];
@@ -52,10 +95,17 @@ export class Occupancy {
   readonly building = new Int32Array(GRID_CELLS * GRID_CELLS);
   private readonly roadCells = new Map<number, number[]>();
 
+  /**
+   * A cell also counts as road when any part of its square reaches the road
+   * surface (with 0.5 m tolerance), so buildings on curves and diagonals never
+   * stand on the road or its sidewalk. Straight grid roads are unchanged.
+   */
   setRoad(edgeId: number, points: P2[], width: number): void {
     this.clearRoad(edgeId);
     // Half a cell of slack: a cell counts as road when the road covers its centre area.
-    const cells = rasterizePolyline(points, width / 2 + 0.5);
+    const set = new Set(rasterizePolyline(points, width / 2 + 0.5));
+    for (const c of rasterizePolylineSquares(points, width / 2 - 0.5)) set.add(c);
+    const cells = [...set];
     for (const c of cells) this.road[c]++;
     this.roadCells.set(edgeId, cells);
   }

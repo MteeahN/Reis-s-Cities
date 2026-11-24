@@ -169,10 +169,6 @@ export function styledHouseRoof(p: Parts, arch: ArchStyle, b: Block, s: Procedur
       p.push({ shape: 'gable', size: [bw + 0.5, 4.6, bd + 0.5], pos: [cx, y, cz], color: s.roof });
       box(p, [0.8, 3.0, 0.8], [cx - bw * 0.3, y + 1.0, cz], '#8a8070');
       break;
-    case 'futuristic':
-      p.push({ shape: 'dome', size: [Math.min(bw, bd) * 0.9, 1.6, Math.min(bw, bd) * 0.9], pos: [cx, y, cz], color: s.wall, segments: 14 });
-      box(p, [bw + 0.1, 0.18, bd + 0.1], [cx, y, cz], s.accent);
-      break;
     default:
       break;
   }
@@ -214,11 +210,6 @@ function halfTimber(p: Parts, b: Block, color: string, fromY: number): void {
     const x = b.cx - b.bw / 2 + (b.bw * (k + 0.5)) / posts;
     box(p, [0.14, Math.min(2.2, b.floorH * 0.8), 0.06], [x, fromY + 0.3, front], color, { rot: [0, 0, 35] });
   }
-}
-
-/** Light strips around a volume (futuristic). */
-function glowBands(p: Parts, b: Block, color: string): void {
-  for (let f = 1; f < Math.min(b.floors, 16); f += 2) box(p, [b.bw + 0.12, 0.12, b.bd + 0.12], [b.cx, f * b.floorH + 0.1, b.cz], color);
 }
 
 /** Style details around a generated building's main volume (facades, roofs, signs, greenery). */
@@ -460,20 +451,196 @@ export function decorate(p: Parts, arch: ArchStyle, b: Block, s: ProceduralSpec,
       }
       break;
     }
-    case 'futuristic': {
-      glowBands(p, b, s.accent);
-      if (industrial) break;
-      if (b.kind !== 'house') {
-        p.push({ shape: 'dome', size: [Math.min(b.bw, b.bd) * 0.8, 2.2, Math.min(b.bw, b.bd) * 0.8], pos: [b.cx, b.top, b.cz], color: '#bfe8f0', segments: 16 });
-        // A ring around the crown and slanted solar fins.
-        cyl(p, Math.min(b.bw, b.bd) * 0.95, 0.25, [b.cx, b.top + 0.4, b.cz], s.accent, 18);
-        for (const sx of [-1, 1]) box(p, [0.15, 3, Math.min(4, b.bd * 0.5)], [b.cx + sx * b.bw * 0.42, b.top, b.cz], '#24344d', { rot: [0, 0, sx * 20] });
-      }
-      // Rounded glass canopy at the entrance.
-      p.push({ shape: 'dome', size: [3, 1.2, 1.6], pos: [b.cx, 2.6, front + 0.3], color: '#bfe8f0', segments: 12 });
-      break;
-    }
     default:
       break;
+  }
+}
+
+/**
+ * Style massing: reshapes the main volume of multi-storey blocks so styles
+ * differ in silhouette, not only in colour and trim. Every rule keeps the
+ * street front plane and stays inside the original envelope (a jetty moves
+ * at most 0.9 m forward), so lots never grow. Returns the block that the
+ * style's trim and roof should follow.
+ */
+export function reshapeMassing(p: Parts, arch: ArchStyle, b: Block, s: ProceduralSpec, v: number): Block {
+  if (b.kind !== 'apartment' && b.kind !== 'office' && b.kind !== 'shop') return b;
+  // The main volume: the tallest facade box centred on the block.
+  let idx = -1;
+  for (let k = 0; k < p.length; k++) {
+    const q = p[k];
+    if (q.shape !== 'box' || !q.facade || Math.abs(q.pos[0] - b.cx) > 0.01 || Math.abs(q.pos[2] - b.cz) > 0.01) continue;
+    if (idx < 0 || q.size[1] > p[idx].size[1]) idx = k;
+  }
+  if (idx < 0) return b;
+  const main = p[idx];
+  const [w, , d] = main.size;
+  let h = main.size[1];
+  const y0 = main.pos[1];
+  const fh = b.floorH;
+  // Volumes stacked on the main one (a recessed top floor) become part of the reshaped mass.
+  const stackedIdx: number[] = [];
+  if (arch !== 'european' && arch !== 'slavic') {
+    for (let k = 0; k < p.length; k++) {
+      const q = p[k];
+      if (k === idx || q.shape !== 'box' || !q.facade || q.pos[1] < y0 + h - 0.5) continue;
+      if (Math.abs(q.pos[0] - b.cx) > w / 2 || Math.abs(q.pos[2] - b.cz) > d / 2) continue;
+      stackedIdx.push(k);
+      h = Math.max(h, q.pos[1] + q.size[1] - y0);
+    }
+  }
+  const floors = Math.round(h / fh);
+  if (floors < 2) return b;
+  const front = b.cz + d / 2;
+  const facade = main.facade;
+  const color = main.color;
+  /** A facade volume `fl` floors tall starting at floor `from`, front flush with the street front. */
+  const vol = (fl: number, from: number, vw: number, vd: number, x: number, c = color) =>
+    p.push({ shape: 'box', size: [vw, fl * fh, vd], pos: [x, y0 + from * fh, front - vd / 2], color: c, facade });
+  const remove = () => {
+    for (const k of [idx, ...stackedIdx].sort((x, y) => y - x)) p.splice(k, 1);
+  };
+  const side = v % 2 ? 1 : -1;
+
+  switch (arch) {
+    case 'modern': {
+      if (v % 4 === 1) {
+        // L-shape: a full-depth wing and a shallow street wing one floor lower.
+        remove();
+        vol(floors, 0, w * 0.55, d, b.cx + side * w * 0.225);
+        vol(floors - 1, 0, w * 0.45, d * 0.6, b.cx - side * w * 0.275);
+        box(p, [w * 0.45, 0.4, d * 0.6], [b.cx - side * w * 0.275, y0 + (floors - 1) * fh, front - d * 0.3], s.accent);
+        return { ...b, cx: b.cx + side * w * 0.225, bw: w * 0.55 };
+      }
+      if (v % 4 === 2 && floors >= 3) {
+        // Tall slab with a low side pavilion.
+        remove();
+        vol(floors, 0, w * 0.62, d, b.cx + side * w * 0.19);
+        vol(Math.max(1, floors - 2), 0, w * 0.38, d * 0.85, b.cx - side * w * 0.31);
+        return { ...b, cx: b.cx + side * w * 0.19, bw: w * 0.62 };
+      }
+      return b;
+    }
+    case 'european': {
+      // Oriel bays rising up the street front, and a corner turret on wide blocks.
+      const bays = w > 10 ? [-w * 0.3, w * 0.3] : [0];
+      const ow = Math.min(2.6, w * 0.22);
+      for (const x of bays) {
+        p.push({ shape: 'box', size: [ow, (floors - 1) * fh - 0.4, 0.9], pos: [b.cx + x, y0 + fh, front + 0.45], color, facade });
+        box(p, [ow + 0.3, 0.3, 1.2], [b.cx + x, y0 + floors * fh - 0.4, front + 0.5], s.accent);
+      }
+      if (w > 9) {
+        const tx = b.cx + side * (w / 2 - 1.3);
+        cyl(p, 2.8, h + 1.4, [tx, y0, front - 1.3], color, 12);
+        p.push({ shape: 'cone', size: [3.3, 3.2, 3.3], pos: [tx, y0 + h + 1.4, front - 1.3], color: s.roof, segments: 12 });
+      }
+      return b;
+    }
+    case 'asian': {
+      // Stacked tiers, two floors each, with an eave slab between them.
+      remove();
+      let tw = w;
+      let last = w;
+      for (let f = 0; f < floors; f += 2) {
+        const fl = Math.min(2, floors - f);
+        vol(fl, f, tw, d, b.cx);
+        if (f + fl < floors) box(p, [tw + 1.4, 0.25, d + 1.2], [b.cx, y0 + (f + fl) * fh - 0.1, front - d / 2 + 0.2], s.roof);
+        last = tw;
+        tw *= 0.92;
+      }
+      return { ...b, bw: last };
+    }
+    case 'mediterranean': {
+      // Whitewashed cubes stepping up to one side, a terrace on each step.
+      remove();
+      const steps = Math.min(3, floors);
+      let fl0 = 0;
+      let cw = w;
+      let cx = b.cx;
+      let top = { cx, cw };
+      for (let k = 0; k < steps; k++) {
+        const fl = k === steps - 1 ? floors - fl0 : Math.max(1, Math.round(floors / steps));
+        vol(fl, fl0, cw, d, cx);
+        if (k < steps - 1) box(p, [cw + 0.2, 0.5, d + 0.2], [cx, y0 + (fl0 + fl) * fh, front - d / 2], color);
+        top = { cx, cw };
+        fl0 += fl;
+        const nw = cw * 0.72;
+        cx += (side * (cw - nw)) / 2;
+        cw = nw;
+      }
+      return { ...b, cx: top.cx, bw: top.cw };
+    }
+    case 'ottoman': {
+      // Jettied upper floors over a recessed stone ground floor, carried on brackets.
+      remove();
+      p.push({ shape: 'box', size: [w * 0.92, fh, d - 0.6], pos: [b.cx, y0, front - 0.6 - (d - 0.6) / 2], color: '#cfc3a8', facade });
+      p.push({ shape: 'box', size: [w, (floors - 1) * fh, d], pos: [b.cx, y0 + fh, front + 0.6 - d / 2], color, facade });
+      const n = Math.max(1, Math.floor(w / 2));
+      for (let k = 0; k <= n; k++) box(p, [0.18, 0.7, 0.8], [b.cx - w / 2 + 0.3 + (k * (w - 0.6)) / n, y0 + fh - 0.75, front + 0.2], s.accent, { rot: [35, 0, 0] });
+      return { ...b, cz: b.cz + 0.6 };
+    }
+    case 'nordic': {
+      // Two narrow gabled houses side by side, one a floor taller.
+      remove();
+      const wa = w * 0.55;
+      const wb = w - wa;
+      const xa = b.cx - w / 2 + wa / 2;
+      const xb = b.cx + w / 2 - wb / 2;
+      vol(floors, 0, wa, d, xa);
+      vol(floors - 1, 0, wb, d, xb, s.accent);
+      if (h < 16) p.push({ shape: 'gable', size: [wb + 0.2, 3.0, d + 0.2], pos: [xb, y0 + (floors - 1) * fh, b.cz], color: s.roof });
+      else box(p, [wb + 0.2, 0.5, d + 0.2], [xb, y0 + (floors - 1) * fh, b.cz], s.roof);
+      return { ...b, cx: xa, bw: wa };
+    }
+    case 'arabic': {
+      // A tall block and a lower wing with a crenellated roof terrace.
+      remove();
+      const wa = w * 0.6;
+      vol(floors, 0, wa, d, b.cx + (side * (w - wa)) / 2);
+      const low = Math.max(1, Math.ceil(floors * 0.5));
+      vol(low, 0, w - wa, d * 0.8, b.cx - (side * wa) / 2);
+      flatParapet(p, b.cx - (side * wa) / 2, front - d * 0.4, w - wa, d * 0.8, y0 + low * fh, color, true);
+      return { ...b, cx: b.cx + (side * (w - wa)) / 2, bw: wa };
+    }
+    case 'slavic': {
+      // A corner tower with a tent roof rises above the block.
+      const tw = Math.min(3, w * 0.28);
+      const tx = b.cx + side * (w / 2 - tw / 2);
+      p.push({ shape: 'box', size: [tw, h + fh, tw], pos: [tx, y0, front - tw / 2 + 0.3], color, facade });
+      p.push({ shape: 'pyramid', size: [tw + 0.4, 3.6, tw + 0.4], pos: [tx, y0 + h + fh, front - tw / 2 + 0.3], color: s.roof });
+      return b;
+    }
+    case 'american': {
+      remove();
+      if (floors < 5) {
+        // Brick walk-up with a lower bay on one side.
+        vol(floors, 0, w * 0.7, d, b.cx + side * w * 0.15);
+        vol(floors - 1, 0, w * 0.3, d, b.cx - side * w * 0.35);
+        return { ...b, cx: b.cx + side * w * 0.15, bw: w * 0.7 };
+      }
+      // Wedding-cake setbacks.
+      const f1 = Math.round(floors * 0.6);
+      const f2 = Math.max(f1 + 1, Math.round(floors * 0.85));
+      vol(f1, 0, w, d, b.cx);
+      vol(f2 - f1, f1, w * 0.78, d * 0.85, b.cx);
+      if (floors > f2) vol(floors - f2, f2, w * 0.56, d * 0.7, b.cx);
+      box(p, [w + 0.2, 0.4, d + 0.2], [b.cx, y0 + f1 * fh, front - d / 2], s.accent);
+      box(p, [w * 0.78 + 0.2, 0.4, d * 0.85 + 0.2], [b.cx, y0 + f2 * fh, front - d * 0.425], s.accent);
+      return { ...b, bw: floors > f2 ? w * 0.56 : w * 0.78 };
+    }
+    case 'medieval': {
+      // Each upper floor oversails the one below.
+      remove();
+      p.push({ shape: 'box', size: [w * 0.94, fh, d - 0.9], pos: [b.cx, y0, front - 0.9 - (d - 0.9) / 2], color: '#a89f92', facade });
+      for (let f = 1; f < floors; f++) {
+        const out = Math.min(3, f) * 0.3;
+        const fd = d - 0.9 + out;
+        p.push({ shape: 'box', size: [w, fh, fd], pos: [b.cx, y0 + f * fh, front - 0.9 + out - fd / 2], color, facade });
+        box(p, [w + 0.1, 0.22, 0.3], [b.cx, y0 + f * fh - 0.1, front - 0.9 + out], s.accent);
+      }
+      return b;
+    }
+    default:
+      return b;
   }
 }

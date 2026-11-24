@@ -4,7 +4,7 @@ import type { RoadMode, RoadPlanView } from '../core/events';
 import { MouseButton, type PointerInfo } from '../core/Input';
 import { ROAD_TYPES, getRoadType, isRoadTypeUnlocked, type RoadTypeDef } from '../data/roads';
 import { sampleBezier, type P2 } from '../entities/road/curve';
-import { NODE_SNAP, planRoad, type Anchor, type RoadPlan, type UpgradePlan } from './placement/RoadPlanner';
+import { ELEVATION_STEP, MAX_ELEVATION, NODE_SNAP, OVERPASS_CLEARANCE, anchorElevation, planRoad, type Anchor, type RoadPlan, type UpgradePlan } from './placement/RoadPlanner';
 import { RoadPreview } from './placement/RoadPreview';
 import { snapSegment, snapToGrid } from './placement/snapping';
 import type { Tool, ToolContext } from './Tool';
@@ -19,6 +19,9 @@ const DRAG_PX = 12;
  * Endpoints snap to existing junctions and roads (creating junctions), otherwise
  * to the cell grid; straight segments snap to 15° steps relative to the road
  * being continued. Ctrl disables grid/angle snapping.
+ * PageUp / PageDown raise and lower the deck: raised roads stand on pillars
+ * and pass over roads at least OVERPASS_CLEARANCE lower; they only snap to
+ * roads at about their own height.
  */
 export class RoadTool implements Tool {
   readonly id = 'road' as const;
@@ -37,6 +40,7 @@ export class RoadTool implements Tool {
   private rightDownX = 0;
   private rightDownY = 0;
   private lastGround: Vector3 | null = null;
+  private elevation = 0;
 
   constructor(private readonly ctx: ToolContext) {
     ctx.overlay.add(this.preview.group);
@@ -52,10 +56,23 @@ export class RoadTool implements Tool {
 
   setRoadType(id: string): boolean {
     const t = getRoadType(id);
-    if (!isRoadTypeUnlocked(t, this.ctx.population())) return false;
+    if (t.playerBuildable === false || !isRoadTypeUnlocked(t, this.ctx.population())) return false;
     this.type = t;
     this.refresh();
     return true;
+  }
+
+  get roadElevation(): number {
+    return this.elevation;
+  }
+
+  /** Height new road ends are built at (snapped to ELEVATION_STEP, 0…MAX_ELEVATION). */
+  setElevation(m: number): void {
+    const next = Math.max(0, Math.min(MAX_ELEVATION, Math.round(m / ELEVATION_STEP) * ELEVATION_STEP));
+    if (next === this.elevation) return;
+    this.elevation = next;
+    this.ctx.events.emit('roadElevation', next);
+    this.refresh();
   }
 
   setMode(mode: RoadMode): void {
@@ -87,10 +104,13 @@ export class RoadTool implements Tool {
   private resolveAnchor(ground: Vector3, forEnd: boolean): Anchor {
     const graph = this.ctx.city.roads;
     const snapR = Math.max(NODE_SNAP, this.type.width * 0.75);
-    const node = graph.nearestNode(ground.x, ground.z, snapR);
+    const level = (y: number) => Math.abs(y - this.elevation) < OVERPASS_CLEARANCE;
+    const found = graph.nearestNode(ground.x, ground.z, snapR);
+    const node = found && level(found.y ?? 0) ? found : null;
     if (node) return { kind: 'node', nodeId: node.id, point: { x: node.x, z: node.z } };
     // Anywhere on an existing road's surface (plus a little slack) snaps onto it.
-    const hit = graph.nearestEdge(ground.x, ground.z, snapR * 0.6, true);
+    const near = graph.nearestEdge(ground.x, ground.z, snapR * 0.6, true, (e) => level(graph.nodes.get(e.a)?.y ?? 0) || level(graph.nodes.get(e.b)?.y ?? 0));
+    const hit = near && level(graph.elevationAt(near.edge, near.t)) ? near : null;
     if (hit) {
       const e = hit.edge;
       const na = graph.nodes.get(e.a)!;
@@ -100,12 +120,13 @@ export class RoadTool implements Tool {
       return { kind: 'edge', edgeId: e.id, t: hit.t, point: hit.point };
     }
     const raw = { x: ground.x, z: ground.z };
-    if (this.free) return { kind: 'free', point: raw };
+    const elev = this.elevation;
+    if (this.free) return { kind: 'free', point: raw, elev };
     let p = snapToGrid(raw, CELL_SIZE);
     if (forEnd && this.start && this.mode === 'straight') {
       p = snapSegment(this.start.point, raw, 15, CELL_SIZE, this.continuationAngle());
     }
-    return { kind: 'free', point: p };
+    return { kind: 'free', point: p, elev };
   }
 
   /** Direction of the road we're continuing from, so angle snapping is relative to it. */
@@ -148,14 +169,17 @@ export class RoadTool implements Tool {
     if (!this.start) {
       this.plan = null;
       this.preview.hidePath();
-      this.preview.setMarkers([this.cursor.point], this.type.width * 0.6, h);
+      this.preview.setMarkers([this.cursor.point], this.type.width * 0.6, h, [anchorElevation(this.ctx.city.roads, this.cursor)]);
+      this.ctx.events.emit('roadPlan', null);
       return;
     }
     const control = this.mode === 'curve' ? this.control : null;
     this.plan = planRoad(this.ctx.city.roads, this.start, this.cursor, control, this.type, this.ctx.city.plannerWorld, this.ctx.city.treasury.balance);
-    this.preview.showPath(this.plan.points, this.type.width, this.plan.valid ? 'valid' : 'invalid', h);
+    const { elevA, elevB } = this.plan;
+    this.preview.showPath(this.plan.points, this.type.width, this.plan.valid ? 'valid' : 'invalid', h, (i, n) => elevA + ((elevB - elevA) * i) / Math.max(1, n - 1));
     const markers = control ? [this.start.point, control, this.cursor.point] : [this.start.point, this.cursor.point];
-    this.preview.setMarkers(markers, this.type.width * 0.6, h);
+    const raise = control ? [elevA, (elevA + elevB) / 2, elevB] : [elevA, elevB];
+    this.preview.setMarkers(markers, this.type.width * 0.6, h, raise);
     this.emitPlan();
   }
 
@@ -203,6 +227,8 @@ export class RoadTool implements Tool {
       cost: p.cost,
       weeklyMaintenance: p.weeklyMaintenance,
       junctions: p.newJunctions,
+      elevA: p.elevA,
+      elevB: p.elevB,
       valid: p.valid,
       errors: p.errors,
     });
@@ -289,6 +315,10 @@ export class RoadTool implements Tool {
   }
 
   onKey(code: string): boolean {
+    if (code === 'PageUp' || code === 'PageDown') {
+      this.setElevation(this.elevation + (code === 'PageUp' ? ELEVATION_STEP : -ELEVATION_STEP));
+      return true;
+    }
     if (code === 'Escape' && (this.start || this.control)) {
       this.cancel();
       return true;

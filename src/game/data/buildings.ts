@@ -252,6 +252,8 @@ export function storeysOf(def: BuildingDef): number {
   if (!s) return 1;
   if (s.style === 'warehouse' || s.style === 'factory') return 1 + Math.floor(s.floors / 2);
   if (s.style === 'tower') return s.floors + 1;
+  // Hotels and casinos: two podium storeys under the tower.
+  if (s.style === 'hotel' || s.style === 'casino') return s.floors + 2;
   if (s.style === 'office' && (s.variant ?? 0) % 2 === 0) return Math.ceil(s.floors * 1.25);
   return Math.max(1, s.floors);
 }
@@ -316,6 +318,12 @@ export const ZONED_BUILDINGS: readonly BuildingDef[] = [
   zoned({ id: 'com3_boutique', name: 'Butik Mağaza', zone: C, level: 3, workers: 16, spec: { style: 'shop', footprint: [1, 1], floors: 4, wall: '#dde3e6', accent: '#8a4fc2', roof: '#777', ground: 'paving', variant: 5 } }),
   zoned({ id: 'com3_arcade', name: 'Pasajlı Çarşı', zone: C, level: 3, workers: 44, spec: { style: 'shop', footprint: [1, 2], floors: 5, wall: '#e9dccb', accent: COM_ACCENTS[1], roof: '#777', ground: 'paving', variant: 2 } }),
   zoned({ id: 'com3_row', name: 'Mağazalar Caddesi', zone: C, level: 3, workers: 36, spec: { style: 'shop', footprint: [2, 1], floors: 4, wall: '#d6dccd', accent: '#1f8f8f', roof: '#777', ground: 'paving', variant: 7 } }),
+  // Commercial — level 3: high-rise hotels and casinos.
+  zoned({ id: 'com3_hotel_s', name: 'Butik Otel', zone: C, level: 3, workers: 40, spec: { style: 'hotel', footprint: [1, 2], floors: 10, wall: '#f2efe8', accent: '#2f4a5a', roof: '#777', ground: 'paving', variant: 1 } }),
+  zoned({ id: 'com3_hotel', name: 'Otel', zone: C, level: 3, workers: 110, landValue: { amount: 4, radius: 4 }, spec: { style: 'hotel', footprint: [2, 2], floors: 16, wall: '#e9e2d4', accent: '#7a2a2a', roof: '#777', ground: 'paving' } }),
+  zoned({ id: 'com3_hotel_l', name: 'Lüks Otel Kulesi', zone: C, level: 3, workers: 160, landValue: { amount: 6, radius: 5 }, spec: { style: 'hotel', footprint: [2, 2], floors: 24, wall: '#e3e8ec', accent: '#3f4448', roof: '#777', ground: 'paving', variant: 3 } }),
+  zoned({ id: 'com3_casino', name: 'Kumarhane', zone: C, level: 3, workers: 150, spec: { style: 'casino', footprint: [2, 2], floors: 12, wall: '#f4ead8', accent: '#b3261e', roof: '#777', ground: 'paving' } }),
+  zoned({ id: 'com3_casino_l', name: 'Kumarhane Oteli', zone: C, level: 3, workers: 210, spec: { style: 'casino', footprint: [2, 2], floors: 20, wall: '#e8e0f0', accent: '#6a2a8a', roof: '#777', ground: 'paving', variant: 1 } }),
   zoned({ id: 'com3_mall', name: 'Alışveriş Merkezi', zone: C, level: 3, workers: 120, spec: { style: 'mall', footprint: [2, 2], floors: 2, wall: '#e8e2d6', accent: COM_ACCENTS[0], roof: '#777', ground: 'paving' } }),
 
   // Office — level 1: small practices; level 2: office buildings; level 3: business towers.

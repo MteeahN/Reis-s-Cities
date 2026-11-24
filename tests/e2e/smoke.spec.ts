@@ -1,4 +1,17 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+/** New cities open at the entry road's end; the tests draw their street at the map centre. */
+/** Road segments shown in the city panel (the game-laid highway is several segments). */
+async function segments(page: Page): Promise<number> {
+  return Number((await page.getByTestId('stat-road-segments').innerText()).replace(/\D/g, ''));
+}
+
+async function centreCamera(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const c = (window as unknown as { __reis: { game: { cameraCtl: { yaw: number; pitch: number; setView(x: number, z: number, yaw: number, pitch: number, d: number): void } } } }).__reis.game.cameraCtl;
+    c.setView(1024, 1024, c.yaw, c.pitch, 520);
+  });
+}
 
 test('creates a city, renders the world and drives the HUD', async ({ page }) => {
   const errors: string[] = [];
@@ -15,6 +28,7 @@ test('creates a city, renders the world and drives the HUD', async ({ page }) =>
 
   // World generation runs in a worker; software WebGL in CI can be slow.
   await expect(page.getByTestId('hud')).toBeVisible({ timeout: 80_000 });
+  await centreCamera(page);
   await expect(page.getByTestId('city-name')).toHaveText('Test Şehri');
   await page.getByTestId('tab-world').click();
   await expect(page.getByTestId('world-seed')).toHaveText('12345');
@@ -90,6 +104,8 @@ test('zoning a street grows houses and brings residents', async ({ page }) => {
   await page.getByTestId('input-seed').fill('12345');
   await page.getByTestId('btn-start').click();
   await expect(page.getByTestId('hud')).toBeVisible({ timeout: 80_000 });
+  await centreCamera(page);
+  const base = await segments(page);
 
   const canvas = page.locator('canvas.game-canvas');
   await canvas.click({ position: { x: 900, y: 600 } });
@@ -98,7 +114,7 @@ test('zoning a street grows houses and brings residents', async ({ page }) => {
   await canvas.hover({ position: { x: 1150, y: 470 } });
   await canvas.click({ position: { x: 1150, y: 470 } });
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('stat-road-segments')).toHaveText('1');
+  await expect.poll(() => segments(page)).toBe(base + 1);
 
   // Zone both sides of the road with the fill mode (default: residential).
   await page.keyboard.press('z');
@@ -107,7 +123,7 @@ test('zoning a street grows houses and brings residents', async ({ page }) => {
   const mid = await page.evaluate(() => {
     type V = { clone(): V; set(x: number, y: number, z: number): V; project(c: unknown): V; x: number; y: number };
     const r = (window as unknown as { __reis: { game: { cameraCtl: { camera: { position: V } } }; city: { roads: { edges: Map<number, { poly: { points: { x: number; z: number }[] } }> } }; renderer: { domElement: HTMLCanvasElement } } }).__reis;
-    const e = [...r.city.roads.edges.values()][0];
+    const e = [...r.city.roads.edges.values()].at(-1)!;
     const p = e.poly.points[Math.floor(e.poly.points.length / 2)];
     const cam = r.game.cameraCtl.camera;
     const v = cam.position.clone().set(p.x, 10, p.z).project(cam);
@@ -120,20 +136,31 @@ test('zoning a street grows houses and brings residents', async ({ page }) => {
 
   // Houses need electricity and water: a wind turbine, a water tower, and a pipe and power line along the street.
   // The city hall gives residents a workplace to drive to.
-  const infra = await page.evaluate(() => {
+  const infra = await page.evaluate(async () => {
     type P = { x: number; z: number };
     type C = {
       zones: { zoneable: Uint8Array };
-      roads: { edges: Map<number, { poly: { points: P[] } }> };
+      roads: { edges: Map<number, { a: number; b: number; typeId: string; poly: { points: P[] } }>; nodes: Map<number, { id: number; x: number; z: number }>; nearestNode(x: number, z: number, r: number): { id: number; x: number; z: number } | null };
+      entryLink: P;
+      plannerWorld: unknown;
+      buildRoad(p: unknown): unknown;
       planBuilding(id: string, i: number, j: number, rot: number): { valid: boolean };
       placeBuilding(p: unknown): unknown;
       planLine(k: string, a: P, b: P): { valid: boolean };
       buildLine(p: unknown): boolean;
     };
     const city = (window as unknown as { __reis: { city: C } }).__reis.city;
+    const pts = [...city.roads.edges.values()].filter((e) => e.typeId !== 'intercity' && e.typeId !== 'citylink').at(-1)!.poly.points;
+    const a = pts[0];
+    const b = pts[pts.length - 1];
+    // Zoneable cells nearest the test street first, so the utilities sit by its pipe and power line.
+    const mx = ((a.x + b.x) / 2) / 8;
+    const mz = ((a.z + b.z) / 2) / 8;
+    const cells: number[] = [];
+    for (let k = 0; k < 256 * 256; k++) if (city.zones.zoneable[k]) cells.push(k);
+    cells.sort((p, q) => Math.hypot((p % 256) - mx, Math.floor(p / 256) - mz) - Math.hypot((q % 256) - mx, Math.floor(q / 256) - mz));
     const place = (id: string) => {
-      for (let k = 0; k < 256 * 256; k++) {
-        if (!city.zones.zoneable[k]) continue;
+      for (const k of cells) {
         for (const rot of [0, 1, 2, 3]) {
           const p = city.planBuilding(id, k % 256, Math.floor(k / 256), rot);
           if (p.valid) return city.placeBuilding(p) !== null;
@@ -141,12 +168,26 @@ test('zoning a street grows houses and brings residents', async ({ page }) => {
       }
       return false;
     };
-    const pts = [...city.roads.edges.values()][0].poly.points;
-    const a = pts[0];
-    const b = pts[pts.length - 1];
-    return [place('wind_turbine'), place('water_tower'), place('city_hall'), city.buildLine(city.planLine('pipe', a, b)), city.buildLine(city.planLine('power', a, b))];
+    const built = [place('wind_turbine'), place('water_tower'), place('city_hall'), city.buildLine(city.planLine('pipe', a, b)), city.buildLine(city.planLine('power', a, b))];
+    // Connect the street to the entry road: newcomers arrive through it.
+    const dev = (p: string) => import(/* @vite-ignore */ p);
+    const { planRoad } = await dev('/src/game/tools/placement/RoadPlanner.ts');
+    const { getRoadType } = await dev('/src/game/data/roads.ts');
+    const end = city.roads.nearestNode(city.entryLink.x, city.entryLink.z, 2)!;
+    let linked = false;
+    for (const q of [b, a]) {
+      const n = city.roads.nearestNode(q.x, q.z, 2);
+      if (!n || linked) continue;
+      // A city road may bridge the river between the street and the link road.
+      for (const type of ['street', 'city']) {
+        if (linked) break;
+        const plan = planRoad(city.roads as never, { kind: 'node', nodeId: n.id, point: n }, { kind: 'node', nodeId: end.id, point: end }, null, getRoadType(type), city.plannerWorld as never, 1e9);
+        if (plan.valid) linked = city.buildRoad(plan) !== null;
+      }
+    }
+    return [linked, ...built];
   });
-  expect(infra).toEqual([true, true, true, true, true]);
+  expect(infra, JSON.stringify(infra)).toEqual([true, true, true, true, true, true]);
 
   // Fast-forward the fixed-step simulation (same code path as normal ticks).
   await page.evaluate(() => {
@@ -184,6 +225,8 @@ test('builds a road, charges the budget and demolishes it with a refund', async 
   await page.getByTestId('input-seed').fill('12345');
   await page.getByTestId('btn-start').click();
   await expect(page.getByTestId('hud')).toBeVisible({ timeout: 80_000 });
+  await centreCamera(page);
+  const base = await segments(page);
 
   const canvas = page.locator('canvas.game-canvas');
   const budgetText = () => page.getByTestId('budget').innerText();
@@ -196,7 +239,7 @@ test('builds a road, charges the budget and demolishes it with a refund', async 
   await canvas.click({ position: { x: 1150, y: 470 } });
   await page.keyboard.press('Escape');
 
-  await expect(page.getByTestId('stat-road-segments')).toHaveText('1');
+  await expect.poll(() => segments(page)).toBe(base + 1);
   expect(await budgetText()).not.toBe(before);
 
   // Demolish it: project the built road's midpoint to the screen and click it.
@@ -209,7 +252,7 @@ test('builds a road, charges the budget and demolishes it with a refund', async 
         renderer: { domElement: HTMLCanvasElement };
       };
     }).__reis;
-    const e = [...r.city.roads.edges.values()][0];
+    const e = [...r.city.roads.edges.values()].at(-1)!;
     const p = e.poly.points[Math.floor(e.poly.points.length / 2)];
     const cam = r.game.cameraCtl.camera;
     const v = cam.position.clone().set(p.x, 10, p.z).project(cam);
@@ -220,7 +263,7 @@ test('builds a road, charges the budget and demolishes it with a refund', async 
   await canvas.hover({ position: mid });
   await expect(page.getByTestId('inspector-demolish')).toContainText('Mahalle Yolu');
   await canvas.click({ position: mid });
-  await expect(page.getByTestId('stat-road-segments')).toHaveText('0');
+  await expect.poll(() => segments(page)).toBe(base);
   await expect(page.getByTestId('toast').first()).toContainText('iade');
 
   expect(errors).toEqual([]);
@@ -235,6 +278,8 @@ test('saves a city to IndexedDB, survives a reload and continues; achievements a
   await page.getByTestId('input-seed').fill('12345');
   await page.getByTestId('btn-start').click();
   await expect(page.getByTestId('hud')).toBeVisible({ timeout: 80_000 });
+  await centreCamera(page);
+  const base = await segments(page);
 
   const canvas = page.locator('canvas.game-canvas');
   await canvas.click({ position: { x: 900, y: 600 } });
@@ -243,7 +288,7 @@ test('saves a city to IndexedDB, survives a reload and continues; achievements a
   await canvas.hover({ position: { x: 1150, y: 470 } });
   await canvas.click({ position: { x: 1150, y: 470 } });
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('stat-road-segments')).toHaveText('1');
+  await expect.poll(() => segments(page)).toBe(base + 1);
 
   // The first road earns an achievement (checked on the next simulation step).
   await page.getByTestId('btn-achievements').click();
@@ -266,7 +311,7 @@ test('saves a city to IndexedDB, survives a reload and continues; achievements a
   await page.getByTestId('btn-continue').click();
   await expect(page.getByTestId('hud')).toBeVisible({ timeout: 80_000 });
   await expect(page.getByTestId('city-name')).toHaveText('Kayıt Kenti');
-  await expect(page.getByTestId('stat-road-segments')).toHaveText('1');
+  await expect.poll(() => segments(page)).toBe(base + 1);
   await expect(page.getByTestId('pause-banner')).toBeVisible();
   expect(await page.getByTestId('budget').innerText()).toBe(budget);
   await page.getByTestId('btn-achievements').click();

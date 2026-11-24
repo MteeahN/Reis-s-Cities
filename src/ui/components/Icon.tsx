@@ -52,6 +52,10 @@ const PATHS = {
   junction: 'M12 3v18M3 12h18M12 12m-3 0a3 3 0 106 0 3 3 0 10-6 0',
   chevronLeft: 'M15 18l-6-6 6-6',
   chevronRight: 'M9 18l6-6-6-6',
+  chevronUp: 'M6 15l6-6 6 6',
+  chevronDown: 'M6 9l6 6 6-6',
+  elevated: 'M2 9h20M2 12h20M6 12v9M18 12v9M12 12v9',
+  roundabout: 'M12 7a5 5 0 105 5M17 12l-2-2M17 12l2-2M12 2v5M12 17v5M2 12h5M17 12h5',
 } as const;
 
 export type IconName = keyof typeof PATHS;

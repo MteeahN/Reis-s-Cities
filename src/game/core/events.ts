@@ -16,7 +16,7 @@ import type { StatsSample } from '../systems/StatsHistory';
 export type ToolId = 'select' | 'road' | 'building' | 'demolish' | 'zone' | 'power' | 'water' | 'services' | 'powerline' | 'pipe' | 'traffic' | 'move';
 
 /** Traffic tool: what a click changes. */
-export type TrafficToolMode = 'oneway' | 'lights' | 'stop' | 'clear';
+export type TrafficToolMode = 'oneway' | 'lights' | 'stop' | 'roundabout' | 'clear';
 
 export interface TrafficToolState {
   mode: TrafficToolMode;
@@ -182,6 +182,9 @@ export interface RoadPlanView {
   junctions: number;
   valid: boolean;
   errors: string[];
+  /** Deck height above the ground at the start and end (m). */
+  elevA?: number;
+  elevB?: number;
   /** Upgrade mode only. */
   fromTypeId?: string;
   refund?: number;
@@ -226,6 +229,8 @@ export type GameEvents = {
   roadPlan: RoadPlanView | null;
   roadMode: RoadMode;
   roadType: string;
+  /** Height the road tool builds at (m above the ground). */
+  roadElevation: number;
   buildingType: string;
   buildingPlan: BuildingPlanView | null;
   demolishTarget: DemolishTarget | null;

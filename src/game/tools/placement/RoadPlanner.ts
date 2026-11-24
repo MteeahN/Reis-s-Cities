@@ -1,5 +1,5 @@
 import { CELL_SIZE, GRID_CELLS, WATER_LEVEL, WORLD_SIZE } from '../../core/config';
-import type { RoadTypeDef } from '../../data/roads';
+import { getRoadType, type RoadTypeDef } from '../../data/roads';
 import {
   bezierLength,
   bezierPoint,
@@ -27,7 +27,7 @@ export interface PlannerWorld {
 export type Anchor =
   | { kind: 'node'; nodeId: number; point: P2 }
   | { kind: 'edge'; edgeId: number; t: number; point: P2 }
-  | { kind: 'free'; point: P2 };
+  | { kind: 'free'; point: P2; /** Deck height above the ground (m). */ elev?: number };
 
 interface Cut {
   /** Bézier parameter along the new road. */
@@ -59,6 +59,11 @@ export interface RoadPlan {
   weeklyMaintenance: number;
   /** Number of new junctions this road creates with existing roads. */
   newJunctions: number;
+  /** Deck height above the ground at the start and end (m). */
+  elevA: number;
+  elevB: number;
+  /** Length raised on pillars over dry land (m). */
+  elevatedLength: number;
   valid: boolean;
   errors: string[];
 }
@@ -68,6 +73,13 @@ export const MIN_EDGE_LENGTH = 8;
 export const MIN_CROSSING_ANGLE = (25 * Math.PI) / 180;
 export const MAX_BRIDGE_LENGTH = 320;
 export const NODE_SNAP = 6;
+/** Height steps of the road tool and the highest deck (m). */
+export const ELEVATION_STEP = 3;
+export const MAX_ELEVATION = 24;
+/** Height difference at which roads pass over each other instead of meeting (m). */
+export const OVERPASS_CLEARANCE = 6;
+/** Deck height above which a road stands on pillars and is built like a bridge (m). */
+const RAISED = 2;
 const SAMPLE_STEP = 4;
 const GRADE_WINDOW = 16;
 const ABUTMENT_LENGTH = 24;
@@ -77,6 +89,7 @@ const isWaterH = (h: number) => h < WATER_LEVEL + 0.3;
 export interface PathMetrics {
   length: number;
   bridgeLength: number;
+  elevatedLength: number;
   maxGrade: number;
   errors: string[];
 }
@@ -85,14 +98,16 @@ export interface PathMetrics {
  * Terrain/land checks shared by new roads and upgrades: bounds, owned land,
  * buildings in the way, water crossings (bridges), grade and curvature.
  */
-export function evaluatePath(curve: QuadBezier, type: RoadTypeDef, world: PlannerWorld): PathMetrics {
+export function evaluatePath(curve: QuadBezier, type: RoadTypeDef, world: PlannerWorld, elevA = 0, elevB = 0): PathMetrics {
   const poly = sampleBezier(curve, SAMPLE_STEP);
   const pts = poly.points;
   const n = pts.length - 1;
   const step = poly.length / Math.max(1, n);
   const errors: string[] = [];
   const heights: number[] = [];
+  const ground: number[] = [];
   let bridgeLength = 0;
+  let elevatedLength = 0;
   let outOfBounds = false;
   let locked = false;
   let building = false;
@@ -104,6 +119,7 @@ export function evaluatePath(curve: QuadBezier, type: RoadTypeDef, world: Planne
     if (p.x < 0 || p.z < 0 || p.x > WORLD_SIZE || p.z > WORLD_SIZE) {
       outOfBounds = true;
       heights.push(WATER_LEVEL + 1);
+      ground.push(WATER_LEVEL + 1);
       continue;
     }
     const ci = Math.min(Math.floor(p.x / CELL_SIZE), GRID_CELLS - 1);
@@ -119,15 +135,18 @@ export function evaluatePath(curve: QuadBezier, type: RoadTypeDef, world: Planne
       if (bi >= 0 && bj >= 0 && bi < GRID_CELLS && bj < GRID_CELLS && world.buildingAt(bi, bj) !== 0) building = true;
     }
     const h = world.heightAt(p.x, p.z);
+    const elev = elevA + ((elevB - elevA) * s) / Math.max(1, n);
     if (isWaterH(h) && s > 0) bridgeLength += step;
-    heights.push(h);
+    else if (elev >= RAISED && s > 0) elevatedLength += step;
+    ground.push(h);
+    heights.push(h + elev);
   }
 
   // Grade over a sliding window; bridge spans and abutments are excluded.
   const abut = Math.ceil(ABUTMENT_LENGTH / step);
   const nearWater = new Uint8Array(n + 1);
   for (let s = 0; s <= n; s++) {
-    if (isWaterH(heights[s])) {
+    if (isWaterH(ground[s])) {
       for (let k = Math.max(0, s - abut); k <= Math.min(n, s + abut); k++) nearWater[k] = 1;
     }
   }
@@ -142,12 +161,13 @@ export function evaluatePath(curve: QuadBezier, type: RoadTypeDef, world: Planne
   if (locked) errors.push('Satın alınmamış arazi');
   if (building) errors.push('Yol bir binanın üzerinden geçiyor');
   if (bridgeLength > 0 && !type.allowsBridge) errors.push(`${type.name} suyu geçemez (köprü için Şehir Yolu seçin)`);
+  if (elevatedLength > 0 && !type.allowsBridge) errors.push(`${type.name} yükseltilemez (Şehir Yolu veya daha geniş bir yol seçin)`);
   if (bridgeLength > MAX_BRIDGE_LENGTH) errors.push(`Köprü çok uzun (en fazla ${MAX_BRIDGE_LENGTH} m)`);
   if (maxGrade > type.maxGrade) errors.push(`Eğim çok yüksek (%${Math.round(maxGrade * 100)} > %${Math.round(type.maxGrade * 100)})`);
   const radius = minTurnRadius(curve);
   if (radius < type.minRadius) errors.push(`Viraj çok keskin (yarıçap ${Math.round(radius)} m < ${type.minRadius} m)`);
 
-  return { length: poly.length, bridgeLength, maxGrade, errors };
+  return { length: poly.length, bridgeLength, elevatedLength, maxGrade, errors };
 }
 
 export function roadCost(type: RoadTypeDef, length: number, bridgeLength: number): number {
@@ -157,6 +177,16 @@ export function roadCost(type: RoadTypeDef, length: number, bridgeLength: number
 
 export function weeklyMaintenance(type: RoadTypeDef, length: number, bridgeLength: number): number {
   return Math.round(length * type.maintenancePerMeter * (1 + (bridgeLength / Math.max(1, length)) * 1.5));
+}
+
+/** Deck height above the ground at an anchor (m). */
+export function anchorElevation(graph: RoadGraph, a: Anchor): number {
+  if (a.kind === 'node') return graph.nodes.get(a.nodeId)?.y ?? 0;
+  if (a.kind === 'edge') {
+    const e = graph.edges.get(a.edgeId);
+    return e ? graph.elevationAt(e, a.t) : 0;
+  }
+  return Math.max(0, a.elev ?? 0);
 }
 
 function incidentEdgeIds(graph: RoadGraph, a: Anchor): Set<number> {
@@ -182,7 +212,10 @@ export function planRoad(
   const curve: QuadBezier = control
     ? { p0: { ...start.point }, p1: { ...control }, p2: { ...end.point } }
     : straightBezier(start.point, end.point);
-  const metrics = evaluatePath(curve, type, world);
+  const elevA = anchorElevation(graph, start);
+  const elevB = anchorElevation(graph, end);
+  const elevAt = (t: number) => elevA + (elevB - elevA) * t;
+  const metrics = evaluatePath(curve, type, world, elevA, elevB);
   const errors = [...metrics.errors];
   const poly = sampleBezier(curve, 2);
   const length = metrics.length;
@@ -209,6 +242,7 @@ export function planRoad(
   let tooClose = false;
   let sharpCrossing = false;
   let junctionOnBridge = false;
+  let lowClearance = false;
   const tanNew = { x: 0, z: 0 };
   const tanOld = { x: 0, z: 0 };
   let k = 0;
@@ -221,6 +255,13 @@ export function planRoad(
       const atStart = dStart < endpointZone;
       const atEnd = dEnd < endpointZone;
       if ((atStart && startIgnore.has(e.id)) || (atEnd && endIgnore.has(e.id))) continue;
+      // Different heights: an overpass, not a junction.
+      const dy = Math.abs(elevAt(hit.ta) - graph.elevationAt(e, hit.tb));
+      if (dy >= OVERPASS_CLEARANCE) continue;
+      if (dy > 0.5) {
+        lowClearance = true;
+        continue;
+      }
       if (atStart || atEnd) {
         tooClose = true;
         continue;
@@ -302,7 +343,7 @@ export function planRoad(
       if (avoid.some((a) => Math.abs(a - d) < Math.max(16, type.width * 1.5))) continue;
       bezierPoint(curve, t, p);
       const near = graph.nearestEdge(p.x, p.z, type.width * 0.3, true);
-      if (near) overlap += length / samples;
+      if (near && Math.abs(graph.elevationAt(near.edge, near.t) - elevAt(t)) < OVERPASS_CLEARANCE) overlap += length / samples;
     }
     if (overlap > 6) errors.push('Mevcut bir yolla çakışıyor');
   }
@@ -311,14 +352,15 @@ export function planRoad(
   for (const a of [start, end]) {
     if (a.kind !== 'free') continue;
     const near = graph.nearestEdge(a.point.x, a.point.z, type.width / 2, true);
-    if (near) errors.push('Yol ucu mevcut bir yola değiyor — bağlamak için yolun üzerine tıklayın');
+    if (near && Math.abs(graph.elevationAt(near.edge, near.t) - anchorElevation(graph, a)) < OVERPASS_CLEARANCE) errors.push('Yol ucu mevcut bir yola değiyor — bağlamak için yolun üzerine tıklayın');
   }
 
   if (tooClose) errors.push('Kavşaklar birbirine çok yakın');
   if (sharpCrossing) errors.push('Yollar çok dar açıyla birleşiyor (en az 25°)');
   if (junctionOnBridge) errors.push('Köprü üzerinde kavşak kurulamaz');
+  if (lowClearance) errors.push(`Üst geçit için yükseklik farkı en az ${OVERPASS_CLEARANCE} m olmalı`);
 
-  const cost = roadCost(type, length, metrics.bridgeLength);
+  const cost = roadCost(type, length, metrics.bridgeLength + metrics.elevatedLength);
   if (cost > budget) errors.push('Yetersiz bütçe');
 
   return {
@@ -333,8 +375,11 @@ export function planRoad(
     bridgeLength: metrics.bridgeLength,
     maxGrade: metrics.maxGrade,
     cost,
-    weeklyMaintenance: weeklyMaintenance(type, length, metrics.bridgeLength),
+    weeklyMaintenance: weeklyMaintenance(type, length, metrics.bridgeLength + metrics.elevatedLength),
     newJunctions: cuts.length + (start.kind === 'edge' ? 1 : 0) + (end.kind === 'edge' ? 1 : 0),
+    elevA,
+    elevB,
+    elevatedLength: metrics.elevatedLength,
     valid: errors.length === 0,
     errors: [...new Set(errors)],
   };
@@ -371,8 +416,8 @@ export function commitRoad(graph: RoadGraph, plan: RoadPlan): { edges: number[];
         curEnd = s.t;
       }
     }
-    if (plan.start.kind === 'free') nodeFor.set('start', graph.addNode(plan.start.point.x, plan.start.point.z).id);
-    if (plan.end.kind === 'free') nodeFor.set('end', graph.addNode(plan.end.point.x, plan.end.point.z).id);
+    if (plan.start.kind === 'free') nodeFor.set('start', graph.addNode(plan.start.point.x, plan.start.point.z, plan.elevA).id);
+    if (plan.end.kind === 'free') nodeFor.set('end', graph.addNode(plan.end.point.x, plan.end.point.z, plan.elevB).id);
 
     const stops: { t: number; node: number }[] = [{ t: 0, node: nodeFor.get('start')! }];
     for (const c of plan.cuts) stops.push({ t: c.t, node: c.nodeId ?? nodeFor.get(c.key)! });
@@ -406,9 +451,10 @@ export interface UpgradePlan {
 export function planUpgrade(graph: RoadGraph, edge: RoadEdge, type: RoadTypeDef, world: PlannerWorld, budget: number): UpgradePlan {
   const errors: string[] = [];
   if (edge.typeId === type.id) errors.push('Yol zaten bu türde');
-  const m = evaluatePath(graph.curveOf(edge), type, world);
+  if (getRoadType(edge.typeId).playerBuildable === false || type.playerBuildable === false) errors.push('Şehir girişi değiştirilemez');
+  const m = evaluatePath(graph.curveOf(edge), type, world, graph.nodes.get(edge.a)?.y ?? 0, graph.nodes.get(edge.b)?.y ?? 0);
   errors.push(...m.errors.filter((e) => !e.startsWith('Satın alınmamış')));
-  const cost = roadCost(type, m.length, m.bridgeLength);
+  const cost = roadCost(type, m.length, m.bridgeLength + m.elevatedLength);
   const refund = Math.round(edge.cost * 0.5);
   const netCost = Math.max(0, cost - refund);
   if (netCost > budget) errors.push('Yetersiz bütçe');

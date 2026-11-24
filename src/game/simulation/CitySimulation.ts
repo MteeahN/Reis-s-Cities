@@ -174,6 +174,7 @@ export class CitySimulation {
     const e = this.employment;
     const employedShare = e.labor > 0 ? e.employed / e.labor : 0;
     // Clock time of day (the city is founded at 08:00).
+    c.outsideEdges(); // refreshes the entry attach the traffic model uses
     c.traffic.step(c.buildings.items.values(), c.population, employedShare, (gameMinutes + START_MINUTE_OFFSET) % MINUTES_PER_DAY);
   }
 
@@ -214,7 +215,8 @@ export class CitySimulation {
       for (let attempt = 0; attempt < 8 && empty.size > 0; attempt++) {
         const k = empty.pick(this.rand)!;
         const lot = findLot(k % 256, Math.floor(k / 256), zone, 1, this.rand, city.lotWorld);
-        if (lot) {
+        // Builders and their materials come in by the entry road: no connection, no construction.
+        if (lot && city.reachesOutside(lot.i, lot.j, lot.w, lot.d, lot.rot)) {
           city.spawnGrowable(lot, tick, this.rand());
           building++;
           break;
@@ -278,7 +280,8 @@ export class CitySimulation {
     const attract = this.attractiveness(total);
     if (free > 0 && attract > 0.05) {
       let arrivals = Math.min(free, (1 + free * 0.6 * days * 24) * attract);
-      const vacant = homes.filter((h) => residentsOf(pop.get(h.id)) < (capacity.get(h.id) ?? 0) - 0.5);
+      // Newcomers arrive by the entry road: only homes connected to it can be found.
+      const vacant = homes.filter((h) => residentsOf(pop.get(h.id)) < (capacity.get(h.id) ?? 0) - 0.5 && city.isConnectedToOutside(h));
       while (arrivals > 0.5 && vacant.length > 0) {
         const idx = Math.floor(this.rand() * vacant.length);
         const h = vacant[idx];

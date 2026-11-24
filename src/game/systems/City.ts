@@ -1,6 +1,6 @@
 import { archStyleAt, archStyleIndex, type ArchStyle } from '../data/styles';
 import { growablePrice, type DistrictRules } from '../data/buildings';
-import { CELL_SIZE, GRID_CELLS, WORLD_SIZE, TILES_PER_SIDE } from '../core/config';
+import { CELL_SIZE, GRID_CELLS, START_TILES, TILE_CELLS, WORLD_SIZE, TILES_PER_SIDE } from '../core/config';
 import { LINE_TYPES, type LineKind } from '../data/infrastructure';
 import { UtilityLines } from '../entities/infra/UtilityLines';
 import type { P2 } from '../entities/road/curve';
@@ -9,14 +9,16 @@ import { computeUtilities, type UtilityResult } from '../simulation/Utilities';
 import { getBuilding } from '../data/buildings';
 import { getRoadType, type RoadTypeDef } from '../data/roads';
 import { getZone, ZoneType, type ZoneKind } from '../data/zones';
-import { planBuilding, type BuildingPlan, type PlacementWorld, type Rotation } from '../entities/building/BuildingPlacement';
+import { frontCells, planBuilding, type BuildingPlan, type PlacementWorld, type Rotation } from '../entities/building/BuildingPlacement';
 import { BuildingRegistry, type PlacedBuilding } from '../entities/building/BuildingRegistry';
 import { RoadGraph, type RoadEdge } from '../entities/road/RoadGraph';
 import { LandValueMap, waterProximity } from '../simulation/LandValue';
 import type { Lot, LotWorld } from '../simulation/LotFinder';
 import { Population } from '../simulation/Population';
-import { TrafficModel } from '../simulation/traffic/TrafficModel';
-import { commitRoad, planUpgrade, type PlannerWorld, type RoadPlan, type UpgradePlan } from '../tools/placement/RoadPlanner';
+import { ATTACH_RADIUS, TrafficModel, type Attach } from '../simulation/traffic/TrafficModel';
+import { commitRoad, planRoad, planUpgrade, type Anchor, type PlannerWorld, type RoadPlan, type UpgradePlan } from '../tools/placement/RoadPlanner';
+import { commitRoundabout, planRoundabout, type RoundaboutPlan } from '../tools/placement/Roundabout';
+import { findRoute, relaxCorners, simplifyRoute, smoothPieces } from './HighwayRoute';
 import { Occupancy } from '../world/Occupancy';
 import type { World } from '../world/World';
 import { ZoneMap } from '../world/ZoneMap';
@@ -63,6 +65,19 @@ export class City {
   maxPopulation = 0;
   /** Sandbox (creative) mode: unlimited money, every tool and all land unlocked. */
   sandbox = false;
+  /**
+   * Where the intercity highway meets the map edges: the city's links to the
+   * outside world. Immigrants, visitors and freight arrive through them.
+   * Empty only for cities saved before the highway existed (no connection rule).
+   */
+  entries: P2[] = [];
+  /** End of the link road from the highway junction into the city (where the first streets start). */
+  entryLink: P2 | null = null;
+  /** First outside connection (null: none). */
+  get entry(): P2 | null {
+    return this.entries[0] ?? null;
+  }
+  private outsideCache: Set<number> | null = null;
   /** Undo / redo of hand-placed buildings. */
   readonly undo = new UndoHistory();
   /** False while undo/redo replays an entry, so it is not recorded again. */
@@ -105,6 +120,8 @@ export class City {
     };
 
     this.roads.onChange((c) => {
+      this.outsideCache = null;
+
       for (const id of c.removed) {
         this.occupancy.clearRoad(id);
         // Land that is no longer near any road loses its (empty) zoning.
@@ -116,7 +133,8 @@ export class City {
         if (!e) continue;
         const type = getRoadType(e.typeId);
         this.occupancy.setRoad(id, e.poly.points, type.width);
-        if (type.zoneable) this.zones.addEdge(id, e.poly.points, type.width);
+        // Raised roads have no street frontage.
+        if (type.zoneable && !this.roads.isElevated(e)) this.zones.addEdge(id, e.poly.points, type.width);
         this.clearVegetationAlong(e);
       }
       // Road cells can't be zoned: clear zoning under roads, refresh the lot index.
@@ -248,6 +266,18 @@ export class City {
     return commitRoad(this.roads, plan).endNode;
   }
 
+  planRoundabout(nodeId: number): RoundaboutPlan {
+    return planRoundabout(this.roads, nodeId, this.plannerWorld, this.treasury.balance);
+  }
+
+  /** Builds a validated roundabout (pays for the ring); false if it can no longer be built. */
+  buildRoundabout(plan: RoundaboutPlan): boolean {
+    const fresh = this.planRoundabout(plan.nodeId);
+    if (!fresh.valid || !this.treasury.spend(fresh.cost, 'roads')) return false;
+    commitRoundabout(this.roads, fresh);
+    return true;
+  }
+
   planUpgrade(edgeId: number, type: RoadTypeDef): UpgradePlan | null {
     const e = this.roads.edges.get(edgeId);
     return e ? planUpgrade(this.roads, e, type, this.plannerWorld, this.treasury.balance) : null;
@@ -272,6 +302,166 @@ export class City {
     this.roads.removeEdge(edgeId);
     this.treasury.refund(refund, 'roads');
     return refund;
+  }
+
+  // ---------------------------------------------------------------- outside connection
+
+  /**
+   * Lays the intercity highway across the whole map (new cities): from one
+   * map edge to the opposite one, passing outside the owned land. The route
+   * is searched over the terrain so it follows the gentlest ground, bridges
+   * short stretches of water and keeps off the city's land; it is drawn as
+   * smooth curves. A single link road leaves it at a junction and enters the
+   * city, where the first streets start. Free of charge; returns false if no
+   * route works.
+   */
+  buildEntryRoad(): boolean {
+    const hwy: RoadTypeDef = { ...getRoadType('intercity'), maxGrade: 1, minRadius: 0 };
+    const anywhere: PlannerWorld = { ...this.plannerWorld, isCellUnlocked: () => true };
+    const wet = (x: number, z: number) => this.world.grid.isWater(Math.floor(x / CELL_SIZE), Math.floor(z / CELL_SIZE));
+    const terrain = { heightAt: this.world.heightAt, isWaterAt: wet };
+    const lo = Math.min(...START_TILES.map(([x]) => x)) * TILE_CELLS * CELL_SIZE;
+    const hi = (Math.max(...START_TILES.map(([x]) => x)) + 1) * TILE_CELLS * CELL_SIZE;
+    const mid = (lo + hi) / 2;
+    const M = WORLD_SIZE;
+    // Keep the highway off the city's own land (and a margin around it).
+    const margin = 40;
+    const avoid = (p: P2) => (p.x > lo - margin && p.x < hi + margin && p.z > lo - margin && p.z < hi + margin ? 40 : 0);
+    const GAP = 80;
+    const options: { w: P2; alongX: boolean; into: P2 }[] = [];
+    for (const shift of [0, -192, 192, -320, 320]) {
+      options.push(
+        { w: { x: mid + shift, z: lo - GAP }, alongX: true, into: { x: 0, z: 1 } },
+        { w: { x: mid + shift, z: hi + GAP }, alongX: true, into: { x: 0, z: -1 } },
+        { w: { x: lo - GAP, z: mid + shift }, alongX: false, into: { x: 1, z: 0 } },
+        { w: { x: hi + GAP, z: mid + shift }, alongX: false, into: { x: -1, z: 0 } },
+      );
+    }
+    for (const { w, alongX, into } of options) {
+      if (wet(w.x, w.z)) continue;
+      const starts: P2[] = [];
+      for (let c = 8; c < M; c += 16) starts.push(alongX ? { x: 8, z: c } : { x: c, z: 8 });
+      const first = findRoute(terrain, starts, (p) => Math.hypot(p.x - w.x, p.z - w.z) < 12, (p) => Math.hypot(p.x - w.x, p.z - w.z), hwy.maxGrade, avoid);
+      const second = findRoute(terrain, [w], (p) => (alongX ? p.x : p.z) >= M - 16, (p) => M - (alongX ? p.x : p.z), hwy.maxGrade, avoid);
+      if (!first || !second) continue;
+      const route = [...first, ...second.slice(1)];
+      // Run the ends right up to the map edge.
+      const a = route[0];
+      const b = route[route.length - 1];
+      route[0] = alongX ? { x: 4, z: a.z } : { x: a.x, z: 4 };
+      route[route.length - 1] = alongX ? { x: M - 4, z: b.z } : { x: b.x, z: M - 4 };
+      const pieces = smoothPieces(relaxCorners(simplifyRoute(route, 14, 120), 60));
+      const before = new Set(this.roads.edges.keys());
+      const rollback = () => {
+        for (const id of [...this.roads.edges.keys()]) if (!before.has(id)) this.roads.removeEdge(id);
+      };
+      let anchor: Anchor = { kind: 'free', point: pieces[0].a };
+      let ok = true;
+      for (const piece of pieces) {
+        const plan = planRoad(this.roads, anchor, { kind: 'free', point: piece.b }, piece.c, hwy, anywhere, Infinity);
+        if (!plan.valid) {
+          ok = false;
+          break;
+        }
+        const node = this.roads.nodes.get(commitRoad(this.roads, plan).endNode);
+        if (!node) {
+          ok = false;
+          break;
+        }
+        anchor = { kind: 'node', nodeId: node.id, point: { x: node.x, z: node.z } };
+      }
+      const link = ok ? this.buildEntryLink(w, into, anywhere) : null;
+      if (!link) {
+        rollback();
+        continue;
+      }
+      this.entries = [pieces[0].a, pieces[pieces.length - 1].b];
+      this.entryLink = link;
+      this.outsideCache = null;
+      this.outsideEdges();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Junction on the highway near `w` and the city's single link road from it
+   * into the owned land (direction `into`), preferably without a bridge;
+   * returns the link road's end.
+   */
+  private buildEntryLink(w: P2, into: P2, world: PlannerWorld): P2 | null {
+    const type = getRoadType('citylink');
+    const hit = this.roads.nearestEdge(w.x, w.z, 48, true);
+    if (!hit || hit.edge.typeId !== 'intercity') return null;
+    for (const dry of [true, false]) {
+      for (const reach of [176, 160, 192, 144, 208]) {
+        const end = { x: hit.point.x + into.x * reach, z: hit.point.z + into.z * reach };
+        const plan = planRoad(this.roads, { kind: 'edge', edgeId: hit.edge.id, t: hit.t, point: hit.point }, { kind: 'free', point: end }, null, type, world, Infinity);
+        if (!plan.valid || (dry && plan.bridgeLength > 0)) continue;
+        commitRoad(this.roads, plan);
+        return end;
+      }
+    }
+    return null;
+  }
+
+  /** Road edges that reach the outside world through the entry road (null: no entry road in this city). */
+  outsideEdges(): Set<number> | null {
+    if (this.entries.length === 0) return null;
+    if (this.outsideCache) return this.outsideCache;
+    const reach = new Set<number>();
+    const outside: Attach[] = [];
+    this.traffic.outside = outside;
+    for (const entry of this.entries) {
+      const start = this.roads.nearestNode(entry.x, entry.z, 6);
+      if (!start) continue;
+      const byNode = new Map<number, RoadEdge[]>();
+      for (const e of this.roads.edges.values()) {
+        for (const n of [e.a, e.b]) {
+          let l = byNode.get(n);
+          if (!l) byNode.set(n, (l = []));
+          l.push(e);
+        }
+      }
+      const seen = new Set<number>([start.id]);
+      const stack = [start.id];
+      while (stack.length) {
+        const n = stack.pop()!;
+        for (const e of byNode.get(n) ?? []) {
+          reach.add(e.id);
+          if (n === start.id && !outside.some((o) => o.edge === e.id)) outside.push({ edge: e.id, s: e.a === n ? 0 : 1 });
+          const o = e.a === n ? e.b : e.a;
+          if (!seen.has(o)) {
+            seen.add(o);
+            stack.push(o);
+          }
+        }
+      }
+    }
+    this.outsideCache = reach;
+    return reach;
+  }
+
+  /** Whether the road in front of a footprint reaches the city entry (always true in cities without one). */
+  reachesOutside(i: number, j: number, w: number, d: number, rot: Rotation): boolean {
+    const reach = this.outsideEdges();
+    if (!reach) return true;
+    for (const depth of [1, 2]) {
+      const cells = frontCells(i, j, w, d, rot, depth);
+      let x = 0;
+      let z = 0;
+      for (const [ci, cj] of cells) {
+        x += (ci + 0.5) * CELL_SIZE;
+        z += (cj + 0.5) * CELL_SIZE;
+      }
+      const hit = this.roads.nearestEdge(x / cells.length, z / cells.length, ATTACH_RADIUS, true, (e) => !this.roads.isElevated(e));
+      if (hit) return reach.has(hit.edge.id);
+    }
+    return false;
+  }
+
+  isConnectedToOutside(b: PlacedBuilding): boolean {
+    return this.reachesOutside(b.i, b.j, b.w, b.d, b.rot);
   }
 
   // ---------------------------------------------------------------- zoning

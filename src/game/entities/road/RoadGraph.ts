@@ -19,6 +19,8 @@ export interface RoadNode {
   z: number;
   edges: number[];
   control?: JunctionControl;
+  /** Height of the road deck above the ground (m): elevated roads and overpasses. Absent: at ground level. */
+  y?: number;
 }
 
 export interface RoadEdge {
@@ -44,7 +46,7 @@ export interface RoadChange {
 
 export interface RoadGraphData {
   version: 1;
-  nodes: { id: number; x: number; z: number; ctl?: JunctionControl }[];
+  nodes: { id: number; x: number; z: number; ctl?: JunctionControl; el?: number }[];
   edges: { id: number; a: number; b: number; typeId: string; cx: number; cz: number; cost: number; ow?: 1 | -1 }[];
   nextId: number;
 }
@@ -161,8 +163,8 @@ export class RoadGraph {
 
   // ---------------------------------------------------------------- edits
 
-  addNode(x: number, z: number): RoadNode {
-    const node: RoadNode = { id: this.nextId++, x, z, edges: [] };
+  addNode(x: number, z: number, y = 0): RoadNode {
+    const node: RoadNode = { id: this.nextId++, x, z, edges: [], ...(y > 0 ? { y } : {}) };
     this.nodes.set(node.id, node);
     return node;
   }
@@ -230,7 +232,7 @@ export class RoadGraph {
     if (!e) throw new Error('splitEdge: unknown edge');
     return this.batch(() => {
       const [L, R] = splitBezier(this.curveOf(e), t);
-      const node = this.addNode(L.p2.x, L.p2.z);
+      const node = this.addNode(L.p2.x, L.p2.z, this.elevationAt(e, t));
       const lenL = bezierLength(L);
       const lenR = bezierLength(R);
       const share = lenL / Math.max(1e-6, lenL + lenR);
@@ -242,6 +244,18 @@ export class RoadGraph {
       if (oneWay) left.oneWay = right.oneWay = oneWay;
       return { node, left, right };
     });
+  }
+
+  /** Deck height above the ground at parameter t of an edge (linear between its junctions). */
+  elevationAt(e: RoadEdge, t: number): number {
+    const ya = this.nodes.get(e.a)?.y ?? 0;
+    const yb = this.nodes.get(e.b)?.y ?? 0;
+    return ya + (yb - ya) * t;
+  }
+
+  /** Is any part of the edge raised off the ground? */
+  isElevated(e: RoadEdge): boolean {
+    return (this.nodes.get(e.a)?.y ?? 0) > 0 || (this.nodes.get(e.b)?.y ?? 0) > 0;
   }
 
   // ---------------------------------------------------------------- spatial index
@@ -314,10 +328,12 @@ export class RoadGraph {
     z: number,
     radius: number,
     includeWidth = false,
+    accept?: (e: RoadEdge) => boolean,
   ): { edge: RoadEdge; t: number; point: P2; dist: number } | null {
     let best: { edge: RoadEdge; t: number; point: P2; dist: number } | null = null;
     const pad = includeWidth ? 14 : 0;
     for (const e of this.edgesInBox(x - radius - pad, z - radius - pad, x + radius + pad, z + radius + pad)) {
+      if (accept && !accept(e)) continue;
       const r = this.closestOnEdge(e, { x, z });
       const limit = radius + (includeWidth ? getRoadType(e.typeId).width / 2 : 0);
       if (r.dist <= limit && (!best || r.dist < best.dist)) best = { edge: e, ...r };
@@ -346,7 +362,7 @@ export class RoadGraph {
   serialize(): RoadGraphData {
     return {
       version: 1,
-      nodes: [...this.nodes.values()].map((n) => ({ id: n.id, x: n.x, z: n.z, ...(n.control ? { ctl: n.control } : {}) })),
+      nodes: [...this.nodes.values()].map((n) => ({ id: n.id, x: n.x, z: n.z, ...(n.control ? { ctl: n.control } : {}), ...(n.y ? { el: n.y } : {}) })),
       edges: [...this.edges.values()].map((e) => ({ id: e.id, a: e.a, b: e.b, typeId: e.typeId, cx: e.c.x, cz: e.c.z, cost: e.cost, ...(e.oneWay ? { ow: e.oneWay } : {}) })),
       nextId: this.nextId,
     };
@@ -362,7 +378,7 @@ export class RoadGraph {
   load(data: RoadGraphData): void {
     if (this.edges.size || this.nodes.size) throw new Error('RoadGraph.load: graph is not empty');
     this.batch(() => {
-      for (const n of data.nodes) this.nodes.set(n.id, { id: n.id, x: n.x, z: n.z, edges: [], ...(n.ctl === 'lights' || n.ctl === 'stop' ? { control: n.ctl } : {}) });
+      for (const n of data.nodes) this.nodes.set(n.id, { id: n.id, x: n.x, z: n.z, edges: [], ...(n.ctl === 'lights' || n.ctl === 'stop' ? { control: n.ctl } : {}), ...(typeof n.el === 'number' && n.el > 0 ? { y: n.el } : {}) });
       for (const e of data.edges) {
         const edge = this.addEdge(e.a, e.b, e.typeId, { x: e.cx, z: e.cz }, e.cost, e.id);
         if (e.ow === 1 || e.ow === -1) edge.oneWay = e.ow;

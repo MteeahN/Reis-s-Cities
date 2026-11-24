@@ -48,6 +48,11 @@ export const SHOP_TRIPS_PER_RESIDENT = 0.25;
 export const FREIGHT_PER_WORKER = 0.4;
 /** Travel-time decay of destination choice (s). */
 export const DEST_DECAY = 300;
+/** Trips through the city entry: freight imported per shop worker, exported per factory worker, visitors per resident. */
+export const IMPORT_PER_SHOP_WORKER = 0.15;
+export const EXPORT_PER_FACTORY_WORKER = 0.2;
+export const VISITORS_PER_RESIDENT = 0.04;
+
 /** How far a building's front may be from the road it uses (m). */
 export const ATTACH_RADIUS = 14;
 
@@ -382,7 +387,8 @@ export class TrafficModel {
       }
       x /= cells.length;
       z /= cells.length;
-      const hit = this.roads.nearestEdge(x, z, ATTACH_RADIUS, true);
+      // Buildings are reached from streets at ground level, not from raised roads.
+      const hit = this.roads.nearestEdge(x, z, ATTACH_RADIUS, true, (e) => !this.roads.isElevated(e));
       if (hit) {
         result = { edge: hit.edge.id, s: hit.t };
         break;
@@ -465,6 +471,9 @@ export class TrafficModel {
    * One traffic update: generate trips, route them on current link times and
    * blend the result into the running flows.
    */
+  /** Where the highway leaves the map (edge id + Bézier parameter), set by the city; empty = no outside world. */
+  outside: Attach[] = [];
+
   step(buildings: Iterable<PlacedBuilding>, pop: Population, employmentRate: number, minuteOfDay: number): void {
     if (this.dirty) this.rebuild();
     const nLinks = this.linkEdge.length;
@@ -494,6 +503,9 @@ export class TrafficModel {
       g.trips[p] += trips;
       if (!g.members.includes(b.id)) g.members.push(b.id);
     };
+    let exportWeight = 0;
+    let shopWorkers = 0;
+    let residentsTotal = 0;
     for (const b of buildings) {
       if (b.state !== 'active') continue;
       const def = getBuilding(b.defId);
@@ -516,8 +528,26 @@ export class TrafficModel {
         addDest('shop', at, b.occupants);
         addDest('freight', at, b.occupants);
       }
-      if (b.zone === ZoneType.Industrial && b.occupants > 0) addOrigin(b, at, 'freight', b.occupants * FREIGHT_PER_WORKER);
+      if (b.zone === ZoneType.Industrial && b.occupants > 0) {
+        addOrigin(b, at, 'freight', b.occupants * FREIGHT_PER_WORKER);
+        exportWeight += b.occupants * EXPORT_PER_FACTORY_WORKER;
+      }
+      if (isShop) shopWorkers += b.occupants;
+      const hh = isHome ? pop.households.get(b.id) : undefined;
+      if (hh) residentsTotal += residentsOf(hh);
     }
+    // The outside world: imports to shops and visitors arrive by the entry road, factories export through it.
+    // Trips split evenly between the highway's ends.
+    const outs = this.outside.filter((o) => this.roads.edges.has(o.edge));
+    outs.forEach((out, k) => {
+      const n = outs.length;
+      if (exportWeight > 0) addDest('freight', out, exportWeight / n);
+      const imports = (shopWorkers * IMPORT_PER_SHOP_WORKER) / n;
+      const visitors = (residentsTotal * VISITORS_PER_RESIDENT) / n;
+      if (imports + visitors > 0) {
+        origins.set(-1 - k, { edge: out.edge, s: out.s, members: [], trips: { work: 0, shop: visitors, freight: imports }, dep: [], arr: [] });
+      }
+    });
     for (const p of PURPOSES) {
       for (const g of dests[p].values()) {
         g.arr = this.arrivals(g.edge, g.s);

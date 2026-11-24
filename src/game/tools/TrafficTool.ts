@@ -15,6 +15,7 @@ export const STOP_COST = 60;
  * Traffic management:
  *  - One-way: click a road segment to cycle its direction (two-way → a→b → b→a → two-way).
  *  - Lights / Stop: click a junction (3+ roads) to install signals or stop signs.
+ *  - Roundabout: click a junction (3–6 roads) to rebuild it as a one-way ring.
  *  - Clear: click a junction to remove its control.
  * Changes feed the traffic assignment (routes, capacities, junction waits) and the vehicles on screen.
  */
@@ -85,6 +86,19 @@ export class TrafficTool implements Tool {
       };
     } else if (this.hoverNode !== null) {
       const n = roads.nodes.get(this.hoverNode)!;
+      if (this.state.mode === 'roundabout') {
+        const plan = this.ctx.city.planRoundabout(n.id);
+        target = {
+          kind: 'junction',
+          name: `${n.edges.length} yollu kavşak`,
+          detail: plan.valid ? `Halka yarıçapı ${Math.round(plan.radius)} m · haftalık bakım ${plan.weeklyMaintenance} ₺` : plan.errors[0],
+          action: plan.valid ? 'Tıklayın: döner kavşak yap' : 'Yapılamaz',
+          cost: plan.valid ? plan.cost : 0,
+        };
+        this.state = { ...this.state, target };
+        this.emit();
+        return;
+      }
       const control = n.control === 'lights' ? 'Trafik lambası' : n.control === 'stop' ? 'Dur levhaları' : 'Kontrolsüz';
       const mode = this.state.mode;
       const want = mode === 'lights' ? 'lights' : mode === 'stop' ? 'stop' : null;
@@ -109,7 +123,9 @@ export class TrafficTool implements Tool {
       this.preview.setMarkers([], 0, h);
     } else if (this.hoverNode !== null) {
       const n = roads.nodes.get(this.hoverNode)!;
-      this.preview.hidePath();
+      const plan = this.state.mode === 'roundabout' ? this.ctx.city.planRoundabout(n.id) : null;
+      if (plan && plan.outline.length > 1) this.preview.showPath(plan.outline, 10, plan.valid ? 'valid' : 'invalid', h, () => this.ctx.city.roads.nodes.get(n.id)?.y ?? 0);
+      else this.preview.hidePath();
       this.preview.setMarkers([{ x: n.x, z: n.z }], 9, h);
     } else this.preview.hide();
   }
@@ -144,6 +160,17 @@ export class TrafficTool implements Tool {
       roads.setOneWay(e.id, next);
       this.ctx.events.emit('sfx', 'click');
       this.ctx.events.emit('toast', { kind: 'info', text: next === 0 ? 'Yol çift yönlü yapıldı' : 'Yol tek yönlü yapıldı' });
+    } else if (this.hoverNode !== null && this.state.mode === 'roundabout') {
+      const plan = city.planRoundabout(this.hoverNode);
+      if (!plan.valid) {
+        this.ctx.events.emit('toast', { kind: 'error', text: plan.errors[0] });
+        return;
+      }
+      if (city.buildRoundabout(plan)) {
+        this.hoverNode = null;
+        this.ctx.events.emit('sfx', 'road');
+        this.ctx.events.emit('toast', { kind: 'success', text: 'Döner kavşak yapıldı' });
+      }
     } else if (this.hoverNode !== null) {
       const n = roads.nodes.get(this.hoverNode)!;
       const want = this.state.mode === 'lights' ? 'lights' : this.state.mode === 'stop' ? 'stop' : null;
@@ -166,7 +193,7 @@ export class TrafficTool implements Tool {
   }
 
   onKey(code: string): boolean {
-    const order: TrafficToolMode[] = ['oneway', 'lights', 'stop', 'clear'];
+    const order: TrafficToolMode[] = ['oneway', 'lights', 'stop', 'roundabout', 'clear'];
     if (code === 'Tab') {
       this.setMode(order[(order.indexOf(this.state.mode) + 1) % order.length]);
       return true;

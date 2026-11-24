@@ -1,5 +1,5 @@
 /** Architectural styles a district (zoned cells) can be given; growable buildings take their lot's style. */
-export const ARCH_STYLES = ['modern', 'european', 'asian', 'mediterranean', 'ottoman', 'nordic', 'arabic', 'slavic', 'american', 'medieval', 'futuristic'] as const;
+export const ARCH_STYLES = ['modern', 'european', 'asian', 'mediterranean', 'ottoman', 'nordic', 'arabic', 'slavic', 'american', 'medieval'] as const;
 export type ArchStyle = (typeof ARCH_STYLES)[number];
 
 export interface ArchStyleDef {
@@ -116,16 +116,6 @@ export const ARCH_STYLE_DEFS: Record<ArchStyle, ArchStyleDef> = {
     roofs: ['#6b4a3a', '#8f4430', '#4a4f55', '#5a3a2a'],
     accents: ['#3a2a20', '#4a3020', '#2e2620'],
     industry: ['#9a8f80', '#8a8070', '#a89f92'],
-  },
-  futuristic: {
-    id: 'futuristic',
-    name: 'Fütüristik',
-    description: 'Beyaz ve gümüş yuvarlak hatlar, camekân cepheler, turkuaz ışık şeritleri, çatı kubbeleri, halkalar ve güneş kanatları.',
-    swatch: ['#eef2f5', '#9aa7b0', '#2fd5e0'],
-    walls: ['#eef2f5', '#dfe6ea', '#e6ecef', '#c9d3da', '#f4f6f7'],
-    roofs: ['#9aa7b0', '#7f8c94', '#b8c2c9'],
-    accents: ['#2fd5e0', '#56e0b0', '#7a8cff', '#2fa8e0'],
-    industry: ['#c9d3da', '#b8c2c9', '#dfe6ea'],
   },
 };
 

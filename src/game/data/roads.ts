@@ -36,6 +36,8 @@ export interface RoadTypeDef {
   previewColor: number;
   /** Catalogue tab: neighbourhood streets, wide roads or highways. */
   category: RoadCategory;
+  /** False for the intercity entry road, which the game lays and players cannot draw. */
+  playerBuildable?: boolean;
 }
 
 export type RoadCategory = 'street' | 'wide' | 'highway';
@@ -209,7 +211,58 @@ export const ROAD_TYPES: readonly RoadTypeDef[] = [
     previewColor: 0x38bdf8,
     category: 'street',
   },
+  {
+    id: 'intercity',
+    name: 'Şehirlerarası Yol',
+    description: 'Haritanın kenarından şehre gelen giriş yolu. Göçmenler, ziyaretçiler ve yük kamyonları bu yoldan gelir.',
+    lanes: 4,
+    oneWay: false,
+    width: 18,
+    sidewalk: 1,
+    median: 2,
+    centerLine: 'none',
+    costPerMeter: 0,
+    maintenancePerMeter: 0,
+    capacity: 3200,
+    speedKmh: 80,
+    maxGrade: 0.12,
+    minRadius: 60,
+    allowsBridge: true,
+    bridgeCostMultiplier: 1,
+    unlockPopulation: 0,
+    zoneable: false,
+    previewColor: 0xe2c044,
+    category: 'highway',
+    playerBuildable: false,
+  },
+  {
+    id: 'citylink',
+    name: 'Şehir Bağlantı Yolu',
+    description: 'Şehirlerarası yolun kavşağından şehre giren yol. Oyunla birlikte gelir; ilk sokaklar buradan başlar.',
+    lanes: 2,
+    oneWay: false,
+    width: 12,
+    sidewalk: 2.5,
+    median: 0,
+    centerLine: 'double',
+    costPerMeter: 0,
+    maintenancePerMeter: 0,
+    capacity: 1100,
+    speedKmh: 50,
+    maxGrade: 0.12,
+    minRadius: 16,
+    allowsBridge: true,
+    bridgeCostMultiplier: 1,
+    unlockPopulation: 0,
+    zoneable: true,
+    previewColor: 0x60a5fa,
+    category: 'street',
+    playerBuildable: false,
+  },
 ];
+
+/** Road types the player can pick in the road tool. */
+export const BUILDABLE_ROAD_TYPES = ROAD_TYPES.filter((t) => t.playerBuildable !== false);
 
 export const getRoadType = (id: string): RoadTypeDef => {
   const t = ROAD_TYPES.find((r) => r.id === id);

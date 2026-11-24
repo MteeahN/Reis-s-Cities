@@ -101,7 +101,7 @@ export class RoadPreview {
   }
 
   /** Draws a ribbon of `width` along `points` (≥2). */
-  showPath(points: P2[], width: number, state: PreviewState, heightAt: HeightFn): void {
+  showPath(points: P2[], width: number, state: PreviewState, heightAt: HeightFn, raise?: (i: number, n: number) => number): void {
     this.group.visible = true;
     const n = Math.min(points.length, MAX_POINTS);
     if (n < 2) {
@@ -123,9 +123,10 @@ export class RoadPreview {
       const nx = -tz * half;
       const nz = tx * half;
       if (i > 0) v += Math.hypot(p.x - points[i - 1].x, p.z - points[i - 1].z);
+      const up = raise ? raise(i, n) : 0;
       const hc = this.deck(heightAt(p.x, p.z));
-      const hl = Math.max(hc, this.deck(heightAt(p.x + nx, p.z + nz)));
-      const hr = Math.max(hc, this.deck(heightAt(p.x - nx, p.z - nz)));
+      const hl = Math.max(hc, this.deck(heightAt(p.x + nx, p.z + nz))) + up;
+      const hr = Math.max(hc, this.deck(heightAt(p.x - nx, p.z - nz))) + up;
       const o = i * 6;
       this.pos[o] = p.x + nx;
       this.pos[o + 1] = hl + LIFT;
@@ -152,13 +153,13 @@ export class RoadPreview {
   }
 
   /** Places markers (start, control, end…); pass fewer points to hide the rest. */
-  setMarkers(points: P2[], size: number, heightAt: HeightFn): void {
+  setMarkers(points: P2[], size: number, heightAt: HeightFn, raise: number[] = []): void {
     this.group.visible = true;
     this.markers.forEach((m, i) => {
       const p = points[i];
       m.visible = !!p;
       if (!p) return;
-      m.position.set(p.x, this.deck(heightAt(p.x, p.z)) + LIFT + 0.05, p.z);
+      m.position.set(p.x, this.deck(heightAt(p.x, p.z)) + (raise[i] ?? 0) + LIFT + 0.05, p.z);
       m.scale.setScalar(Math.max(3, size));
     });
   }

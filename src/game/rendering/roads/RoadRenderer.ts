@@ -151,7 +151,8 @@ export class RoadRenderer {
     let h = this.nodeHeights.get(nodeId);
     if (h === undefined) {
       const n = this.graph.nodes.get(nodeId)!;
-      h = nodeSurfaceHeight(n, this.nodeRadius(nodeId), this.heightAt);
+      // Elevated roads: the deck stands that far above the ground (pillars are added by the edge mesh).
+      h = nodeSurfaceHeight(n, this.nodeRadius(nodeId), this.heightAt) + (n.y ?? 0);
       this.nodeHeights.set(nodeId, h);
     }
     return h;

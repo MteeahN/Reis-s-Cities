@@ -90,6 +90,8 @@ export class DemolishTool implements Tool {
     }
     if (allow('road')) {
       const hit = city.roads.nearestEdge(ground.x, ground.z, f === 'road' ? 4 : 1, true);
+      // The city entry road is never a demolish target.
+      if (hit && getRoadType(hit.edge.typeId).playerBuildable === false) return null;
       if (hit) return { kind: 'road', id: hit.edge.id, name: getRoadType(hit.edge.typeId).name, refund: city.roadRefund(hit.edge.id) };
     }
     if (f !== 'all') return null;
@@ -129,7 +131,13 @@ export class DemolishTool implements Tool {
   onPointerUp(p: PointerInfo, ground: Vector3 | null): void {
     if (p.button !== MouseButton.Left || Math.hypot(p.x - this.downX, p.y - this.downY) > 5) return;
     const t = this.find(ground);
-    if (!t) return;
+    if (!t) {
+      const hit = ground ? this.ctx.city.roads.nearestEdge(ground.x, ground.z, 4, true) : null;
+      if (hit && getRoadType(hit.edge.typeId).playerBuildable === false) {
+        this.ctx.events.emit('toast', { kind: 'warning', text: 'Şehir girişi yıkılamaz: göçmenler, ziyaretçiler ve yük kamyonları bu yoldan gelir.' });
+      }
+      return;
+    }
     const city = this.ctx.city;
     const refund =
       t.kind === 'road'

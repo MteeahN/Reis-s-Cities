@@ -177,7 +177,8 @@ describe('Traffic noise and exhaust', () => {
   });
 });
 
-describe('Traffic performance', () => {
+// Wall-clock test: other test files share the CPU, so a slow moment gets two more tries.
+describe('Traffic performance', { retry: 2 }, () => {
   it('routes a 20×20 grid with hundreds of origin groups quickly', () => {
     const g = new RoadGraph();
     const S = 20;

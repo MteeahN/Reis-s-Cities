@@ -53,6 +53,7 @@ export interface GameUIState {
   budget: number;
   tool: ToolId;
   roadType: string;
+  roadElevation: number;
   roadMode: RoadMode;
   buildingType: string;
   grid: boolean;
@@ -119,6 +120,7 @@ export const INITIAL_GAME_STATE = {
   budget: STARTING_BUDGET,
   tool: 'select' as ToolId,
   roadType: 'street',
+  roadElevation: 0,
   roadMode: 'straight' as RoadMode,
   buildingType: 'city_hall',
   hover: null,
