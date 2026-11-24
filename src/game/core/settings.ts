@@ -1,4 +1,5 @@
 import type { DayNightMode } from '../rendering/DayNight';
+import type { ArtStyle } from '../rendering/PostProcessing';
 import { QUALITY_PRESETS, type QualityLevel, type QualitySetting, type ShadowQuality } from '../rendering/QualityManager';
 
 /** What the player chose in the graphics menu. Preset values are copied into the fields; editing a field makes it 'custom'. */
@@ -17,6 +18,8 @@ export interface GraphicsSettings {
   dayNight: DayNightMode;
   /** Street lamp brightness at night, 0–1 (independent of presets). */
   streetLights: number;
+  /** Hand-drawn sketch look or the realistic render (independent of presets). */
+  artStyle: ArtStyle;
 }
 
 export interface AudioSettings {
@@ -45,7 +48,7 @@ export interface Settings {
   gameplay: GameplaySettings;
 }
 
-export function presetValues(level: QualityLevel): Omit<GraphicsSettings, 'preset' | 'dayNight' | 'streetLights'> {
+export function presetValues(level: QualityLevel): Omit<GraphicsSettings, 'preset' | 'dayNight' | 'streetLights' | 'artStyle'> {
   const p = QUALITY_PRESETS[level];
   return {
     shadows: p.shadows,
@@ -66,12 +69,12 @@ export function presetValues(level: QualityLevel): Omit<GraphicsSettings, 'prese
 export function nextGraphics(cur: GraphicsSettings, patch: Partial<GraphicsSettings>, autoLevel: QualityLevel): GraphicsSettings {
   const next: GraphicsSettings = { ...cur, ...patch };
   if (patch.preset && patch.preset !== 'custom') return { ...next, ...presetValues(patch.preset === 'auto' ? autoLevel : patch.preset) };
-  if (Object.keys(patch).some((k) => k !== 'preset' && k !== 'dayNight' && k !== 'streetLights')) next.preset = 'custom';
+  if (Object.keys(patch).some((k) => k !== 'preset' && k !== 'dayNight' && k !== 'streetLights' && k !== 'artStyle')) next.preset = 'custom';
   return next;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  graphics: { preset: 'auto', ...presetValues('high'), dayNight: 'cycle', streetLights: 0.45 },
+  graphics: { preset: 'auto', ...presetValues('high'), dayNight: 'cycle', streetLights: 0.45, artStyle: 'sketch' },
   audio: { master: 0.8, ambience: 0.7, effects: 0.8, muted: false },
   gameplay: { autosave: true, autosaveMinutes: 3, uiScale: 1, tutorial: true },
 };
@@ -100,6 +103,7 @@ export function sanitizeSettings(raw: unknown): Settings {
       bloom: typeof g.bloom === 'boolean' ? g.bloom : dg.bloom,
       dayNight: oneOf(g.dayNight, ['cycle', 'day', 'night'] as const, dg.dayNight),
       streetLights: clamp(g.streetLights, 0, 1, dg.streetLights),
+      artStyle: oneOf(g.artStyle, ['sketch', 'realistic'] as const, dg.artStyle),
     },
     audio: {
       master: clamp(a.master, 0, 1, da.master),

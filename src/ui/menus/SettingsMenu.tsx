@@ -8,6 +8,11 @@ import { exportSave, saveBeforeLeaving, saveCity } from '../../store/saveManager
 import { useGameStore } from '../../store/gameStore';
 import { Icon } from '../components/Icon';
 
+const ART_STYLES: { id: GraphicsSettings['artStyle']; label: string }[] = [
+  { id: 'sketch', label: 'Eskiz' },
+  { id: 'realistic', label: 'Gerçekçi' },
+];
+
 const PRESETS: { id: GraphicsSettings['preset']; label: string }[] = [
   { id: 'auto', label: 'Otomatik' },
   { id: 'high', label: 'Yüksek' },
@@ -70,6 +75,15 @@ function GraphicsTab({ g }: { g: GraphicsSettings }) {
             ? 'Özel ayarlar kullanılıyor; bir ön ayar seçerek geri dönebilirsiniz.'
             : 'Sabit ön ayar.'}
       </p>
+      <div className="section-title">Çizim stili</div>
+      <div className="segmented">
+        {ART_STYLES.map((o) => (
+          <button key={o.id} className={g.artStyle === o.id ? 'active' : ''} onClick={() => setG({ artStyle: o.id })} data-testid={`art-${o.id}`}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <p className="hint">Eskiz: mürekkep çizgileri, suluboya ve kâğıt dokusu. Gerçekçi: klasik 3B görüntü.</p>
       <div className="section-title">Gölgeler</div>
       <div className="segmented">
         {SHADOWS.map((o) => (

@@ -800,7 +800,8 @@ export class Game {
     this.vehicles.setMax(g.vehicles);
     this.furniture.setBrightness(g.streetLights);
     this.pedestrians.setMax(g.vehicles);
-    this.post.setEnabled(g.bloom);
+    this.post.setBloom(g.bloom);
+    this.post.setStyle(g.artStyle);
     this.dayNight.mode = g.dayNight;
     if (!initial) this.resize();
   }

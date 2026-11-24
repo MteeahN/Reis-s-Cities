@@ -13,6 +13,7 @@
 9. ✅ Ofis bölgesi, refah ve kat sınırı, 11 mimari stil
 10. ✅ Geri al / yinele, bina taşıma, katalog araması ve favoriler, görev ödülleri, şehir seviyesi, öğretici,
     arayüz boyutu
+11. ✅ Eskiz çizim stili (mürekkep çizgi, suluboya, tarama, kâğıt dokusu); Gerçekçi stile geçiş
 
 ## Bilinen sınırlar (dürüst durum)
 

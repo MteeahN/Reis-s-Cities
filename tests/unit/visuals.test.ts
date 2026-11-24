@@ -165,6 +165,9 @@ describe('Settings', () => {
     expect(s.audio.master).toBe(0.3);
     expect(s.audio.muted).toBe(false);
     expect(sanitizeSettings('garbage')).toEqual(DEFAULT_SETTINGS);
+    expect(DEFAULT_SETTINGS.graphics.artStyle).toBe('sketch');
+    expect(sanitizeSettings({ graphics: { artStyle: 'oil' } }).graphics.artStyle).toBe('sketch');
+    expect(sanitizeSettings({ graphics: { artStyle: 'realistic' } }).graphics.artStyle).toBe('realistic');
   });
 
   it('presets copy their values; editing a value makes it custom', () => {
@@ -176,6 +179,7 @@ describe('Settings', () => {
     expect(custom.preset).toBe('custom');
     expect(custom.vehicles).toBe(420);
     // Day/night is independent of presets.
+    expect(nextGraphics(low, { artStyle: 'realistic' }, 'high')).toMatchObject({ preset: 'low', artStyle: 'realistic' });
     expect(nextGraphics(low, { dayNight: 'day' }, 'high').preset).toBe('low');
     // 'auto' takes the level auto quality is on right now.
     expect(nextGraphics(custom, { preset: 'auto' }, 'medium')).toMatchObject({ preset: 'auto', ...presetValues('medium') });

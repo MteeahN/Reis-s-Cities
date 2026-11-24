@@ -41,6 +41,12 @@ oyunlarından gelir; isim, görsel, model ve kod tamamen özgündür.
 Modern, Avrupa, Asya, Akdeniz, Osmanlı, İskandinav, Arap, Slav, Amerikan, Orta Çağ, Fütüristik. Stil bölgeye
 boyanır; büyüyen binaların çatısı, cephe süsleri ve renkleri değişir. Stil değiştirmek şehir verisini silmez.
 
+## Görsel stil
+
+Varsayılan görünüm **Eskiz**dir: sahne mürekkep çizgileri, suluboya renkler, gölgelerde kalem taraması ve kâğıt
+dokusuyla elle çizilmiş gibi görünür. Gece kâğıt koyulaşır, ışıklı pencereler parlamaya devam eder. Ayarlar →
+Grafik → Çizim stili'nden **Gerçekçi** görünüme geçilebilir. Bu bir ekran efektidir; oyun verisini değiştirmez.
+
 ## Tasarım kuralları
 
 - Sahte mekanik yok: her sayı simülasyondan gelir.
