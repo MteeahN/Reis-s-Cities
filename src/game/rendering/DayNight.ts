@@ -1,10 +1,11 @@
+import { getLook, type Look } from './Looks';
 import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, Points, PointsMaterial, type Scene, type WebGLRenderer } from 'three';
 import { mulberry32 } from '../world/generation/rng';
 import type { Lighting } from './Lighting';
 import { nightUniform } from './nightUniform';
 import type { SkyEnvironment } from './SkyEnvironment';
 
-export type DayNightMode = 'cycle' | 'day' | 'night';
+export type DayNightMode = 'cycle' | 'morning' | 'day' | 'evening' | 'night';
 
 export const SUNRISE_HOUR = 6;
 export const SUNSET_HOUR = 20;
@@ -80,7 +81,7 @@ export function skyStateAt(minuteOfDay: number): SkyState {
   };
 }
 
-const FIXED_MINUTE: Record<Exclude<DayNightMode, 'cycle'>, number> = { day: 13 * 60, night: 23 * 60 };
+const FIXED_MINUTE: Record<Exclude<DayNightMode, 'cycle'>, number> = { morning: 7 * 60 + 20, day: 13 * 60, evening: 18 * 60 + 50, night: 23 * 60 };
 
 /**
  * Applies the time of day to the sky, sun/moon light, fog, exposure, stars
@@ -90,6 +91,9 @@ const FIXED_MINUTE: Record<Exclude<DayNightMode, 'cycle'>, number> = { day: 13 *
  */
 export class DayNightCycle {
   mode: DayNightMode = 'cycle';
+  /** Picture look applied on top of the time of day. */
+  look: Look = getLook('standard');
+  private readonly baseFogNear: number;
   state: SkyState = skyStateAt(FIXED_MINUTE.day);
   private readonly stars: Points;
   private lastEnvElevation = Infinity;
@@ -125,6 +129,7 @@ export class DayNightCycle {
     this.stars.renderOrder = -1;
     this.stars.visible = false;
     scene.add(this.stars);
+    this.baseFogNear = sky.fog.near;
   }
 
   /** @param minuteOfDay game clock (0–1440), ignored unless the mode is 'cycle'. */
@@ -142,23 +147,25 @@ export class DayNightCycle {
       this.lastEnvAzimuth = s.sunAzimuth;
       this.envCooldown = 0.5;
     }
-    this.sky.setEnvironmentIntensity(s.envIntensity);
+    const look = this.look;
+    this.sky.setEnvironmentIntensity(s.envIntensity * look.sky);
     this.sky.fog.color.setHex(s.fogColor);
+    if (look.fogMix > 0) this.sky.fog.color.lerp(this.tmp.setHex(look.fogTint), look.fogMix * (1 - s.night * 0.7));
+    this.sky.fog.near = this.baseFogNear * look.fogNear;
 
     this.lighting.setLightDirection(s.lightElevation, s.lightAzimuth);
     this.lighting.sun.color.setHex(s.lightColor);
-    this.lighting.sun.intensity = s.lightIntensity;
+    this.lighting.sun.intensity = s.lightIntensity * look.sun;
     this.lighting.hemi.color.setHex(s.hemiSky);
     this.lighting.hemi.groundColor.setHex(s.hemiGround);
-    this.lighting.hemi.intensity = s.hemiIntensity;
-    this.renderer.toneMappingExposure = s.exposure;
+    this.lighting.hemi.intensity = s.hemiIntensity * look.sky;
+    this.renderer.toneMappingExposure = s.exposure * look.exposure;
 
     nightUniform.value = s.night;
     const mat = this.stars.material as PointsMaterial;
     mat.opacity = s.stars;
     this.stars.visible = s.stars > 0.01;
     this.stars.position.set(cameraX, 0, cameraZ);
-    void this.tmp;
   }
 
   get night(): number {

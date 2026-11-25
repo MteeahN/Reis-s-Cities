@@ -98,8 +98,10 @@ export class BuildingTool implements Tool {
     const city = this.ctx.city;
     if (!this.manualRotation) this.rot = bestRotation(this.def, g.x, g.z, this.rot, city.placementWorld);
     const { i, j } = anchorFor(this.def, this.rot, g.x, g.z);
-    let plan = city.planBuilding(this.def.id, i, j, this.rot);
-    if (!plan.valid) {
+    // Near an angled or curved road the building is pulled to it (any angle), unless the player turned it by hand.
+    const magnet = this.manualRotation ? null : city.magnetPlan(this.def.id, g.x, g.z);
+    let plan = magnet ?? city.planBuilding(this.def.id, i, j, this.rot);
+    if (!magnet && !plan.valid) {
       // Curved and diagonal roads rarely line up with whole cells: try the
       // nearby lots (and turns, unless the player chose one) and take the
       // closest that fits and faces a road.
@@ -133,9 +135,14 @@ export class BuildingTool implements Tool {
     this.plan = plan;
     this.ghost.visible = true;
     // Drawn up to the kerb, as the placed building will be.
-    const snap = city.roadSnap(plan.i, plan.j, plan.w, plan.d, plan.rot);
-    this.ghost.position.set(plan.centerX + (snap?.x ?? 0), plan.baseY + 0.05, plan.centerZ + (snap?.z ?? 0));
-    this.ghost.rotation.y = (plan.rot * Math.PI) / 2 + (snap?.yaw ?? 0);
+    if (plan.free) {
+      this.ghost.position.set(plan.free.x, plan.baseY + 0.05, plan.free.z);
+      this.ghost.rotation.y = plan.free.yaw;
+    } else {
+      const snap = city.roadSnap(plan.i, plan.j, plan.w, plan.d, plan.rot);
+      this.ghost.position.set(plan.centerX + (snap?.x ?? 0), plan.baseY + 0.05, plan.centerZ + (snap?.z ?? 0));
+      this.ghost.rotation.y = (plan.rot * Math.PI) / 2 + (snap?.yaw ?? 0);
+    }
     const svc = this.def.service;
     const radius = svc ? svc.radius * CELL_SIZE : this.def.landValueEffect ? this.def.landValueEffect.radius * CELL_SIZE : 0;
     this.ring.visible = radius > 0;
@@ -144,7 +151,8 @@ export class BuildingTool implements Tool {
       this.ring.scale.setScalar(radius);
     }
     this.ghostMat.color.setHex(plan.valid ? 0x34d399 : 0xf87171);
-    this.ctx.world.terrainMaterial.setHover(
+    if (plan.free) this.ctx.world.terrainMaterial.clearHover();
+    else this.ctx.world.terrainMaterial.setHover(
       plan.i * CELL_SIZE,
       plan.j * CELL_SIZE,
       (plan.i + plan.w) * CELL_SIZE,

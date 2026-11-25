@@ -49,11 +49,41 @@ function History({ days }: { days: DayLedger[] }) {
   );
 }
 
+const num = (v: number) => Math.round(v).toLocaleString('tr-TR');
+
+/** Offer surplus utilities to the neighbouring towns: only real surplus is sold. */
+function ExportsSection() {
+  const rows = useGameStore((s) => s.exports);
+  if (!rows.length) return null;
+  return (
+    <>
+      <div className="section-title">Komşu kasabalara satış</div>
+      <p className="hint small">Şehrin kullanmadığı üretim satılır; talep artarsa önce satış azalır, şehir hizmetsiz kalmaz.</p>
+      {rows.map((x) => (
+        <div className="export-row" key={x.kind} data-testid={`export-${x.kind}`}>
+          <div className="export-head">
+            <span>{x.name}</span>
+            <span className="muted small">fazla {num(x.surplus)} {x.unit}</span>
+          </div>
+          <div className="export-ctl">
+            <button className="mode-btn" onClick={() => getGame()?.setExport(x.kind, x.offered - x.step)} disabled={x.offered <= 0} aria-label={`${x.name} satışını azalt`}>−</button>
+            <span className="export-amount">{num(x.offered)} {x.unit}</span>
+            <button className="mode-btn" onClick={() => getGame()?.setExport(x.kind, x.offered + x.step)} disabled={x.offered >= x.max} aria-label={`${x.name} satışını artır`} data-testid={`export-${x.kind}-add`}>+</button>
+            <span className={x.sold < x.offered ? 'text-yellow small' : 'small'}>
+              satılan {num(x.sold)} · {signed(x.income)}/gün
+            </span>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function EconomyTab() {
   const eco = useGameStore((s) => s.economy);
   if (!eco) return null;
   const r = eco.rates;
-  const income = r.taxResidential + r.taxCommercial + r.taxIndustrial + (r.transitFares ?? 0);
+  const income = r.taxResidential + r.taxCommercial + r.taxIndustrial + (r.transitFares ?? 0) + (r.exportSales ?? 0);
   const expenses = r.upkeepRoads + r.upkeepBuildings + r.upkeepPower + r.upkeepWater + r.upkeepServices + (r.upkeepTransit ?? 0) + r.loanPayments;
   const t = eco.today.lines;
   const construction = (t.constructionRoads ?? 0) + (t.constructionBuildings ?? 0) + (t.constructionInfra ?? 0);
@@ -111,6 +141,7 @@ export function EconomyTab() {
       <Line k="Ticaret vergisi" v={r.taxCommercial} />
       <Line k="Sanayi vergisi" v={r.taxIndustrial} />
       {(r.transitFares ?? 0) > 0 && <Line k="Otobüs biletleri" v={r.transitFares} testId="eco-transit-fares" />}
+      {(r.exportSales ?? 0) > 0 && <Line k="Komşulara satış" v={r.exportSales} note="fazla elektrik, su, arıtma" testId="eco-exports" />}
       <div className="section-title">Günlük gider</div>
       <Line k="Yol bakımı" v={-r.upkeepRoads} testId="eco-upkeep-roads" />
       <Line k="Bina bakımı" v={-r.upkeepBuildings} />
@@ -123,6 +154,8 @@ export function EconomyTab() {
         <span>Toplam</span>
         <strong className={income - expenses >= 0 ? 'text-green' : 'text-red'}>{signed(income - expenses)}/gün</strong>
       </div>
+
+      <ExportsSection />
 
       <div className="section-title">Bugün (gerçekleşen)</div>
       <Line k="Gelir" v={eco.today.income - (t.loan ?? 0) - (t.refunds ?? 0) - (t.reward ?? 0)} />

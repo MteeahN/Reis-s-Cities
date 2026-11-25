@@ -77,6 +77,14 @@ test('creates a city, renders the world and drives the HUD', async ({ page }) =>
   await expect(page.getByTestId('layer-legend')).toContainText('Suç');
   await page.getByTestId('tool-layers').click();
 
+  // Walking the streets in first person: the build toolbar hides, Esc returns to the city camera.
+  await page.getByTestId('btn-walk').click();
+  await expect(page.getByTestId('walk-hud')).toBeVisible();
+  await expect(page.getByTestId('tool-road')).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('walk-hud')).toBeHidden();
+  await expect(page.getByTestId('tool-road')).toBeVisible();
+
   // Phase 7: graphics and sound settings change the running engine and persist.
   type R = { __reis: { game: { getSettings(): { graphics: Record<string, unknown>; audio: Record<string, unknown> }; dayNight: { night: number } } } };
   const settings = () => page.evaluate(() => (window as unknown as R).__reis.game.getSettings());
@@ -87,6 +95,8 @@ test('creates a city, renders the world and drives the HUD', async ({ page }) =>
   expect((await settings()).graphics).toMatchObject({ preset: 'low', shadows: 'off', bloom: false });
   await page.getByTestId('shadows-medium').click();
   await expect(page.getByTestId('graphics-preset-hint')).toContainText('Özel');
+  await page.getByTestId('look-vivid').click();
+  expect((await settings()).graphics).toMatchObject({ look: 'vivid' });
   await page.getByTestId('daynight-night').click();
   await expect.poll(() => page.evaluate(() => (window as unknown as R).__reis.game.dayNight.night)).toBe(1);
   await page.getByTestId('settings-tab-audio').click();

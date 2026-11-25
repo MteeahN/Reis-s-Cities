@@ -156,6 +156,7 @@ export function TopBar() {
   const helpOpen = useGameStore((s) => s.helpOpen);
   const settingsOpen = useGameStore((s) => s.settingsOpen);
   const popup = useGameStore((s) => s.popup);
+  const walking = useGameStore((s) => s.walking);
   const saving = useGameStore((s) => s.saving);
   const earned = useGameStore((s) => s.achievements.filter((a) => a.earnedAt !== null).length);
   const unread = useGameStore((s) => s.feedUnread);
@@ -202,6 +203,9 @@ export function TopBar() {
         <button className={`icon-btn badge-btn ${popup === 'feed' ? 'active' : ''}`} onClick={() => togglePopup('feed')} title="Kent Sesi — vatandaşların istekleri ve şikâyetleri" data-testid="btn-feed">
           <Icon name="chat" size={18} />
           {unread > 0 && <span className="count-badge alert" data-testid="feed-unread">{unread > 99 ? '99+' : unread}</span>}
+        </button>
+        <button className={`icon-btn ${walking ? 'active' : ''}`} onClick={() => getGame()?.toggleWalk()} title="Şehirde yürü (I) — kameranın baktığı yerden birinci şahıs" data-testid="btn-walk">
+          <Icon name="walk" size={18} />
         </button>
         <button className={`icon-btn ${popup === 'stats' ? 'active' : ''}`} onClick={() => togglePopup('stats')} title="İstatistikler" data-testid="btn-stats">
           <Icon name="chart" size={18} />

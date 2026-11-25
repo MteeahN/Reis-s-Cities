@@ -1,3 +1,4 @@
+import type { LookId } from '../rendering/Looks';
 import type { DayNightMode } from '../rendering/DayNight';
 import { QUALITY_PRESETS, type QualityLevel, type QualitySetting, type ShadowQuality } from '../rendering/QualityManager';
 
@@ -15,6 +16,8 @@ export interface GraphicsSettings {
   buildingDetail: number;
   bloom: boolean;
   dayNight: DayNightMode;
+  /** Picture look (mood): light, fog, outlines and colour grading. */
+  look: LookId;
   /** Street lamp brightness at night, 0–1 (independent of presets). */
   streetLights: number;
 }
@@ -45,7 +48,7 @@ export interface Settings {
   gameplay: GameplaySettings;
 }
 
-export function presetValues(level: QualityLevel): Omit<GraphicsSettings, 'preset' | 'dayNight' | 'streetLights'> {
+export function presetValues(level: QualityLevel): Omit<GraphicsSettings, 'preset' | 'dayNight' | 'streetLights' | 'look'> {
   const p = QUALITY_PRESETS[level];
   return {
     shadows: p.shadows,
@@ -66,12 +69,12 @@ export function presetValues(level: QualityLevel): Omit<GraphicsSettings, 'prese
 export function nextGraphics(cur: GraphicsSettings, patch: Partial<GraphicsSettings>, autoLevel: QualityLevel): GraphicsSettings {
   const next: GraphicsSettings = { ...cur, ...patch };
   if (patch.preset && patch.preset !== 'custom') return { ...next, ...presetValues(patch.preset === 'auto' ? autoLevel : patch.preset) };
-  if (Object.keys(patch).some((k) => k !== 'preset' && k !== 'dayNight' && k !== 'streetLights')) next.preset = 'custom';
+  if (Object.keys(patch).some((k) => k !== 'preset' && k !== 'dayNight' && k !== 'streetLights' && k !== 'look')) next.preset = 'custom';
   return next;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  graphics: { preset: 'auto', ...presetValues('high'), dayNight: 'cycle', streetLights: 0.45 },
+  graphics: { preset: 'auto', ...presetValues('high'), dayNight: 'cycle', streetLights: 0.45, look: 'standard' },
   audio: { master: 0.8, ambience: 0.7, effects: 0.8, muted: false },
   gameplay: { autosave: true, autosaveMinutes: 3, uiScale: 1, tutorial: true },
 };
@@ -83,22 +86,25 @@ const oneOf = <T extends string>(v: unknown, list: readonly T[], d: T): T => (li
 /** Validates untrusted (stored) data, falling back to defaults field by field. */
 export function sanitizeSettings(raw: unknown): Settings {
   const r = (raw ?? {}) as { graphics?: Partial<GraphicsSettings>; audio?: Partial<AudioSettings>; gameplay?: Partial<GameplaySettings> };
-  const g = r.graphics ?? {};
+  const g: Partial<GraphicsSettings> = { ...(r.graphics ?? {}) };
   const a = r.audio ?? {};
   const p = r.gameplay ?? {};
   const dp = DEFAULT_SETTINGS.gameplay;
   const dg = DEFAULT_SETTINGS.graphics;
   const da = DEFAULT_SETTINGS.audio;
+  const preset = oneOf(g.preset, ['auto', 'high', 'medium', 'low', 'custom'] as const, dg.preset);
+  if (preset !== 'custom') Object.assign(g, presetValues(preset === 'auto' ? 'high' : preset));
   return {
     graphics: {
-      preset: oneOf(g.preset, ['auto', 'high', 'medium', 'low', 'custom'] as const, dg.preset),
+      preset,
       shadows: oneOf(g.shadows, ['off', 'low', 'medium', 'high'] as const, dg.shadows),
       resolution: clamp(g.resolution, 0.5, 2, dg.resolution),
       vegetationDistance: clamp(g.vegetationDistance, 150, 1000, dg.vegetationDistance),
       vehicles: Math.round(clamp(g.vehicles, 0, 600, dg.vehicles)),
       buildingDetail: clamp(g.buildingDetail, 200, 1600, dg.buildingDetail),
       bloom: typeof g.bloom === 'boolean' ? g.bloom : dg.bloom,
-      dayNight: oneOf(g.dayNight, ['cycle', 'day', 'night'] as const, dg.dayNight),
+      dayNight: oneOf(g.dayNight, ['cycle', 'morning', 'day', 'evening', 'night'] as const, dg.dayNight),
+      look: oneOf(g.look, ['standard', 'soft', 'gloomy', 'vivid'] as const, dg.look),
       streetLights: clamp(g.streetLights, 0, 1, dg.streetLights),
     },
     audio: {

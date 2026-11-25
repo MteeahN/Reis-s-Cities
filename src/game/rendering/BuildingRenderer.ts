@@ -19,6 +19,7 @@ class InstancePool {
     private readonly parent: Group,
     capacity = 8,
     withLit = false,
+    private readonly castsShadow = true,
   ) {
     if (withLit) {
       this.lit = new InstancedBufferAttribute(new Float32Array(capacity), 1);
@@ -31,9 +32,10 @@ class InstancePool {
     const m = new InstancedMesh(this.geo, this.mat, capacity);
     m.count = 0;
     m.visible = false;
-    m.castShadow = true;
+    m.castShadow = this.castsShadow;
     m.receiveShadow = true;
-    m.frustumCulled = false;
+    // Culled by the bounds of its instances (recomputed when they change), in the view and the shadow pass.
+    m.frustumCulled = true;
     m.setColorAt(0, new Color(1, 1, 1)); // allocate the colour buffer
     this.parent.add(m);
     return m;
@@ -112,6 +114,7 @@ class InstancePool {
 
   private sync(): void {
     this.mesh.count = this.idAt.length;
+    this.mesh.boundingSphere = null;
     this.mesh.visible = this.idAt.length > 0 && !this.hidden;
     this.mesh.instanceMatrix.needsUpdate = true;
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
@@ -214,7 +217,8 @@ export class BuildingRenderer {
     if (g.plain) set.all.push(new InstancePool(g.plain, mats.plain, this.group));
     if (g.facade) set.all.push((set.facade = new InstancePool(g.facade, mats.facade, this.group, 8, true)));
     if (g.detail) {
-      set.all.push((set.detail = new InstancePool(g.detail, mats.plain, this.group)));
+      // Small parts: no shadows (they are barely visible and would double their draw calls).
+      set.all.push((set.detail = new InstancePool(g.detail, mats.plain, this.group, 8, false, false)));
       set.detail.setHidden(!this.detailVisible);
       this.detailPools.push(set.detail);
     }

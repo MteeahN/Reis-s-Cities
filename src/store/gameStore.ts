@@ -22,6 +22,8 @@ import type {
   TransitToolState,
   TransitView,
   DecorToolState,
+  PetitionsView,
+  ExportRow,
 } from '../game/core/events';
 import type { PopulationStats } from '../game/simulation/CitySimulation';
 import type { Demand } from '../game/simulation/Demand';
@@ -120,6 +122,9 @@ export interface GameUIState {
   /** Open HUD popup (achievements, statistics or the citizens' feed). */
   popup: 'achievements' | 'stats' | 'feed' | 'advisors' | null;
   advice: Advice[];
+  petitions: PetitionsView;
+  exports: ExportRow[];
+  walking: boolean;
   feed: FeedPost[];
   /** Feed posts that arrived since the feed was last opened. */
   feedUnread: number;
@@ -175,6 +180,9 @@ export const INITIAL_GAME_STATE = {
   feed: [] as FeedPost[],
   feedUnread: 0,
   advice: [] as Advice[],
+  exports: [] as ExportRow[],
+  walking: false,
+  petitions: { open: null, promised: [], recent: [], trust: 0, happiness: 0 } as PetitionsView,
 };
 
 export const useGameStore = create<GameUIState>((set) => ({

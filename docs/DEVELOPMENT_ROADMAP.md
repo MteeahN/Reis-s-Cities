@@ -35,7 +35,14 @@
 22. ✅ Yeşil okla hemen yükseltme, yerleşim unvanı
 23. ✅ Otobüs garajı (garaj kapasitesi kadar otobüs çalışır), hatlar arası aktarma, hat düzenleme (durak ekle / çıkar,
     ad, renk), toplu taşıma kapsama katmanı, duraklarda bekleyen yolcular
-24. ✅ Binalar eğri ve açılı yollara döner (en çok 50°), ön cephesi kaldırıma yaslanır
+24. ✅ Binalar eğri ve açılı yollara döner (en çok 50°); ön cephe yola paralel yaslanır, komşulara ve yola taşmaz
+25. ✅ Vatandaş dilekçeleri (söz ver / reddet, süreli, gerçek kapsamayla denetim, belediyeye güven mutluluğa etki)
+26. ✅ Fazla elektrik, su ve arıtma kapasitesini komşu kasabalara satış
+27. ✅ Yola mıknatıs: elle konan bina kıvrık / çapraz yola her açıda döner, ızgaradan bağımsız durur, komşuya yanaşır
+28. ✅ Görünüm seçenekleri (Standart / Yumuşak / Kasvetli / Canlı) ve günün saati (sabah, akşam dahil)
+29. ✅ Cephe atlası: stil başına dört pencere tasarımı, zemin katta kapı / vitrin / kepenk
+30. ✅ Performans: ağaç ve kaya LOD'u, bina havuzlarında görüş alanı ayıklama, ayrıntılarda gölgesiz çizim
+31. ✅ Şehirde yürüyüş: birinci şahıs kamera, kaldırımdan başlar, bina ve suyla çarpışma, fare kilidiyle bakış
 
 ## Bilinen sınırlar (dürüst durum)
 

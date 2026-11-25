@@ -1,3 +1,5 @@
+import type { PetitionData } from '../systems/Petitions';
+import type { ExportKind } from '../systems/Exports';
 import { APP_VERSION, GRID_CELLS, TILES_PER_SIDE, type GameSpeed } from '../core/config';
 import { ALL_BUILDINGS } from '../data/buildings';
 import { ROAD_TYPES } from '../data/roads';
@@ -51,6 +53,8 @@ export interface CityState {
   props?: { nextId: number; items: PlacedProp[] };
   /** Bus stops and lines. */
   transit?: TransitData;
+  petitions?: PetitionData;
+  exports?: Partial<Record<ExportKind, number>>;
   buildings: { nextId: number; items: SavedBuilding[] };
   /** Run-length encoded zone per cell: [value, count, …]. */
   zones: number[];
@@ -142,6 +146,8 @@ export function serializeCity(city: City, sim: CitySimulation): CityState {
     heights: rle(city.districtHeight),
     ...(city.paint.some((v) => v !== 0) ? { paint: rle(city.paint) } : {}),
     ...(city.transit.stops.size ? { transit: city.transit.serialize() } : {}),
+    ...(city.petitions.list.length || city.petitions.trust ? { petitions: city.petitions.serialize() } : {}),
+    ...(city.exports.any ? { exports: city.exports.serialize() } : {}),
     ...(city.props.size ? { props: { nextId: city.nextPropIdValue, items: [...city.props.values()].map((x) => ({ ...x })) } } : {}),
     ...(city.entries.length ? { entries: city.entries.map((e) => ({ x: e.x, z: e.z })) } : {}),
     ...(city.entryLink ? { entryLink: { x: city.entryLink.x, z: city.entryLink.z } } : {}),
@@ -186,6 +192,8 @@ export function restoreCity(city: City, sim: CitySimulation, s: CityState, tick:
   }
   if (s.props && Array.isArray(s.props.items)) city.restoreProps(s.props.items, Number(s.props.nextId) || 1);
   if (s.transit && typeof s.transit === 'object') city.transit.restore(s.transit);
+  city.petitions.restore(s.petitions);
+  city.exports.restore(s.exports);
   city.migrateGrowableZones();
   city.economy.restore(s.economy);
   city.population.restore(s.population, (id) => city.buildings.items.get(id)?.zone === ZoneType.Residential);

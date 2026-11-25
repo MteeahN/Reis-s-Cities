@@ -136,6 +136,11 @@ export function poplarLow(): BufferGeometry {
   );
 }
 
+/** Far rock: an octahedron-like lump (8 triangles instead of 144). */
+export function rockLow(): BufferGeometry {
+  return build([{ geo: new DodecahedronGeometry(1, 0).scale(1.35, 0.7, 1.1), top: 0x9a968a, bottom: 0x5e5b53 }], 105);
+}
+
 export function rock(): BufferGeometry {
   return build(
     [{ geo: new DodecahedronGeometry(1, 1).scale(1.35, 0.7, 1.1), top: 0x9a968a, bottom: 0x5e5b53, jitter: 0.28 }],

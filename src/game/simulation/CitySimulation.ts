@@ -1,4 +1,6 @@
-import { GRID_CELLS, START_MINUTE_OFFSET } from '../core/config';
+import { NEED_TEXT, type PetitionNeed, type PetitionWorld } from '../systems/Petitions';
+import { WALK } from './Transit';
+import { CELL_SIZE, GRID_CELLS, START_MINUTE_OFFSET } from '../core/config';
 import { buildingCapacity, getBuilding, zonedTemplates , growablePrice } from '../data/buildings';
 import { BUS_DAILY_UPKEEP, FARE } from './Transit';
 import { DEBT_HAPPINESS_PENALTY, PROFIT_PER_WORKER, TAX } from '../data/economy';
@@ -9,7 +11,6 @@ import type { ServiceKind } from '../data/buildings';
 import { SERVICE_KINDS } from './Services';
 import type { UtilityStats } from './Utilities';
 import { ZONES, ZoneType, type ZoneKind } from '../data/zones';
-import { hasRoadAccess } from '../entities/building/BuildingPlacement';
 import type { PlacedBuilding } from '../entities/building/BuildingRegistry';
 import type { City } from '../systems/City';
 import { seededRng, type SeededRng } from '../world/generation/rng';
@@ -39,6 +40,8 @@ export const FIRE_CHANCE_PER_DAY = 0.004;
 /** An unattended fire destroys the building after this many ticks. */
 export const BURN_DOWN_TICKS = 150;
 const MINUTES_PER_DAY = 1440;
+/** Service cover a home needs before its residents stop asking for it. */
+const PETITION_COVERAGE = 0.3;
 
 export const LEVEL_REQUIREMENTS: Record<2 | 3, { landValue: number; happiness: number; occupancy: number }> = {
   2: { landValue: 35, happiness: 50, occupancy: 0.8 },
@@ -138,6 +141,7 @@ export class CitySimulation {
     private readonly cb: SimCallbacks,
   ) {
     this.rand = seededRng(seed ^ 0xc17c);
+    if (city.petitions) city.petitions.seed = seed ^ 0x7e7;
   }
 
   serialize(): SimulationSave {
@@ -235,6 +239,35 @@ export class CitySimulation {
       if (b.state === 'active' && getBuilding(b.defId).workers > 0) out.push(b);
     }
     return out;
+  }
+
+  /** What each home lacks, from the same coverage the simulation uses (for petitions). */
+  private petitionWorld(homes: PlacedBuilding[]): PetitionWorld {
+    const city = this.city;
+    const svc = city.services;
+    const stops = [...city.transit.stops.values()];
+    const served = new Set<number>();
+    for (const l of city.transit.lines.values()) if (city.transit.running(l) > 0 && city.transit.route(l).ok) for (const s of l.stops) served.add(s);
+    const centre = (b: PlacedBuilding) => ({ x: (b.i + b.w / 2) * CELL_SIZE, z: (b.j + b.d / 2) * CELL_SIZE });
+    const met = (b: PlacedBuilding, need: PetitionNeed): boolean => {
+      if (need === 'bus') {
+        const c = centre(b);
+        return stops.some((s) => served.has(s.id) && Math.hypot(s.x - c.x, s.z - c.z) <= WALK);
+      }
+      return svc.average(need, b.cells) >= PETITION_COVERAGE;
+    };
+    const NEEDS: PetitionNeed[] = ['police', 'fire', 'health', 'education', 'bus'];
+    return {
+      homes: homes.map((b) => {
+        const c = centre(b);
+        return { id: b.id, x: c.x, z: c.z, residents: b.occupants, lacks: NEEDS.filter((n) => !met(b, n)) };
+      }),
+      exists: (id) => city.buildings.items.has(id),
+      met: (id, need) => {
+        const b = city.buildings.items.get(id);
+        return !!b && met(b, need);
+      },
+    };
   }
 
   private homes(): PlacedBuilding[] {
@@ -383,6 +416,7 @@ export class CitySimulation {
         upkeepServices: upkeep.service,
         transitFares: city.transit.ridersPerDay * FARE,
         upkeepTransit: city.transit.busCount * BUS_DAILY_UPKEEP,
+        exportSales: city.exports.income(city.utilities.stats),
       },
       days,
     );
@@ -401,6 +435,15 @@ export class CitySimulation {
     const garbageMatters = t0.total > 300;
     const traffic = city.traffic;
     const anyWorkplace = workplaces.some((w) => w.occupants > 0);
+    // Petitions: deadlines, kept promises (checked against the city), new requests.
+    const petitionChanges = city.petitions.update(gameMinutes, days, t0.total, this.petitionWorld(homes));
+    for (const p of petitionChanges) {
+      const ask = NEED_TEXT[p.need].ask;
+      if (p.state === 'kept') this.cb.onNotice?.({ kind: 'success', text: `Söz tutuldu: ${ask}. Halkın güveni arttı.` });
+      else if (p.state === 'broken') this.cb.onNotice?.({ kind: 'error', text: `Söz tutulmadı: ${ask}. Halkın güveni azaldı.` });
+      else if (p.state === 'expired') this.cb.onNotice?.({ kind: 'warning', text: `Bir dilekçe yanıtsız kaldı (${p.author}).` });
+    }
+    const trustTerm = city.petitions.happinessTerm();
     const factorSum = new Map<string, number>();
     let factorWeight = 0;
     let noiseSum = 0;
@@ -408,7 +451,7 @@ export class CitySimulation {
       const hh = pop.get(h.id);
       const lv = city.landValue.averageOver(h.cells, city.landValue.value);
       const pol = city.landValue.averageOver(h.cells, city.landValue.pollution);
-      const access = hasRoadAccess(h.i, h.j, h.w, h.d, h.rot, city.placementWorld) ? 0 : -25;
+      const access = city.roadAccessOf(h) ? 0 : -25;
       const noWater = !util.water.has(h.id);
       const noSewage = !util.sewage.has(h.id);
       const noGarbage = garbageMatters && svc.average('garbage', h.cells) < 0.3;
@@ -445,6 +488,7 @@ export class CitySimulation {
         ['Suç', crimeTerm],
         ['Çöp', garbageTerm],
         ['İşe ulaşım', commuteTerm],
+        ['Belediyeye güven', trustTerm],
       ];
       let target = 0;
       const n = residentsOf(hh);
@@ -635,7 +679,7 @@ export class CitySimulation {
     const days = (SLOW_INTERVAL * 0.6) / MINUTES_PER_DAY;
     for (const b of [...city.buildings.items.values()]) {
       if (!b.zone) continue;
-      const access = hasRoadAccess(b.i, b.j, b.w, b.d, b.rot, city.placementWorld);
+      const access = city.roadAccessOf(b);
       if (b.state === 'abandoned') {
         b.abandonedTicks += SLOW_INTERVAL;
         if (b.abandonedTicks >= ABANDONED_REMOVE_TICKS) city.removeGrowable(b.id);

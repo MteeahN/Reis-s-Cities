@@ -2,6 +2,7 @@ import type { AdviceLevel } from '../../game/systems/Advisors';
 import { getGame } from '../../store/gameBridge';
 import { useGameStore } from '../../store/gameStore';
 import { Icon } from '../components/Icon';
+import { PetitionSummary } from './PetitionCard';
 
 const LEVEL: Record<AdviceLevel, string> = { high: 'Acil', medium: 'Önemli', low: 'Öneri' };
 const TOOL_LABEL: Record<string, string> = {
@@ -25,6 +26,7 @@ export function AdvisorsPanel() {
           <Icon name="close" size={14} />
         </button>
       </div>
+      <PetitionSummary />
       {advice.length === 0 ? (
         <p className="hint" data-testid="advisors-empty">Danışmanların şu an bir uyarısı yok: altyapı, hizmetler, iş, bütçe ve trafik yolunda.</p>
       ) : (

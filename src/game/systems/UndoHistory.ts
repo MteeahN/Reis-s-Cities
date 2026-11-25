@@ -1,4 +1,4 @@
-import type { Rotation } from '../entities/building/BuildingPlacement';
+import type { Rotation, FreeSpot } from '../entities/building/BuildingPlacement';
 import type { ArchStyle } from '../data/styles';
 import type { RoadGraphData } from '../entities/road/RoadGraph';
 import type { LineKind } from '../data/infrastructure';
@@ -19,6 +19,8 @@ export interface Spot {
   i: number;
   j: number;
   rot: Rotation;
+  /** Set for a building placed off the grid along a road. */
+  free?: FreeSpot;
 }
 
 /** Zone and district rules of one cell before / after a zoning stroke. */

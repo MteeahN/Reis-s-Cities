@@ -3,13 +3,13 @@ import { growablePrice, type DistrictRules } from '../data/buildings';
 import { CELL_SIZE, GRID_CELLS, WATER_LEVEL, START_TILES, TILE_CELLS, WORLD_SIZE, TILES_PER_SIDE } from '../core/config';
 import { LINE_TYPES, type LineKind } from '../data/infrastructure';
 import { UtilityLines } from '../entities/infra/UtilityLines';
-import { sampleBezier, type P2 } from '../entities/road/curve';
+import { bezierTangent, sampleBezier, type P2 } from '../entities/road/curve';
 import { ServiceCoverage } from '../simulation/Services';
 import { computeUtilities, type UtilityResult } from '../simulation/Utilities';
 import { getBuilding, storeysOf } from '../data/buildings';
 import { getRoadType, type RoadSurface, type RoadTypeDef } from '../data/roads';
 import { getZone, ZoneType, type ZoneKind } from '../data/zones';
-import { frontCells, frontStep, planBuilding, type BuildingPlan, type PlacementWorld, type Rotation } from '../entities/building/BuildingPlacement';
+import { footprintCells, frontCells, frontStep, hasRoadAccess, MAX_FOUNDATION_DROP, planBuilding, type BuildingPlan, type FreeSpot, type PlacementWorld, type Rotation } from '../entities/building/BuildingPlacement';
 import { BuildingRegistry, type GroundSeat, type PlacedBuilding } from '../entities/building/BuildingRegistry';
 import { RoadGraph, type RoadEdge } from '../entities/road/RoadGraph';
 import { LandValueMap, waterProximity } from '../simulation/LandValue';
@@ -25,6 +25,8 @@ import { ZoneMap } from '../world/ZoneMap';
 import { Economy } from './Economy';
 import { Treasury } from './Treasury';
 import type { LedgerCategory } from './Treasury';
+import { Petitions } from './Petitions';
+import { Exports } from './Exports';
 import { BUS_PRICE, DEPOT_BUSES, DEPOT_ID, MAX_BUSES, STOP_COST, Transit } from '../simulation/Transit';
 import { UndoHistory, type CellZoning, type PlacedProp, type Spot, type UndoEntry } from './UndoHistory';
 import { getPaint, getProp, isPropId, PAINT_RES, PAINT_STEP } from '../data/decor';
@@ -70,6 +72,10 @@ export class City {
   readonly traffic = new TrafficModel(this.roads);
   /** Bus stops and lines. */
   readonly transit = new Transit(this.roads);
+  /** Citizen petitions and the residents' trust in the mayor. */
+  readonly petitions = new Petitions();
+  /** Surplus utilities sold to the neighbouring towns. */
+  readonly exports = new Exports();
   /** Latest utility network solution (recomputed when infrastructure changes). */
   utilities: UtilityResult;
   private utilitiesDirty = true;
@@ -230,6 +236,16 @@ export class City {
       }
       return false;
     });
+  }
+
+  /** Clears the trees under a building (all the cells it covers). */
+  private clearVegetationOf(b: PlacedBuilding): void {
+    if (!b.free) return this.clearVegetationRect(b.i, b.j, b.w, b.d);
+    const is = b.cells.map((k) => k % GRID_CELLS);
+    const js = b.cells.map((k) => Math.floor(k / GRID_CELLS));
+    const i0 = Math.min(...is);
+    const j0 = Math.min(...js);
+    this.clearVegetationRect(i0, j0, Math.max(...is) - i0 + 1, Math.max(...js) - j0 + 1);
   }
 
   private clearVegetationRect(i: number, j: number, w: number, d: number): void {
@@ -1167,12 +1183,12 @@ export class City {
       style: this.styleOfLot(lot.i, lot.j, lot.w, lot.d),
     });
     this.occupancy.setBuilding(b.id, b.cells);
+    this.resnapAround(b);
     for (const k of b.cells) this.zones.refresh(k, false);
-    this.clearVegetationRect(b.i, b.j, b.w, b.d);
+    this.clearVegetationOf(b);
     return b;
   }
 
-  /** Restores saved buildings (save system): occupancy, zoning index and cleared trees follow. */
   /**
    * How a building on these cells is drawn against the road in front of it
    * (straight, angled or curved): turned by up to 50° to face the road (a
@@ -1180,8 +1196,360 @@ export class City {
    * road's normal until the front meets the kerb — towards the road across a
    * strip of grass, or back from it where a curve cuts into the lot. Visual
    * only; the cells stay where they are.
+   *
+   * The drawn footprint must not overlap another building's drawn footprint
+   * or the road; when it would, the building stays square on its own cells
+   * (moving it square onto a curve would leave one corner on the kerb).
    */
   roadSnap(i: number, j: number, w: number, d: number, rot: Rotation): { x: number; z: number; yaw: number } | null {
+    const s = this.solveRoadSnap(i, j, w, d, rot);
+    return s && this.snapFits(i, j, w, d, s) ? s : null;
+  }
+
+  /**
+   * A new building took its cells: neighbours drawn over them (turned or moved
+   * towards the road before it was there) are snapped again, now seeing it.
+   */
+  private resnapAround(b: PlacedBuilding): void {
+    const mine = this.drawnCorners(b.i, b.j, b.w, b.d, { x: b.ox ?? 0, z: b.oz ?? 0, yaw: b.oyaw ?? 0 }, 0.3);
+    const own = this.drawnCorners(b.i, b.j, b.w, b.d, null, 0.3);
+    const seen = new Set<number>([b.id]);
+    const r = 4;
+    for (let cj = b.j - r; cj < b.j + b.d + r; cj++) {
+      for (let ci = b.i - r; ci < b.i + b.w + r; ci++) {
+        if (ci < 0 || cj < 0 || ci >= GRID_CELLS || cj >= GRID_CELLS) continue;
+        const id = this.occupancy.buildingAt(ci, cj);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const o = this.buildings.items.get(id);
+        if (!o || (!o.ox && !o.oz && !o.oyaw)) continue;
+        const theirs = this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3);
+        if (quadsOverlap(theirs, mine) || quadsOverlap(theirs, own)) this.buildings.resnap(id);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- road magnet (free placement)
+
+  /**
+   * Hand placement beside an angled or curved road, the way a builder lines a
+   * house up with the street: when the cursor is within reach of such a road
+   * the building turns to the road's direction at that point (any angle, not
+   * 90° steps), its whole front is laid along the kerb, and it slides along
+   * the road with the cursor. If it would hit another building it slides
+   * aside, and when a neighbour is close it closes the gap. Returns null when
+   * no such road is near (the grid placement applies) or the road runs along
+   * the grid (grid lots already meet it).
+   */
+  magnetPlan(defId: string, x: number, z: number): BuildingPlan | null {
+    const def = getBuilding(defId);
+    if (def.utility?.requiresShore) return null;
+    const first = this.magnetSpot(def.footprint, x, z);
+    if (!first) return null;
+    // Square to the grid already: the grid placement is the same, and neater.
+    const quarter = Math.PI / 2;
+    const off = first.yaw / quarter - Math.round(first.yaw / quarter);
+    if (Math.abs(off * quarter) < (3 * Math.PI) / 180) return null;
+    const fits = (s: FreeSpot) => this.freeGeometryErrors(def.footprint, s).length === 0;
+    // Slide along the road to a free place nearest the cursor.
+    let best: { spot: FreeSpot; shift: number } | null = fits(first) ? { spot: first, shift: 0 } : null;
+    const step = 0.5;
+    const span = Math.max(def.footprint[0], def.footprint[1]) * CELL_SIZE * 1.5;
+    for (let k = 1; !best && k * step <= span; k++) {
+      for (const sgn of [1, -1]) {
+        const s = this.magnetSpot(def.footprint, x + first.tx * sgn * k * step, z + first.tz * sgn * k * step);
+        if (s && fits(s)) {
+          best = { spot: s, shift: sgn * k * step };
+          break;
+        }
+      }
+    }
+    if (!best) return this.planFree(defId, first);
+    // Magnet to a neighbour: close a gap of up to 2.5 m along the road.
+    let snapped = best.spot;
+    for (const sgn of [1, -1]) {
+      let last: FreeSpot | null = null;
+      let hit = false;
+      for (let k = 1; k <= 10; k++) {
+        const d = best.shift + sgn * k * 0.25;
+        const s = this.magnetSpot(def.footprint, x + first.tx * d, z + first.tz * d);
+        if (!s) break;
+        if (!fits(s)) {
+          hit = this.freeGeometryErrors(def.footprint, s).includes('Başka bir binayla çakışıyor');
+          break;
+        }
+        last = s;
+      }
+      if (hit && last) {
+        snapped = last;
+        break;
+      }
+    }
+    return this.planFree(defId, snapped);
+  }
+
+  /**
+   * Where a building of this footprint (cells, at rot 0) is drawn when pulled
+   * to the road nearest (x, z): centre, absolute turn, and the road direction.
+   */
+  private magnetSpot(footprint: readonly [number, number] | number[], x: number, z: number): (FreeSpot & { tx: number; tz: number }) | null {
+    const hw = (footprint[0] * CELL_SIZE) / 2;
+    const hd = (footprint[1] * CELL_SIZE) / 2;
+    const accept = (e: RoadEdge) => !this.roads.isElevated(e) && getRoadType(e.typeId).category !== 'highway';
+    const hit = this.roads.nearestEdge(x, z, hd * 2 + MAGNET_REACH, true, accept);
+    if (!hit) return null;
+    const surface = getRoadType(hit.edge.typeId).width / 2;
+    if (hit.dist - surface > hd * 2 + MAGNET_REACH) return null;
+    const t = bezierTangent(this.roads.curveOf(hit.edge), hit.t);
+    // Normal towards the cursor's side of the road.
+    let nx = -t.z;
+    let nz = t.x;
+    if ((x - hit.point.x) * nx + (z - hit.point.z) * nz < 0) (nx = -nx), (nz = -nz);
+    const laid = this.layFront(hit.point.x + nx * (surface + 0.1 + hd), hit.point.z + nz * (surface + 0.1 + hd), Math.atan2(-nx, -nz), hd, hw, nx, nz);
+    return laid ? { ...laid, tx: t.x, tz: t.z } : null;
+  }
+
+  /**
+   * Lays a front (half depth hd, half width hw) along the road: parallel to
+   * the chord between the road points nearest its corners, then moved along
+   * the normal until its nearest point is 0.1 m from the kerb.
+   */
+  private layFront(cx: number, cz: number, yaw: number, hd: number, hw: number, nx: number, nz: number): FreeSpot | null {
+    const accept = (e: RoadEdge) => !this.roads.isElevated(e);
+    const front = (a: number) => ({ fx: Math.sin(a), fz: Math.cos(a), px: Math.cos(a), pz: -Math.sin(a) });
+    for (let k = 0; k < 3; k++) {
+      const { fx, fz, px, pz } = front(yaw);
+      const ends = [1, -1].map((side) => this.roads.nearestEdge(cx + fx * hd + px * hw * side, cz + fz * hd + pz * hw * side, CELL_SIZE * 3, true, accept)?.point);
+      if (!ends[0] || !ends[1]) break;
+      let tx = ends[0].x - ends[1].x;
+      let tz = ends[0].z - ends[1].z;
+      const tl = Math.hypot(tx, tz);
+      if (tl < 1e-3) break;
+      tx /= tl;
+      tz /= tl;
+      let qx = -tz;
+      let qz = tx;
+      if (qx * nx + qz * nz < 0) (qx = -qx), (qz = -qz);
+      nx = qx;
+      nz = qz;
+      const next = Math.atan2(-nx, -nz);
+      const done = Math.abs(next - yaw) < 1e-3;
+      yaw = next;
+      if (done) break;
+    }
+    const { fx, fz, px, pz } = front(yaw);
+    const gapAt = (ox: number, oz: number): number => {
+      const near = this.roads.nearestEdge(ox, oz, CELL_SIZE * 3, true, accept);
+      if (!near) return Infinity;
+      const side = (ox - near.point.x) * nx + (oz - near.point.z) * nz >= 0 ? 1 : -1;
+      return side * near.dist - getRoadType(near.edge.typeId).width / 2;
+    };
+    for (let k = 0; k < 8; k++) {
+      const g =
+        Math.min(
+          gapAt(cx + fx * hd, cz + fz * hd),
+          gapAt(cx + fx * hd + px * hw * 0.95, cz + fz * hd + pz * hw * 0.95),
+          gapAt(cx + fx * hd - px * hw * 0.95, cz + fz * hd - pz * hw * 0.95),
+        ) - 0.1;
+      if (!Number.isFinite(g)) return null;
+      cx += fx * g;
+      cz += fz * g;
+      if (Math.abs(g) < 0.02) break;
+    }
+    return { x: cx, z: cz, yaw: Math.atan2(Math.sin(yaw), Math.cos(yaw)) };
+  }
+
+  /** The grid lot a freely placed building is filed under (its nearest quarter turn and cells). */
+  private nominalLot(footprint: readonly [number, number] | number[], spot: FreeSpot): { i: number; j: number; w: number; d: number; rot: Rotation; ox: number; oz: number; oyaw: number } {
+    const quarter = Math.PI / 2;
+    const q = Math.round(spot.yaw / quarter);
+    const rot = (((q % 4) + 4) % 4) as Rotation;
+    const [w, d] = rot % 2 === 0 ? [footprint[0], footprint[1]] : [footprint[1], footprint[0]];
+    const i = Math.round(spot.x / CELL_SIZE - w / 2);
+    const j = Math.round(spot.z / CELL_SIZE - d / 2);
+    return { i, j, w, d, rot, ox: spot.x - (i + w / 2) * CELL_SIZE || 0, oz: spot.z - (j + d / 2) * CELL_SIZE || 0, oyaw: spot.yaw - q * quarter || 0 };
+  }
+
+  /** Corners of a freely placed footprint. */
+  private freeQuad(footprint: readonly [number, number] | number[], s: FreeSpot, inset = 0): { x: number; z: number }[] {
+    const hx = (footprint[0] * CELL_SIZE) / 2 - inset;
+    const hz = (footprint[1] * CELL_SIZE) / 2 - inset;
+    const cos = Math.cos(s.yaw);
+    const sin = Math.sin(s.yaw);
+    return [
+      [-hx, -hz],
+      [hx, -hz],
+      [hx, hz],
+      [-hx, hz],
+    ].map(([x, z]) => ({ x: s.x + x * cos + z * sin, z: s.z - x * sin + z * cos }));
+  }
+
+  /** Cells a freely placed footprint covers (by more than a sliver), and why it can't stand there. */
+  private freeCells(footprint: readonly [number, number] | number[], s: FreeSpot): { cells: number[]; errors: string[] } {
+    const quad = this.freeQuad(footprint, s, 0.4);
+    const xs = quad.map((p) => p.x);
+    const zs = quad.map((p) => p.z);
+    const errors = new Set<string>();
+    const cells: number[] = [];
+    for (let j = Math.floor(Math.min(...zs) / CELL_SIZE); j <= Math.floor(Math.max(...zs) / CELL_SIZE); j++) {
+      for (let i = Math.floor(Math.min(...xs) / CELL_SIZE); i <= Math.floor(Math.max(...xs) / CELL_SIZE); i++) {
+        const cell = [
+          { x: i * CELL_SIZE, z: j * CELL_SIZE },
+          { x: (i + 1) * CELL_SIZE, z: j * CELL_SIZE },
+          { x: (i + 1) * CELL_SIZE, z: (j + 1) * CELL_SIZE },
+          { x: i * CELL_SIZE, z: (j + 1) * CELL_SIZE },
+        ];
+        if (!quadsOverlap(cell, quad)) continue;
+        if (i < 0 || j < 0 || i >= GRID_CELLS || j >= GRID_CELLS) {
+          errors.add('Harita sınırlarının dışında');
+          continue;
+        }
+        // Road cells are shared with the road (the surface itself is checked apart).
+        if (this.occupancy.hasRoad(i, j)) continue;
+        if (!this.world.isCellUnlocked(i, j)) errors.add('Satın alınmamış arazi');
+        if (this.world.grid.isWater(i, j)) errors.add('Su üzerine inşa edilemez');
+        if (this.occupancy.buildingAt(i, j) !== 0) errors.add('Başka bir binayla çakışıyor');
+        cells.push(j * GRID_CELLS + i);
+      }
+    }
+    if (cells.length === 0) errors.add('Yolun üzerine inşa edilemez');
+    return { cells, errors: [...errors] };
+  }
+
+  /** Errors of a free footprint against the road surface and other buildings as drawn. */
+  private freeGeometryErrors(footprint: readonly [number, number] | number[], s: FreeSpot): string[] {
+    const { errors } = this.freeCells(footprint, s);
+    const mine = this.freeQuad(footprint, s, 0.3);
+    const xs = mine.map((p) => p.x);
+    const zs = mine.map((p) => p.z);
+    const seen = new Set<number>();
+    const r = 2;
+    let clash = false;
+    for (let cj = Math.floor(Math.min(...zs) / CELL_SIZE) - r; cj <= Math.floor(Math.max(...zs) / CELL_SIZE) + r && !clash; cj++) {
+      for (let ci = Math.floor(Math.min(...xs) / CELL_SIZE) - r; ci <= Math.floor(Math.max(...xs) / CELL_SIZE) + r; ci++) {
+        const id = this.occupancy.buildingAt(ci, cj);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const o = this.buildings.items.get(id);
+        if (o && quadsOverlap(mine, this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3))) {
+          clash = true;
+          break;
+        }
+      }
+    }
+    const out = new Set(errors);
+    if (clash) out.add('Başka bir binayla çakışıyor');
+    const accept = (e: RoadEdge) => !this.roads.isElevated(e);
+    for (let k = 0; k < 4; k++) {
+      const a = mine[k];
+      const b = mine[(k + 1) % 4];
+      for (const p of [a, { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }]) {
+        const near = this.roads.nearestEdge(p.x, p.z, CELL_SIZE, true, accept);
+        if (near && near.dist < getRoadType(near.edge.typeId).width / 2 - 0.2) out.add('Yolun üzerine inşa edilemez');
+      }
+    }
+    return [...out];
+  }
+
+  /** Validates a freely placed building (turned and moved to a road) at `spot`. */
+  planFree(defId: string, spot: FreeSpot): BuildingPlan {
+    const def = getBuilding(defId);
+    const lot = this.nominalLot(def.footprint, spot);
+    // Price, budget, unlocks and one-of-a-kind rules come from the ordinary plan.
+    const base = this.planBuilding(defId, lot.i, lot.j, lot.rot);
+    const errors = base.errors.filter((e) => e === 'Yetersiz bütçe' || e.startsWith('Kilitli') || e.endsWith('zaten inşa edildi'));
+    const geo = this.freeGeometryErrors(def.footprint, spot);
+    const { cells } = this.freeCells(def.footprint, spot);
+    const quad = this.freeQuad(def.footprint, spot);
+    const heights = [...quad, spot].map((p) => this.world.heightAt(p.x, p.z));
+    const baseY = Math.max(...heights);
+    const minY = Math.min(...heights);
+    if (baseY - minY > MAX_FOUNDATION_DROP) geo.push('Arazi çok eğimli');
+    errors.unshift(...geo);
+    return {
+      ...base,
+      i: lot.i,
+      j: lot.j,
+      rot: lot.rot,
+      w: lot.w,
+      d: lot.d,
+      baseY,
+      minY,
+      centerX: spot.x,
+      centerZ: spot.z,
+      roadAccess: true,
+      valid: errors.length === 0,
+      errors,
+      free: { ...spot, cells, ox: lot.ox, oz: lot.oz, oyaw: lot.oyaw },
+    };
+  }
+
+  /** The plan to rebuild a building where it stood (free or on the grid). */
+  private planAt(defId: string, at: Spot): BuildingPlan {
+    return at.free ? this.planFree(defId, at.free) : this.planBuilding(defId, at.i, at.j, at.rot);
+  }
+
+  /** Does a building reach a road? (Free ones: their front is at a kerb.) */
+  roadAccessOf(b: PlacedBuilding): boolean {
+    if (!b.free) return hasRoadAccess(b.i, b.j, b.w, b.d, b.rot, this.placementWorld);
+    const [fx, fz] = [Math.sin(b.rot * (Math.PI / 2) + (b.oyaw ?? 0)), Math.cos(b.rot * (Math.PI / 2) + (b.oyaw ?? 0))];
+    const depth = (getBuilding(b.defId).footprint[1] * CELL_SIZE) / 2;
+    const x = (b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0) + fx * depth;
+    const z = (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0) + fz * depth;
+    const near = this.roads.nearestEdge(x, z, CELL_SIZE * 2, true, (e) => !this.roads.isElevated(e));
+    return !!near && near.dist - getRoadType(near.edge.typeId).width / 2 < 2;
+  }
+
+  /** Drawn corners of a footprint with a snap offset (x, z) and extra turn. */
+  private drawnCorners(i: number, j: number, w: number, d: number, s: { x: number; z: number; yaw: number } | null, inset = 0): { x: number; z: number }[] {
+    const cx = (i + w / 2) * CELL_SIZE + (s?.x ?? 0);
+    const cz = (j + d / 2) * CELL_SIZE + (s?.z ?? 0);
+    const hx = (w * CELL_SIZE) / 2 - inset;
+    const hz = (d * CELL_SIZE) / 2 - inset;
+    const yaw = s?.yaw ?? 0;
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    return [
+      [-hx, -hz],
+      [hx, -hz],
+      [hx, hz],
+      [-hx, hz],
+    ].map(([x, z]) => ({ x: cx + x * cos + z * sin, z: cz - x * sin + z * cos }));
+  }
+
+  /** Does a snapped footprint stay clear of other buildings (as drawn) and of the road surface? */
+  private snapFits(i: number, j: number, w: number, d: number, s: { x: number; z: number; yaw: number }): boolean {
+    const mine = this.drawnCorners(i, j, w, d, s, 0.3);
+    // Other buildings around, as they are drawn (only those already placed).
+    const seen = new Set<number>();
+    const r = 3;
+    for (let cj = j - r; cj < j + d + r; cj++) {
+      for (let ci = i - r; ci < i + w + r; ci++) {
+        if (ci < 0 || cj < 0 || ci >= GRID_CELLS || cj >= GRID_CELLS) continue;
+        const id = this.occupancy.buildingAt(ci, cj);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const o = this.buildings.items.get(id);
+        if (!o || (o.i === i && o.j === j && o.w === w && o.d === d)) continue;
+        const theirs = this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3);
+        if (quadsOverlap(mine, theirs)) return false;
+      }
+    }
+    // The road: no corner or side midpoint on the carriageway.
+    const accept = (e: RoadEdge) => !this.roads.isElevated(e);
+    for (let k = 0; k < 4; k++) {
+      const a = mine[k];
+      const b = mine[(k + 1) % 4];
+      for (const p of [a, { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }]) {
+        const near = this.roads.nearestEdge(p.x, p.z, CELL_SIZE, true, accept);
+        if (near && near.dist < getRoadType(near.edge.typeId).width / 2 - 0.2) return false;
+      }
+    }
+    return true;
+  }
+
+  /** The offset (and turn) that lays the front along the road at its kerb, or null. */
+  private solveRoadSnap(i: number, j: number, w: number, d: number, rot: Rotation): { x: number; z: number; yaw: number } | null {
     const [sx, sz] = frontStep(rot);
     const cx = (i + w / 2) * CELL_SIZE;
     const cz = (j + d / 2) * CELL_SIZE;
@@ -1192,24 +1560,50 @@ export class City {
     const fz = cz + sz * halfDepth;
     const hit = this.roads.nearestEdge(fx + sx * CELL_SIZE, fz + sz * CELL_SIZE, CELL_SIZE * 2.2, true, accept);
     if (!hit) return null;
-    // Unit normal from the road towards the lot.
+    // Unit normal from the road towards the lot (first guess: from the nearest point).
     let nx = fx - hit.point.x;
     let nz = fz - hit.point.z;
     const nl = Math.hypot(nx, nz);
     if (nl < 1e-3) return null;
     nx /= nl;
     nz /= nl;
-    // Turn the front to face the road (−n), at most 50°.
-    const mx = -nx;
-    const mz = -nz;
-    const yaw = Math.atan2(sz * mx - sx * mz, sx * mx + sz * mz);
-    if (Math.abs(yaw) > (50 * Math.PI) / 180) return null;
-    const cos = Math.cos(yaw);
-    const sin = Math.sin(yaw);
-    const turn = (x: number, z: number) => ({ x: x * cos + z * sin, z: -x * sin + z * cos });
-    // Front centre and corners after turning; their gaps to the road surface.
     const px = -sz;
     const pz = sx;
+    const yawOf = () => Math.atan2(-sz * nx + sx * nz, -sx * nx - sz * nz);
+    let yaw = yawOf();
+    let cos = Math.cos(yaw);
+    let sin = Math.sin(yaw);
+    const turn = (x: number, z: number) => ({ x: x * cos + z * sin, z: -x * sin + z * cos });
+    // Then lay the whole front along the road: parallel to the chord between the
+    // road points nearest its two corners, so on a curve both corners (inside a
+    // bend) or the middle (outside one) meet the kerb, not one corner alone.
+    for (let k = 0; k < 3; k++) {
+      const ends = [1, -1].map((side) => {
+        const v = turn(sx * halfDepth + px * halfWidth * side, sz * halfDepth + pz * halfWidth * side);
+        return this.roads.nearestEdge(cx + v.x, cz + v.z, CELL_SIZE * 3, true, accept)?.point;
+      });
+      if (!ends[0] || !ends[1]) break;
+      let tx = ends[0].x - ends[1].x;
+      let tz = ends[0].z - ends[1].z;
+      const tl = Math.hypot(tx, tz);
+      if (tl < 1e-3) break;
+      tx /= tl;
+      tz /= tl;
+      // Normal of the chord, on the lot's side.
+      let qx = -tz;
+      let qz = tx;
+      if (qx * nx + qz * nz < 0) (qx = -qx), (qz = -qz);
+      nx = qx;
+      nz = qz;
+      const next = yawOf();
+      const done = Math.abs(next - yaw) < 1e-3;
+      yaw = next;
+      cos = Math.cos(yaw);
+      sin = Math.sin(yaw);
+      if (done) break;
+    }
+    // Turn the front to face the road (−n), at most 50°.
+    if (Math.abs(yaw) > (50 * Math.PI) / 180) return null;
     // Gap from a point of the turned front (moved `shift` m towards the road) to the road surface.
     const gapAt = (ox: number, oz: number, shift: number): number => {
       const v = turn(ox, oz);
@@ -1229,7 +1623,7 @@ export class City {
       );
     // A few steps: the closest front point ends up 0.1 m from the kerb.
     let gap = 0;
-    for (let k = 0; k < 3; k++) {
+    for (let k = 0; k < 8; k++) {
       const g = frontGap(gap) - 0.1;
       if (!Number.isFinite(g)) return null;
       gap += g;
@@ -1276,19 +1670,28 @@ export class City {
         const id = this.occupancy.buildingAt(i + di, j + dj);
         const b = id ? this.buildings.items.get(id) : undefined;
         if (!b) continue;
-        const lx = x - (b.ox ?? 0);
-        const lz = z - (b.oz ?? 0);
-        if (lx >= b.i * CELL_SIZE && lx < (b.i + b.w) * CELL_SIZE && lz >= b.j * CELL_SIZE && lz < (b.j + b.d) * CELL_SIZE) return b.id;
+        // Inside the footprint as drawn (moved and turned towards the road)?
+        const q = this.drawnCorners(b.i, b.j, b.w, b.d, { x: b.ox ?? 0, z: b.oz ?? 0, yaw: b.oyaw ?? 0 });
+        let inside = true;
+        for (let k = 0; k < 4 && inside; k++) {
+          const p = q[k];
+          const r = q[(k + 1) % 4];
+          if ((r.x - p.x) * (z - p.z) - (r.z - p.z) * (x - p.x) < 0) inside = false;
+        }
+        if (inside) return b.id;
       }
     }
     return 0;
   }
 
+  /** Restores saved buildings (save system): occupancy, zoning index and cleared trees follow. */
   restoreBuildings(items: Parameters<BuildingRegistry['restore']>[0], nextId: number): void {
+    // Occupancy first: each building's road snap checks the ones restored before it.
+    for (const it of items) this.occupancy.setBuilding(it.id, it.free ?? footprintCells(it.i, it.j, it.w, it.d));
     const added = this.buildings.restore(items, nextId);
     for (const b of added) {
       this.occupancy.setBuilding(b.id, b.cells);
-      this.clearVegetationRect(b.i, b.j, b.w, b.d);
+      this.clearVegetationOf(b);
     }
   }
 
@@ -1344,7 +1747,7 @@ export class City {
   placeGrowable(plan: BuildingPlan, style: ArchStyle, tint: number, tick: number): PlacedBuilding | null {
     const def = getBuilding(plan.defId);
     if (!def.zone) return null;
-    const fresh = this.planBuilding(plan.defId, plan.i, plan.j, plan.rot);
+    const fresh = plan.free ? this.planFree(plan.defId, plan.free) : this.planBuilding(plan.defId, plan.i, plan.j, plan.rot);
     if (!fresh.valid || !this.treasury.spend(fresh.cost, 'buildings')) return null;
     const b = this.buildings.create({
       defId: def.id,
@@ -1362,26 +1765,29 @@ export class City {
       tint,
       sinceTick: tick,
       style,
+      ...(fresh.free ? { free: fresh.free.cells, ox: fresh.free.ox, oz: fresh.free.oz, ...(fresh.free.oyaw ? { oyaw: fresh.free.oyaw } : {}) } : {}),
     });
     this.zones.set(b.cells, def.zone, () => false);
     for (const k of b.cells) this.districtStyle[k] = archStyleIndex(style);
     this.occupancy.setBuilding(b.id, b.cells);
+    this.resnapAround(b);
     for (const k of b.cells) this.zones.refresh(k, false);
-    this.clearVegetationRect(b.i, b.j, b.w, b.d);
+    this.clearVegetationOf(b);
     if (this.recording) this.undo.push({ kind: 'place', id: b.id, defId: def.id, at: spotOf(b), cost: b.cost, style, tint });
     return b;
   }
 
   placeBuilding(plan: BuildingPlan): PlacedBuilding | null {
-    const fresh = this.planBuilding(plan.defId, plan.i, plan.j, plan.rot);
+    const fresh = plan.free ? this.planFree(plan.defId, plan.free) : this.planBuilding(plan.defId, plan.i, plan.j, plan.rot);
     if (!fresh.valid) return null;
     const group = getBuilding(plan.defId).group ?? 'landmark';
     if (!this.treasury.spend(fresh.cost, group === 'landmark' ? 'buildings' : 'infra')) return null;
     const b = this.buildings.add(fresh);
     this.occupancy.setBuilding(b.id, b.cells);
+    this.resnapAround(b);
     // A player building replaces any zoning under it.
     this.zones.set(b.cells, ZoneType.None, () => false);
-    this.clearVegetationRect(b.i, b.j, b.w, b.d);
+    this.clearVegetationOf(b);
     if (this.recording) this.undo.push({ kind: 'place', id: b.id, defId: b.defId, at: spotOf(b), cost: b.cost, tint: b.tint });
     return b;
   }
@@ -1435,8 +1841,9 @@ export class City {
     this.occupancy.clearBuilding(id, b.cells);
     const moved = this.buildings.add({ ...plan, cost: b.cost });
     this.occupancy.setBuilding(moved.id, moved.cells);
+    this.resnapAround(moved);
     this.zones.set(moved.cells, ZoneType.None, () => false);
-    this.clearVegetationRect(moved.i, moved.j, moved.w, moved.d);
+    this.clearVegetationOf(moved);
     if (this.recording) this.undo.push({ kind: 'move', id: moved.id, defId: b.defId, from, to: spotOf(moved) });
     return moved;
   }
@@ -1587,7 +1994,7 @@ export class City {
       }
       // Rebuild: a placement pays its price again, an undone demolition pays back the refund.
       const price = e.kind === 'place' ? e.cost : e.refund;
-      const plan = this.planBuilding(e.defId, e.at.i, e.at.j, e.at.rot);
+      const plan = this.planAt(e.defId, e.at);
       const blocking = plan.errors.filter((x) => x !== 'Yetersiz bütçe' && !x.startsWith('Kilitli'));
       if (blocking.length > 0) return blocking[0];
       if (!this.treasury.canAfford(price)) return 'Yetersiz bütçe';
@@ -1598,8 +2005,9 @@ export class City {
         this.treasury.spend(price, ledgerOf(e.defId));
         b = this.buildings.add({ ...plan, cost: e.cost });
         this.occupancy.setBuilding(b.id, b.cells);
+        this.resnapAround(b);
         this.zones.set(b.cells, ZoneType.None, () => false);
-        this.clearVegetationRect(b.i, b.j, b.w, b.d);
+        this.clearVegetationOf(b);
       }
       if (!b) return 'Bina yeniden kurulamadı';
       e.id = b.id;
@@ -1623,5 +2031,40 @@ export class City {
   }
 }
 
-const spotOf = (b: PlacedBuilding): Spot => ({ i: b.i, j: b.j, rot: b.rot });
+const spotOf = (b: PlacedBuilding): Spot => ({
+  i: b.i,
+  j: b.j,
+  rot: b.rot,
+  ...(b.free ? { free: { x: (b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0), z: (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0), yaw: (b.rot * Math.PI) / 2 + (b.oyaw ?? 0) } } : {}),
+});
+/** How far (m) beyond a building's own depth the road magnet reaches. */
+const MAGNET_REACH = CELL_SIZE * 2;
 const ledgerOf = (defId: string) => ((getBuilding(defId).group ?? 'landmark') === 'landmark' ? 'buildings' : 'infra') as 'buildings' | 'infra';
+
+/** Do two convex quads (corner lists) overlap? Separating-axis test. */
+export function quadsOverlap(a: { x: number; z: number }[], b: { x: number; z: number }[]): boolean {
+  for (const poly of [a, b]) {
+    for (let k = 0; k < poly.length; k++) {
+      const p = poly[k];
+      const q = poly[(k + 1) % poly.length];
+      const ax = -(q.z - p.z);
+      const az = q.x - p.x;
+      let minA = Infinity;
+      let maxA = -Infinity;
+      let minB = Infinity;
+      let maxB = -Infinity;
+      for (const v of a) {
+        const t = v.x * ax + v.z * az;
+        minA = Math.min(minA, t);
+        maxA = Math.max(maxA, t);
+      }
+      for (const v of b) {
+        const t = v.x * ax + v.z * az;
+        minB = Math.min(minB, t);
+        maxB = Math.max(maxB, t);
+      }
+      if (maxA <= minB || maxB <= minA) return false;
+    }
+  }
+  return true;
+}

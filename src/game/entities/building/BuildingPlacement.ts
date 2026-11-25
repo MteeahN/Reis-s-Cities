@@ -12,6 +12,13 @@ export interface PlacementWorld {
   buildingAt(i: number, j: number): number;
 }
 
+/** A building placed off the grid: drawn centre (m) and absolute turn (radians, as the renderer turns it). */
+export interface FreeSpot {
+  x: number;
+  z: number;
+  yaw: number;
+}
+
 export interface BuildingPlan {
   defId: string;
   i: number;
@@ -29,6 +36,8 @@ export interface BuildingPlan {
   roadAccess: boolean;
   valid: boolean;
   errors: string[];
+  /** Placed off the grid along a road: where it is drawn, its offset from the filed grid lot, and the cells it covers. */
+  free?: FreeSpot & { cells: number[]; ox: number; oz: number; oyaw: number };
 }
 
 export const MAX_FOUNDATION_DROP = 6;

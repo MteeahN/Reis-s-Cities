@@ -27,6 +27,44 @@ export interface TransitToolState {
   hint: string | null;
 }
 
+/** Sales to the neighbouring towns, per utility. */
+export interface ExportRow {
+  kind: 'power' | 'water' | 'sewage';
+  name: string;
+  unit: string;
+  offered: number;
+  /** Unused production now. */
+  surplus: number;
+  sold: number;
+  /** ₺ a day. */
+  income: number;
+  max: number;
+  step: number;
+  pricePerThousand: number;
+}
+
+/** A citizen petition, for the HUD. */
+export interface PetitionView {
+  id: number;
+  author: string;
+  text: string;
+  /** What they ask for ("evimizin yakınında okul"). */
+  ask: string;
+  state: 'open' | 'promised' | 'kept' | 'broken' | 'refused' | 'expired';
+  /** Days left to answer (open) or to keep the promise (promised). */
+  daysLeft: number;
+}
+
+export interface PetitionsView {
+  open: PetitionView | null;
+  promised: PetitionView[];
+  recent: PetitionView[];
+  /** Residents' trust in the mayor, −30…30 (happiness factor). */
+  trust: number;
+  /** Its happiness effect (points). */
+  happiness: number;
+}
+
 /** Bus network summary for the panel. */
 export interface TransitView {
   stops: number;
@@ -291,6 +329,10 @@ export type GameEvents = {
   transit: TransitView;
   /** What the advisors say now (most urgent first). */
   advice: Advice[];
+  petitions: PetitionsView;
+  exports: ExportRow[];
+  /** First-person walking mode is on. */
+  walking: boolean;
   decorTool: DecorToolState;
   budget: number;
   cityStats: CityStats;

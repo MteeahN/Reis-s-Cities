@@ -4,6 +4,8 @@ import { saveCity } from '../store/saveManager';
 import { AchievementsPanel } from './panels/AchievementsPanel';
 import { FeedPanel } from './panels/FeedPanel';
 import { AdvisorsPanel } from './panels/AdvisorsPanel';
+import { PetitionCard } from './panels/PetitionCard';
+import { WalkHud } from './hud/WalkHud';
 import { StatsPanel } from './panels/StatsPanel';
 import { DemandMeter } from './hud/DemandMeter';
 import { LayerLegend } from './hud/LayerLegend';
@@ -20,6 +22,7 @@ import { Toolbar } from './toolbar/Toolbar';
 /** HUD overlay. The root ignores pointer events so the 3D view stays interactive. */
 export function GameHud() {
   const uiScale = useGameStore((s) => s.settings.gameplay.uiScale);
+  const walking = useGameStore((s) => s.walking);
   // Ctrl+S saves the city (instead of the browser's "save page").
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -32,13 +35,15 @@ export function GameHud() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   return (
-    <div className="hud" data-testid="hud" style={uiScale === 1 ? undefined : ({ zoom: uiScale, width: `${100 / uiScale}vw`, height: `${100 / uiScale}vh`, inset: 'auto', top: 0, left: 0 } as CSSProperties)}>
+    <div className={`hud ${walking ? 'walking' : ''}`} data-testid="hud" style={uiScale === 1 ? undefined : ({ zoom: uiScale, width: `${100 / uiScale}vw`, height: `${100 / uiScale}vh`, inset: 'auto', top: 0, left: 0 } as CSSProperties)}>
       <TopBar />
       <SettingsMenu />
       <StatsPanel />
       <AchievementsPanel />
       <FeedPanel />
       <AdvisorsPanel />
+      <PetitionCard />
+      <WalkHud />
       <Toasts />
       <Tutorial />
       <LayerLegend />

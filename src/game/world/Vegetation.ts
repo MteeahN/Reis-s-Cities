@@ -9,13 +9,15 @@ import {
   Quaternion,
   Vector3,
 } from 'three';
-import { broadleafHigh, broadleafLow, pineHigh, pineLow, poplarHigh, poplarLow, rock } from '../entities/TreeModels';
+import { broadleafHigh, broadleafLow, pineHigh, pineLow, poplarHigh, poplarLow, rock, rockLow } from '../entities/TreeModels';
 import { patchSway } from '../rendering/foliage';
 import { patchInk } from '../rendering/ink';
 import { Species, VEG_STRIDE, type VegetationSet } from './generation/generateWorld';
 
 interface VegCell {
   bounds: Box3;
+  /** LOD shown now (undefined until the first update). */
+  near?: boolean;
   high: InstancedMesh[];
   low: InstancedMesh[];
 }
@@ -28,6 +30,7 @@ interface Models {
   poplarHigh: BufferGeometry;
   poplarLow: BufferGeometry;
   rock: BufferGeometry;
+  rockLow: BufferGeometry;
 }
 
 const ZERO_MATRIX = new Matrix4().makeScale(0, 0, 0);
@@ -48,7 +51,7 @@ export class Vegetation {
   private readonly cells: VegCell[] = [];
   private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 });
   private readonly models: Models;
-  lodDistance = 700;
+  lodDistance = 380;
   private readonly tmpV = new Vector3();
   /** Removable objects: xz positions, spatial hash, and [mesh, index, mesh, index…] per object. */
   private readonly positions: number[] = [];
@@ -68,6 +71,7 @@ export class Vegetation {
       poplarHigh: poplarHigh(),
       poplarLow: poplarLow(),
       rock: rock(),
+      rockLow: rockLow(),
     };
   }
 
@@ -155,8 +159,13 @@ export class Vegetation {
       if (l1) cell.low.push(l1);
       if (l2) cell.low.push(l2);
       if (l3) cell.low.push(l3);
-      // Rocks are cheap: a single LOD that is visible at all distances.
-      make(this.models.rock, rocks, ROCK_TINTS, true, true);
+      // Rocks: detailed and shadowed near the camera, a plain lump further away.
+      if (withHighLod) {
+        const r1 = make(this.models.rock, rocks, ROCK_TINTS, true, true);
+        if (r1) cell.high.push(r1);
+      }
+      const r2 = make(this.models.rockLow, rocks, ROCK_TINTS, false, true);
+      if (r2) cell.low.push(r2);
 
       cell.bounds.expandByScalar(12);
       this.cells.push(cell);
@@ -227,12 +236,18 @@ export class Vegetation {
     return [...this.removed];
   }
 
-  /** Switches LOD per cell by distance from the camera to the cell bounds. */
+  /**
+   * Switches LOD per cell by distance from the camera to the cell bounds.
+   * Only changes visibility when a cell crosses the threshold (no per-frame
+   * work for cells that stay on the same side).
+   */
   update(cameraPos: Vector3): void {
     for (const cell of this.cells) {
       if (cell.high.length === 0) continue;
       cell.bounds.clampPoint(cameraPos, this.tmpV);
       const near = this.tmpV.distanceTo(cameraPos) < this.lodDistance;
+      if (cell.near === near) continue;
+      cell.near = near;
       for (const mesh of cell.high) mesh.visible = near;
       for (const mesh of cell.low) mesh.visible = !near;
     }

@@ -74,7 +74,7 @@ export class Input {
   };
 
   private handleMove = (e: PointerEvent) => {
-    if (this.buttons.size > 0) {
+    if (this.buttons.size > 0 || document.pointerLockElement === this.el) {
       this.dragDX += e.movementX;
       this.dragDY += e.movementY;
     }

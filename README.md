@@ -27,6 +27,17 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   Katlı Otopark: oyun park yeri arayan sürücüleri hesaplamaz, bu yüzden otoparklar görünüm içindir; yalnızca görevli
   işleri gerçektir (açıklamalarında yazıyor).
 - **Bölge renkleri:** konut / ticaret / sanayi / ofis renkleri artık yalnızca bölgeleme aracı açıkken görünür.
+- **Vatandaş dilekçeleri:** 100 nüfustan sonra birkaç günde bir, gerçekten eksiği olan bir evin sakinleri başkandan
+  bir şey ister: polis, itfaiye ya da sağlık kapsaması, okul ya da yürüme mesafesinde çalışan bir otobüs hattı. Kart
+  bir gün içinde yanıt bekler. "Söz ver" denirse 7 gün içinde yapılmalıdır; söz, simülasyonun kullandığı aynı kapsama
+  ile denetlenir. Tutulan söz güveni artırır (+8), tutulmayan çok düşürür (−12), ret (−3) ve yanıtsızlık (−2) biraz
+  düşürür. **Belediyeye güven** (−30…+30, günde %3 sönümlenir) her hanenin mutluluğuna 0,3 katıyla eklenir.
+  Danışmanlar panelinde süren sözler, kalan gün ve son sonuçlar görünür; "Nerede" kamerayı eve götürür. Kayda yazılır.
+- **Komşu kasabalara satış (Bütçe sekmesi):** şehrin kullanmadığı elektrik, temiz su ve atık su arıtma kapasitesi
+  satılır (₺8 / 1.000 kW, ₺20 / 1.000 m³ su, ₺15 / 1.000 m³ arıtma, günlük). Oyuncu ne kadar sunacağını seçer;
+  satılan, gerçek fazlayı aşmaz: talep artınca önce satış azalır, şehir hizmetsiz kalmaz. Komşular günde en çok
+  20.000 kW ve 3.000 m³ alır. Hatların komşulara şehirlerarası yol boyunca döşeli olduğu varsayılır. Gelir bütçede
+  ayrı satırdır, kayda yazılır.
 - **Danışmanlar (üst çubuk):** şehrin o an en çok neye ihtiyacı olduğunu altyapı, güvenlik, sağlık, eğitim, ekonomi,
   imar, ulaşım, bütçe ve halkla ilişkiler danışmanları söyler. Her madde simülasyonun ölçtüğü rakamı yazar
   ("6 bina elektriksiz", "talep %100, boş ev 0") ve sorunu çözen aracı tek tıkla açar. Acil olanlar önce gelir ve
@@ -78,11 +89,19 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
 - **Eğimli arazide binalar:** dört kata kadar binalar %12'ye kadar eğimde araziyle birlikte eğilir (parsel zemine
   oturur, kaide görünmez). Daha yüksek binalar ve dik eğimler dik durur, en alçak köşeye kadar yamaca gömülür
   (yukarı tarafta en fazla 2,5 m; fazlasını kaide tamamlar). Görüntüdür; hücreler ve oyun kuralları değişmez.
+- **Yola mıknatıs (elle yerleştirme):** bina aracında imleç kıvrık ya da çapraz bir yola (binanın derinliği + 2 hücre)
+  yaklaşınca bina yola çekilir: yolun o noktadaki yönüne her açıda döner (90°'lik adımlarla değil), ön yüzü kaldırıma
+  paralel yaslanır ve imleçle yol boyunca kayar. Başka bir binaya çarpacaksa yana kayar; 2,5 m'den yakın komşusuna
+  yanaşır. Bina ızgaraya bağlı değildir: değdiği hücreleri sahiplenir (ızgara binaları üstüne kurulamaz), yol hücrelerini
+  yolla paylaşır. Izgaraya paralel yollarda ve R ile elle döndürünce ızgara yerleşimi geçerlidir. Geri alma, kayıt ve
+  yol erişimi bu yerleşimi olduğu gibi tanır.
 - **Yola yaslanan binalar:** binalar önündeki yola yaslanarak çizilir: düz yolda arada çim şerit kalırsa kaldırım
-  kenarına çekilir; kavisli ya da çapraz yolda yola bakacak kadar (en çok 50°) döner ve ön cephesinin yola en yakın
-  noktası kaldırıma değene dek ileri ya da geri kaydırılır. Yerleştirirken imleç yol eğrisine denk gelmeyen bir
+  kenarına çekilir; kavisli ya da çapraz yolda en çok 50° döner: ön cephe, iki köşesinin karşısındaki yol noktalarını birleştiren
+  çizgiye paralel olur (yalnız bir köşe değil, yüz yola yaslanır) ve kaldırıma değene dek ileri ya da geri kaydırılır. Yerleştirirken imleç yol eğrisine denk gelmeyen bir
   hücredeyse araç yakındaki (±2 hücre) uygun parsel ve yönlerden en yakınını seçer. Yalnızca görüntü: hücreler yerinde
-  kalır, seçme / yıkma / taşıma çizildiği yerden çalışır. Arada başka bir bina varsa kaydırılmaz.
+  kalır, seçme / yıkma / taşıma çizildiği yerden çalışır. Arada başka bir bina varsa kaydırılmaz. Döndürülmüş ve
+  kaydırılmış hâli komşu binaların çizildiği yere ya da yol yüzeyine taşacaksa bina döndürülmez, kendi hücrelerinde
+  kalır; sonradan yanına bina konunca komşular yeniden hesaplanır. Kayıt binaların çizildiği yeri olduğu gibi saklar.
 - **Yol kenarı bölgeleme:** seçim yalnızca işaret edilen yola bakan araziyi alır; köşede kesişen yolun cephesine
   taşmaz. Başka türde bölgelenmiş arazi sınırdır: yeni bölge onun sınırına kadar uzanır, onu ve arkasını
   değiştirmez (örneğin konutun yanına sanayi çizerken konut korunur). Fırça modu ve "Kaldır" eskisi gibi her şeye işler.
@@ -225,6 +244,24 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   çizimi; yollar Sokaklar / Geniş yollar / Otoyol, konutlar Hepsi / Evler / Az katlı / Yüksek sekmelerinde.
 - **Grafik ayarları:** ön ayar (otomatik/yüksek/orta/düşük) ve tek tek gölge kalitesi, çözünürlük ölçeği, ağaç ve bina detay
   mesafesi, en fazla araç, ışık parlaması (bloom), gündüz/gece. Bir değeri değiştirmek ön ayarı **Özel** yapar.
+- **Şehirde yürü (I ya da üst çubuktaki yürüyen adam):** kameranın baktığı yere en yakın sokağın kaldırımında, yol
+  boyunca bakarak göz hizasına (1,7 m) inilir. W A S D yürür, Shift koşar, haritaya tıklayınca fare kilitlenir ve
+  fareyle bakılır (ya da Q / E ile dönülür), Esc ya da "Şehre dön" çıkar ve kamera yürüyüşün bittiği yere döner.
+  Binalar (çizildikleri yerde) ve köprüsüz su yürüyeni durdurur, duvar boyunca kayar; yollarda yol yüzeyine, başka
+  yerde araziye basar. Yürürken inşaat araçları gizlenir, haritaya tıklamak bir şey kurmaz; simülasyon sürer.
+- **Görünüm (Ayarlar → Grafik):** Standart, Yumuşak (sıcak, yumuşak ışık, ince çizgiler), Kasvetli (bulutlu, soğuk,
+  soluk) ve Canlı (doygun renkler, belirgin kontur). Güneş ve gök ışığını, pusu, kontur kalınlığını ve son görüntünün
+  doygunluk / kontrast / tonunu değiştirir; Standart ek maliyet getirmez, diğerleri tek bir tam ekran geçişi ekler.
+  **Günün saati:** Döngü (oyun saati), Sabah, Gündüz, Akşam, Gece — yalnızca ışık; simülasyon saati değişmez.
+- **Cephe çeşitleri:** her cephe stilinin (konut, ofis, dükkân, sanayi) dört pencere tasarımı var (panjurlu, Fransız
+  balkonlu, kemerli, şerit pencereli, kanatlı cam, tuğla…); hangisi olduğu binanın konumundan seçilir, komşular
+  farklı görünür. Yere değen duvarların zemin katı ayrı çizilir: kapılar, vitrinler, tenteler, lobi camları, sanayi
+  kepenkleri. Hepsi tek bir doku atlasında; üçgen sayısı artmaz, gece ışıkları aynı biçimde yanar.
+- **Performans:** ağaçların ayrıntılı modeli artık yalnızca yakında çizilir (yüksek ön ayarda 380 m; eskiden 600 m),
+  kayaların da uzak için sade modeli var; bina havuzları görüş alanı dışında kalınca (gölge geçişinde de) çizilmez,
+  küçük bina ayrıntıları gölge düşürmez. Yüksek ön ayarda çözünürlük sınırı 1,5. Ölçülen: ~300 binalı bir test
+  şehrinde uzak görünümde çizim çağrısı ~785 → ~386, üçgen ~1,8 M → ~0,54 M. Kayıtlı ayarlar bir ön ayardaysa o
+  ön ayarın güncel değerlerini alır.
   **Ses ayarları:** ana ses, ortam, efekt, sessiz. Ayarlar tarayıcıda (localStorage) saklanır; şehir kaydı Aşama 8'de.
 
 ### Aşama 6'da neler var

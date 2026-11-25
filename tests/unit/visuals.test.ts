@@ -84,13 +84,15 @@ describe('Building models', () => {
         expect(g.height).toBeGreaterThan(0);
         if (g.facade) {
           const tiles = new Set(g.facade.getAttribute('aTile').array as Float32Array);
-          for (const t of tiles) expect([0, 1, 2, 3]).toContain(t);
+          for (const t of tiles) expect([0, 1, 2, 3, 10, 11, 12, 13]).toContain(t);
         }
       }
     }
     // Offices use the curtain-wall tile, shops the shopfront tile.
-    expect([...(buildingGeometry(getBuilding('com3_office_m')).facade!.getAttribute('aTile').array as Float32Array)]).toContain(1);
-    expect([...(buildingGeometry(getBuilding('com1_shop')).facade!.getAttribute('aTile').array as Float32Array)]).toContain(2);
+    expect([...(buildingGeometry(getBuilding('com3_office_m')).facade!.getAttribute('aTile').array as Float32Array)].map((t) => t % 10)).toContain(1);
+    expect([...(buildingGeometry(getBuilding('com1_shop')).facade!.getAttribute('aTile').array as Float32Array)].map((t) => t % 10)).toContain(2);
+    // Walls standing on the ground are marked (+10) for doors and shopfronts.
+    expect([...(buildingGeometry(getBuilding('com1_shop')).facade!.getAttribute('aTile').array as Float32Array)]).toContain(12);
   });
 
   it('small parts go to the LOD detail layer, construction sites keep them', () => {
@@ -156,8 +158,8 @@ describe('Street furniture', () => {
 
 describe('Settings', () => {
   it('sanitizes stored settings field by field', () => {
-    const s = sanitizeSettings({ graphics: { preset: 'ultra', resolution: 9, vehicles: -5, bloom: 'yes', dayNight: 'night' }, audio: { master: 0.3, muted: 1 } });
-    expect(s.graphics.preset).toBe(DEFAULT_SETTINGS.graphics.preset);
+    expect(sanitizeSettings({ graphics: { preset: 'ultra' } }).graphics.preset).toBe(DEFAULT_SETTINGS.graphics.preset);
+    const s = sanitizeSettings({ graphics: { preset: 'custom', resolution: 9, vehicles: -5, bloom: 'yes', dayNight: 'night' }, audio: { master: 0.3, muted: 1 } });
     expect(s.graphics.resolution).toBe(2);
     expect(s.graphics.vehicles).toBe(0);
     expect(s.graphics.bloom).toBe(DEFAULT_SETTINGS.graphics.bloom);
@@ -165,6 +167,8 @@ describe('Settings', () => {
     expect(s.audio.master).toBe(0.3);
     expect(s.audio.muted).toBe(false);
     expect(sanitizeSettings('garbage')).toEqual(DEFAULT_SETTINGS);
+    // On a preset, stored values follow the preset as it is now (an older, heavier tree distance is not kept).
+    expect(sanitizeSettings({ graphics: { preset: 'high', vegetationDistance: 600 } }).graphics.vegetationDistance).toBe(presetValues('high').vegetationDistance);
   });
 
   it('presets copy their values; editing a value makes it custom', () => {
@@ -233,5 +237,19 @@ describe('Pedestrian figures', () => {
         for (const id of [1, 2, 3, 4]) expect(parts.has(id), `${b} part ${id}`).toBe(true);
       }
     }
+  });
+});
+
+describe('Picture looks', () => {
+  it('are independent of quality presets, sanitized, and only non-standard looks grade the image', async () => {
+    const { LOOKS, getLook, needsGrade } = await import('../../src/game/rendering/Looks');
+    expect(needsGrade(getLook('standard'))).toBe(false);
+    for (const l of LOOKS.filter((x) => x.id !== 'standard')) expect(needsGrade(l)).toBe(true);
+    const g = DEFAULT_SETTINGS.graphics;
+    expect(g.look).toBe('standard');
+    const vivid = nextGraphics({ ...g, preset: 'low' }, { look: 'vivid' }, 'high');
+    expect(vivid.preset).toBe('low');
+    expect(vivid.look).toBe('vivid');
+    expect(sanitizeSettings({ graphics: { look: 'neon', dayNight: 'evening' } }).graphics).toMatchObject({ look: 'standard', dayNight: 'evening' });
   });
 });

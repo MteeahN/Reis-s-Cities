@@ -76,6 +76,9 @@ export interface InkOptions {
 }
 
 /** Adds ink lines to a standard material, keeping any shader patch it already has. */
+/** Global multiplier of the ink outline strength (picture looks change it). */
+export const inkScaleUniform = { value: 1 };
+
 export function patchInk(mat: MeshStandardMaterial, opts: InkOptions = {}): void {
   const color = opts.color ?? [0.07, 0.055, 0.05];
   const width = opts.width ?? 1.15;
@@ -85,10 +88,11 @@ export function patchInk(mat: MeshStandardMaterial, opts: InkOptions = {}): void
   const prevKey = mat.customProgramCacheKey.bind(mat);
   mat.onBeforeCompile = (shader, renderer) => {
     prev(shader, renderer);
+    shader.uniforms.uInkScale = inkScaleUniform;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\nattribute vec3 aInk;\nvarying vec3 vInk;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvInk = aInk;`);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\nvarying vec3 vInk;`).replace(
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\nvarying vec3 vInk;\nuniform float uInkScale;`).replace(
       '#include <dithering_fragment>',
       `#include <dithering_fragment>
 if (vInk.x > 0.5) {
@@ -97,14 +101,14 @@ if (vInk.x > 0.5) {
   float inkW = fwidth(inkD) * ${width.toFixed(3)};
   float inkLine = 1.0 - smoothstep(inkW * 0.5, inkW * 1.5, inkD);
   float inkFade = 1.0 - smoothstep(${fade[0].toFixed(1)}, ${fade[1].toFixed(1)}, length(vViewPosition));
-  gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${color.map((v) => v.toFixed(3)).join(', ')}), inkLine * inkFade * ${strength.toFixed(3)});
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${color.map((v) => v.toFixed(3)).join(', ')}), clamp(inkLine * inkFade * ${strength.toFixed(3)} * uInkScale, 0.0, 1.0));
 }`,
     );
   };
-  mat.customProgramCacheKey = () => `${prevKey()}|ink-${width}-${strength}-${fade.join('-')}`;
+  mat.customProgramCacheKey = () => `${prevKey()}|ink2-${width}-${strength}-${fade.join('-')}`;
 }
 
 /** True when a material was patched for ink (used by tests). */
 export function hasInk(mat: Material): boolean {
-  return mat.customProgramCacheKey().includes('|ink-');
+  return mat.customProgramCacheKey().includes('|ink2-');
 }

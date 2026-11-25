@@ -16,9 +16,9 @@ export interface QualityPreset {
 }
 
 export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
-  high: { pixelRatioCap: 2, shadows: 'high', vegetationLod: 600, vehicles: 600, buildingDetail: 900, bloom: true },
-  medium: { pixelRatioCap: 1.25, shadows: 'medium', vegetationLod: 420, vehicles: 350, buildingDetail: 600, bloom: false },
-  low: { pixelRatioCap: 0.85, shadows: 'off', vegetationLod: 260, vehicles: 150, buildingDetail: 350, bloom: false },
+  high: { pixelRatioCap: 1.5, shadows: 'high', vegetationLod: 380, vehicles: 600, buildingDetail: 900, bloom: true },
+  medium: { pixelRatioCap: 1.25, shadows: 'medium', vegetationLod: 280, vehicles: 350, buildingDetail: 600, bloom: false },
+  low: { pixelRatioCap: 0.85, shadows: 'off', vegetationLod: 200, vehicles: 150, buildingDetail: 350, bloom: false },
 };
 
 const ORDER: QualityLevel[] = ['high', 'medium', 'low'];

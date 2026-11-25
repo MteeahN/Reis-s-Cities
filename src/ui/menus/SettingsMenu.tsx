@@ -7,6 +7,7 @@ import { getGame, stopGame } from '../../store/gameBridge';
 import { exportSave, saveBeforeLeaving, saveCity } from '../../store/saveManager';
 import { useGameStore } from '../../store/gameStore';
 import { Icon } from '../components/Icon';
+import { LOOKS } from '../../game/rendering/Looks';
 
 const PRESETS: { id: GraphicsSettings['preset']; label: string }[] = [
   { id: 'auto', label: 'Otomatik' },
@@ -24,8 +25,10 @@ const SHADOWS: { id: ShadowQuality; label: string }[] = [
 
 const DAY_NIGHT: { id: DayNightMode; label: string }[] = [
   { id: 'cycle', label: 'Döngü' },
-  { id: 'day', label: 'Hep gündüz' },
-  { id: 'night', label: 'Hep gece' },
+  { id: 'morning', label: 'Sabah' },
+  { id: 'day', label: 'Gündüz' },
+  { id: 'evening', label: 'Akşam' },
+  { id: 'night', label: 'Gece' },
 ];
 
 type Tab = 'graphics' | 'audio' | 'game';
@@ -87,8 +90,16 @@ function GraphicsTab({ g }: { g: GraphicsSettings }) {
         <input type="checkbox" checked={g.bloom} onChange={() => setG({ bloom: !g.bloom })} data-testid="gfx-bloom" />
         <span>Işık parlaması (bloom)</span>
       </label>
-      <div className="section-title">Gündüz ve gece</div>
-      <div className="segmented three">
+      <div className="section-title">Görünüm</div>
+      <div className="segmented four">
+        {LOOKS.map((l) => (
+          <button key={l.id} className={g.look === l.id ? 'active' : ''} onClick={() => setG({ look: l.id })} title={l.description} data-testid={`look-${l.id}`}>
+            {l.name}
+          </button>
+        ))}
+      </div>
+      <div className="section-title">Günün saati</div>
+      <div className="segmented five">
         {DAY_NIGHT.map((o) => (
           <button key={o.id} className={g.dayNight === o.id ? 'active' : ''} onClick={() => setG({ dayNight: o.id })} data-testid={`daynight-${o.id}`}>
             {o.label}

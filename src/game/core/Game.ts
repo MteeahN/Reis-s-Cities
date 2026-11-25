@@ -1,3 +1,8 @@
+import { bezierTangent } from '../entities/road/curve';
+import { EYE_HEIGHT, WalkController } from '../camera/WalkController';
+import { sampleProfile, type SurfacePoint } from '../rendering/roads/RoadRenderer';
+import { getLook } from '../rendering/Looks';
+import { inkScaleUniform } from '../rendering/ink';
 import { ARCH_STYLE_DEFS } from '../data/styles';
 import {
   ACESFilmicToneMapping,
@@ -20,13 +25,14 @@ import type { Demand } from '../simulation/Demand';
 import { CitizenFeed } from '../systems/CitizenFeed';
 import { cityAdvice } from '../systems/Advisors';
 import { getRoadType, isRoadTypeUnlocked, type RoadSurface } from '../data/roads';
-import { hasRoadAccess } from '../entities/building/BuildingPlacement';
 import { BuildingRenderer } from '../rendering/BuildingRenderer';
 import { RoadRenderer } from '../rendering/roads/RoadRenderer';
 import { City } from '../systems/City';
 import { ZoneOverlay } from '../rendering/ZoneOverlay';
 import { DecorRenderer } from '../rendering/DecorRenderer';
 import { TransitRenderer } from '../rendering/TransitRenderer';
+import { NEED_TEXT, type Petition } from '../systems/Petitions';
+import { EXPORTS, surplus, type ExportKind } from '../systems/Exports';
 import { BUS_DAILY_CAPACITY, BUS_DAILY_UPKEEP, DEPOT_ID, FARE, LINE_COLORS } from '../simulation/Transit';
 import { PowerLineRenderer } from '../rendering/PowerLineRenderer';
 import { PipeRenderer } from '../rendering/PipeRenderer';
@@ -40,7 +46,7 @@ import { VehicleRenderer } from '../rendering/VehicleRenderer';
 import type { InfoLayerId } from '../rendering/InfoLayers';
 import { SERVICE_KINDS } from '../simulation/Services';
 import { CitySimulation } from '../simulation/CitySimulation';
-import type { ZoneToolState, DemolishFilter, TrafficToolMode } from './events';
+import type { ZoneToolState, DemolishFilter, TrafficToolMode, PetitionView } from './events';
 import { buildingCapacity } from '../data/buildings';
 import { undoLabel } from '../systems/UndoHistory';
 
@@ -65,7 +71,7 @@ import { ToolManager } from '../tools/ToolManager';
 import { requestWorld } from '../world/generation/WorldGenClient';
 import { pickGround } from '../world/TerrainPicker';
 import { World } from '../world/World';
-import { APP_VERSION, CELL_SIZE, GRID_CELLS, START_MINUTE_OFFSET, WATER_LEVEL, WORLD_SIZE, type GameSpeed } from './config';
+import { APP_VERSION, CAMERA, CELL_SIZE, GRID_CELLS, START_MINUTE_OFFSET, WATER_LEVEL, WORLD_SIZE, type GameSpeed } from './config';
 import { EventBus } from './EventBus';
 import type { BuildingInfo, DecorToolState, GameEvents, PaintToolState, RoadInfo, RoadMode, TerrainToolState, ToolId } from './events';
 import { Input, type PointerInfo } from './Input';
@@ -125,6 +131,11 @@ export class Game {
   decor!: DecorRenderer;
   private transitRenderer!: TransitRenderer;
   private transitSeen = -1;
+  /** First-person walking (null: the city camera). */
+  private walk: WalkController | null = null;
+  private walkReturn: { x: number; z: number; yaw: number; pitch: number; distance: number } | null = null;
+  private readonly walkPt: SurfacePoint = { x: 0, y: 0, z: 0, tx: 1, tz: 0 };
+  private petitionsSeen = -1;
   private selectionRefresh = 1;
   private roadRenderer!: RoadRenderer;
   private buildingRenderer!: BuildingRenderer;
@@ -246,6 +257,7 @@ export class Game {
         this.events.emit('demand', demand);
         this.updateFeed(stats, demand);
         this.emitTransit();
+        this.emitPetitions();
         this.events.emit('advice', cityAdvice({ stats, demand, taxRates: { ...this.city.economy.taxRates }, inDebt: this.city.economy.inDebt, dailyNet: this.city.economy.projectedDailyNet(), buses: { bought: this.city.transit.busCount, depotCapacity: this.city.busDepotCapacity() } }));
         this.events.emit('maxPopulation', this.citySim.maxPopulation);
         this.trackProgress();
@@ -297,7 +309,16 @@ export class Game {
     this.city.roads.onChange(onCityChange);
     this.city.buildings.onChange(onCityChange);
     this.city.undo.onChange(() => this.emitUndoState());
-    this.input.addListener(this.tools);
+    // Tools get the pointer, except while walking (then a click locks the mouse for looking around).
+    this.input.addListener({
+      onPointerDown: (p) => (this.walk ? this.lockPointer() : this.tools.onPointerDown(p)),
+      onPointerMove: (p) => {
+        if (!this.walk) this.tools.onPointerMove(p);
+      },
+      onPointerUp: (p) => {
+        if (!this.walk) this.tools.onPointerUp(p);
+      },
+    });
     this.input.addListener({
       onKeyDown: (code, e) => this.handleKey(code, e),
       onPointerMove: (p) => (this.lastPointer = p),
@@ -470,7 +491,7 @@ export class Game {
       population: st.total,
       happiness: st.happiness,
       balance: this.city.treasury.balance,
-      income: r.taxResidential + r.taxCommercial + r.taxIndustrial + (r.transitFares ?? 0),
+      income: r.taxResidential + r.taxCommercial + r.taxIndustrial + (r.transitFares ?? 0) + (r.exportSales ?? 0),
       expenses: r.upkeepRoads + r.upkeepBuildings + r.upkeepPower + r.upkeepWater + r.upkeepServices + (r.upkeepTransit ?? 0) + r.loanPayments,
       unemployment: st.unemploymentRate,
       jobs: st.jobs,
@@ -546,10 +567,14 @@ export class Game {
     if (this.sim.advance(dt) > 0) this.emitTime(false);
 
     // Camera
-    const cursorGround =
-      this.input.wheel !== 0 && this.input.pointerInside ? this.pick(this.input.pointerX, this.input.pointerY)?.clone() ?? null : null;
-    this.cameraCtl.update(dt, this.input, this.container.clientHeight, cursorGround);
     const cam = this.cameraCtl.camera;
+    if (this.walk) {
+      this.updateWalk(dt);
+    } else {
+      const cursorGround =
+        this.input.wheel !== 0 && this.input.pointerInside ? this.pick(this.input.pointerX, this.input.pointerY)?.clone() ?? null : null;
+      this.cameraCtl.update(dt, this.input, this.container.clientHeight, cursorGround);
+    }
     timeUniform.value = now / 1000;
     this.dayNight.update(this.minuteOfDay(), dt, cam.position.x, cam.position.z);
     this.lighting.update(this.cameraCtl.target, this.cameraCtl.distance);
@@ -570,6 +595,10 @@ export class Game {
     this.trafficControls.update();
     this.vehicles.update(dt, this.sim.speed, this.cameraCtl.target.x, this.cameraCtl.target.z, this.cameraCtl.distance);
     this.transitRenderer.update(dt, this.sim.speed);
+    if (this.city.petitions.version !== this.petitionsSeen) {
+      this.petitionsSeen = this.city.petitions.version;
+      this.emitPetitions();
+    }
     if (this.city.transit.version !== this.transitSeen) {
       this.transitSeen = this.city.transit.version;
       this.emitTransit();
@@ -589,14 +618,14 @@ export class Game {
     // Re-evaluate the hovered cell when the camera moves under a still cursor.
     const moved = this.cameraMoved();
     this.repickTimer -= dt;
-    if (moved && this.lastPointer && this.input.pointerInside && this.repickTimer <= 0) {
+    if (!this.walk && moved && this.lastPointer && this.input.pointerInside && this.repickTimer <= 0) {
       this.repickTimer = 0.05;
       this.tools.onPointerMove(this.lastPointer);
     }
 
     // Grid overlay fade
     const t = this.tools.activeId;
-    const gridTarget = this.gridUser || t === 'road' || t === 'building' ? 1 : 0;
+    const gridTarget = !this.walk && (this.gridUser || t === 'road' || t === 'building') ? 1 : 0;
     this.gridOpacity += (gridTarget - this.gridOpacity) * Math.min(1, dt * 10);
     this.world.terrainMaterial.uniforms.uGridOpacity.value = this.gridOpacity < 0.01 ? 0 : this.gridOpacity;
 
@@ -711,6 +740,16 @@ export class Game {
   // ---------------------------------------------------------------- input
 
   private handleKey(code: string, e: KeyboardEvent): void {
+    if (this.walk) {
+      // While walking only a few keys do something else than move.
+      if (code === 'Escape' || code === 'KeyI') this.stopWalk();
+      else if (code === 'Space') this.togglePause();
+      else if (code === 'KeyH' || code === 'F1') {
+        e.preventDefault();
+        this.events.emit('toggleHelp', undefined);
+      }
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && !e.altKey) {
       if (code === 'KeyZ' && !e.shiftKey) {
         e.preventDefault();
@@ -819,9 +858,114 @@ export class Game {
         e.preventDefault();
         this.events.emit('toggleHelp', undefined);
         break;
+      case 'KeyI':
+        this.startWalk();
+        break;
       default:
         break;
     }
+  }
+
+  // ---------------------------------------------------------------- walking
+
+  /** Surface height to stand on: a road deck where there is a road, else the ground (water: its surface). */
+  private walkGround(x: number, z: number): number {
+    const hit = this.city.roads.nearestEdge(x, z, 0, true);
+    if (hit) {
+      const prof = this.roadRenderer.edgeProfile(hit.edge.id);
+      if (prof) return sampleProfile(prof, hit.t * prof.length, this.walkPt).y;
+    }
+    return Math.max(WATER_LEVEL, this.world.heightAt(x, z));
+  }
+
+  /** Walls and water stop the walker (bridges and roads over water do not). */
+  private walkBlocked(x: number, z: number): boolean {
+    if (this.city.buildingAtWorld(x, z) !== 0) return true;
+    const i = Math.floor(x / CELL_SIZE);
+    const j = Math.floor(z / CELL_SIZE);
+    return this.world.grid.isWater(i, j) && !this.city.roads.nearestEdge(x, z, 0, true);
+  }
+
+  get walking(): boolean {
+    return this.walk !== null;
+  }
+
+  /** Walk the streets in first person, starting at the camera's focus (the nearest free spot). */
+  startWalk(): void {
+    if (this.walk) return;
+    const c = this.cameraCtl;
+    const w = new WalkController({ ground: (x, z) => this.walkGround(x, z), blocked: (x, z) => this.walkBlocked(x, z) });
+    // Start on the pavement of the nearest street, looking along it (else at the focus point).
+    let sx = c.target.x;
+    let sz = c.target.z;
+    let yaw = c.yaw;
+    const road = this.city.roads.nearestEdge(sx, sz, 250, true, (e) => !this.city.roads.isElevated(e));
+    if (road) {
+      const t = bezierTangent(this.city.roads.curveOf(road.edge), road.t);
+      const type = getRoadType(road.edge.typeId);
+      let nx = -t.z;
+      let nz = t.x;
+      if ((sx - road.point.x) * nx + (sz - road.point.z) * nz < 0) (nx = -nx), (nz = -nz);
+      const off = type.sidewalk > 0 ? type.width / 2 - type.sidewalk / 2 : type.width / 2 + 1;
+      sx = road.point.x + nx * off;
+      sz = road.point.z + nz * off;
+      // Facing the way the camera looked, along the street.
+      const along = Math.atan2(-t.x, -t.z);
+      yaw = Math.cos(along - c.yaw) >= 0 ? along : along + Math.PI;
+    }
+    if (!w.start(sx, sz, yaw)) {
+      this.events.emit('toast', { kind: 'warning', text: 'Burada yürünecek boş bir yer yok' });
+      return;
+    }
+    this.walkReturn = { x: c.target.x, z: c.target.z, yaw: c.yaw, pitch: c.pitch, distance: c.distance };
+    this.setTool('select');
+    this.walk = w;
+    this.problemIcons.group.visible = false;
+    this.events.emit('walking', true);
+  }
+
+  stopWalk(): void {
+    if (!this.walk) return;
+    const r = this.walkReturn;
+    const w = this.walk;
+    this.walk = null;
+    if (document.pointerLockElement === this.renderer.domElement) document.exitPointerLock();
+    this.problemIcons.group.visible = true;
+    // Back to the city camera above where the walk ended, facing the same way.
+    this.cameraCtl.setView(w.x, w.z, w.yaw, r?.pitch ?? 0.82, r?.distance ?? 220);
+    this.events.emit('walking', false);
+  }
+
+  toggleWalk(): void {
+    if (this.walk) this.stopWalk();
+    else this.startWalk();
+  }
+
+  private lockPointer(): void {
+    const el = this.renderer.domElement;
+    if (document.pointerLockElement !== el) void el.requestPointerLock?.()?.catch?.(() => {});
+  }
+
+  private updateWalk(dt: number): void {
+    const w = this.walk!;
+    const inp = this.input;
+    const { dx, dy } = inp.consume();
+    const key = (...codes: string[]) => codes.some((k) => inp.isDown(k));
+    w.update(dt, {
+      forward: (key('KeyW', 'ArrowUp') ? 1 : 0) - (key('KeyS', 'ArrowDown') ? 1 : 0),
+      strafe: (key('KeyD', 'ArrowRight') ? 1 : 0) - (key('KeyA', 'ArrowLeft') ? 1 : 0),
+      run: key('ShiftLeft', 'ShiftRight'),
+      lookDX: dx,
+      lookDY: dy,
+      turn: (key('KeyE') ? 1 : 0) - (key('KeyQ') ? 1 : 0),
+    });
+    const cam = this.cameraCtl.camera;
+    w.apply(cam);
+    // Systems that follow the camera (trees, building detail, traffic, shadows) see a close-up at the walker.
+    const c = this.cameraCtl;
+    c.target.set(w.x, w.y - EYE_HEIGHT, w.z);
+    c.yaw = w.yaw;
+    c.distance = CAMERA.minDistance;
   }
 
   private pick(x: number, y: number): Vector3 | null {
@@ -871,6 +1015,10 @@ export class Game {
     this.pedestrians.setMax(g.vehicles);
     this.post.setEnabled(g.bloom);
     this.dayNight.mode = g.dayNight;
+    const look = getLook(g.look);
+    this.dayNight.look = look;
+    this.post.setLook(look);
+    inkScaleUniform.value = look.ink;
     if (!initial) this.resize();
   }
 
@@ -1077,6 +1225,34 @@ export class Game {
     });
   }
 
+  /** Petitions for the HUD (days left counted from now). */
+  private emitPetitions(): void {
+    const p = this.city.petitions;
+    const now = this.sim.gameMinutes;
+    const view = (x: Petition): PetitionView => ({ id: x.id, author: x.author, text: x.text, ask: NEED_TEXT[x.need].ask, state: x.state, daysLeft: Math.max(0, (x.deadline - now) / 1440) });
+    const open = p.open;
+    this.events.emit('petitions', {
+      open: open ? view(open) : null,
+      promised: p.promised.map(view),
+      recent: p.list.filter((x) => x.state !== 'open' && x.state !== 'promised').slice(-5).reverse().map(view),
+      trust: p.trust,
+      happiness: p.happinessTerm(),
+    });
+  }
+
+  /** Answers the open petition: a promise (to keep within days) or a refusal. */
+  answerPetition(id: number, promise: boolean): void {
+    const p = this.city.petitions;
+    const ok = promise ? p.promise(id, this.sim.gameMinutes) : p.refuse(id, this.sim.gameMinutes);
+    if (ok) this.events.emit('sfx', promise ? 'place' : 'demolish');
+  }
+
+  /** Camera to the home behind a petition. */
+  focusPetition(id: number): void {
+    const x = this.city.petitions.list.find((q) => q.id === id);
+    if (x) this.cameraCtl.focusOn(x.x, x.z, 140);
+  }
+
   setTransitMode(mode: 'stop' | 'line' | 'edit', editLine: number | null = null): void {
     this.tools.transit.setMode(mode, editLine);
   }
@@ -1170,7 +1346,7 @@ export class Game {
       total > 300,
       (id) => {
         const b = this.city.buildings.items.get(id);
-        return !!b && hasRoadAccess(b.i, b.j, b.w, b.d, b.rot, this.city.placementWorld);
+        return !!b && this.city.roadAccessOf(b);
       },
       (id) => {
         const b = this.city.buildings.items.get(id);
@@ -1229,7 +1405,7 @@ export class Game {
       electricity: def.electricity,
       water: def.water,
       pollution: def.pollution,
-      roadAccess: hasRoadAccess(b.i, b.j, b.w, b.d, b.rot, this.city.placementWorld),
+      roadAccess: this.city.roadAccessOf(b),
       centerX: (b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0),
       centerZ: (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0),
       zone: b.zone,
@@ -1291,6 +1467,13 @@ export class Game {
 
   private emitEconomy(): void {
     const e = this.city.economy;
+    const us = this.city.utilities.stats;
+    const free = surplus(us);
+    const sold = this.city.exports.sold(us);
+    this.events.emit(
+      'exports',
+      EXPORTS.map((d) => ({ kind: d.kind, name: d.name, unit: d.unit, offered: this.city.exports.offered[d.kind], surplus: free[d.kind], sold: sold[d.kind], income: (sold[d.kind] / 1000) * d.pricePerThousand, max: d.max, step: d.step, pricePerThousand: d.pricePerThousand })),
+    );
     this.events.emit('economy', {
       balance: this.city.treasury.balance,
       taxRates: { ...e.taxRates },
@@ -1302,6 +1485,12 @@ export class Game {
       inDebt: e.inDebt,
       daysInDebt: e.daysInDebt,
     });
+  }
+
+  /** How much of a utility to offer the neighbouring towns a day. */
+  setExport(kind: ExportKind, amount: number): void {
+    this.city.exports.set(kind, amount);
+    this.emitEconomy();
   }
 
   setTaxRate(kind: TaxKind, value: number): void {

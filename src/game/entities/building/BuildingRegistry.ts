@@ -49,6 +49,11 @@ export interface PlacedBuilding {
   oyaw?: number;
   /** How the building sits on sloping ground (visual only): tilt with the slope (gentle, low-rise) or set into it. */
   seat?: GroundSeat;
+  /**
+   * Placed off the grid along a road (turned to it at any angle): the cells it
+   * covers. Its drawn offset (ox, oz, oyaw) is fixed, not snapped.
+   */
+  free?: number[];
 }
 
 /** Visual seating on the terrain: drawn base height, and the ground slope (dh/dx, dh/dz) to tilt with, if any. */
@@ -79,6 +84,11 @@ export interface NewBuilding {
   tint: number;
   sinceTick: number;
   style?: ArchStyle;
+  /** Off-grid placement: covered cells and the fixed drawn offset. */
+  free?: number[];
+  ox?: number;
+  oz?: number;
+  oyaw?: number;
 }
 
 /**
@@ -95,6 +105,14 @@ export class BuildingRegistry {
   seater: ((defId: string, i: number, j: number, w: number, d: number) => GroundSeat | null) | null = null;
 
   private snap<T extends { defId: string; i: number; j: number; w: number; d: number; rot: Rotation }>(b: T): T & { ox?: number; oz?: number; oyaw?: number; seat?: GroundSeat } {
+    if ((b as { free?: number[] }).free) {
+      // Off the grid: drawn where it was placed, upright.
+      const kept = { ...b } as T & { ox?: number; oz?: number; oyaw?: number; seat?: GroundSeat };
+      delete kept.seat;
+      kept.ox = kept.ox || 0;
+      kept.oz = kept.oz || 0;
+      return kept;
+    }
     const s = this.snapper?.(b.i, b.j, b.w, b.d, b.rot);
     const out = { ...b } as T & { ox?: number; oz?: number; oyaw?: number; seat?: GroundSeat };
     delete out.ox;
@@ -103,12 +121,23 @@ export class BuildingRegistry {
     delete out.seat;
     const seat = this.seater?.(b.defId, b.i, b.j, b.w, b.d);
     if (seat) out.seat = seat;
-    if (s) {
-      out.ox = s.x;
-      out.oz = s.z;
-      if (s.yaw) out.oyaw = s.yaw;
-    }
+    // Always written (0 when not moved): a save keeps how each building was drawn.
+    out.ox = s?.x || 0;
+    out.oz = s?.z || 0;
+    if (s?.yaw) out.oyaw = s.yaw;
     return out;
+  }
+
+  /** Snaps a placed building again (its surroundings changed). */
+  resnap(id: number): void {
+    const b = this.items.get(id);
+    if (!b || b.free) return;
+    const before = { ...b };
+    const s = this.snap(b);
+    delete b.oyaw;
+    Object.assign(b, { ox: s.ox, oz: s.oz, ...(s.oyaw ? { oyaw: s.oyaw } : {}) });
+    if (before.ox === b.ox && before.oz === b.oz && before.oyaw === b.oyaw) return;
+    this.emit({ added: [b], removed: [before] });
   }
 
   /** Adds a player-placed building from a validated plan. */
@@ -128,6 +157,7 @@ export class BuildingRegistry {
       state: 'active',
       tint: 0,
       sinceTick: 0,
+      ...(plan.free ? { free: plan.free.cells, ox: plan.free.ox, oz: plan.free.oz, ...(plan.free.oyaw ? { oyaw: plan.free.oyaw } : {}) } : {}),
     });
   }
 
@@ -135,7 +165,7 @@ export class BuildingRegistry {
     const b: PlacedBuilding = {
       ...this.snap(n),
       id: this.nextId++,
-      cells: footprintCells(n.i, n.j, n.w, n.d),
+      cells: n.free ? [...n.free] : footprintCells(n.i, n.j, n.w, n.d),
       progress: n.state === 'construction' ? 0 : 1,
       occupants: 0,
       noAccessTicks: 0,
@@ -180,7 +210,15 @@ export class BuildingRegistry {
   restore(items: Omit<PlacedBuilding, 'cells'>[], nextId: number): PlacedBuilding[] {
     const added: PlacedBuilding[] = [];
     for (const it of items) {
-      const b: PlacedBuilding = { ...this.snap(it), cells: footprintCells(it.i, it.j, it.w, it.d) };
+      // Saved snap offsets are kept as they were (older saves without them are snapped now).
+      const snapped = this.snap(it);
+      if (typeof it.ox === 'number' && typeof it.oz === 'number') {
+        snapped.ox = it.ox;
+        snapped.oz = it.oz;
+        if (it.oyaw) snapped.oyaw = it.oyaw;
+        else delete snapped.oyaw;
+      }
+      const b: PlacedBuilding = { ...snapped, cells: it.free ? [...it.free] : footprintCells(it.i, it.j, it.w, it.d) };
       this.items.set(b.id, b);
       this.nextId = Math.max(this.nextId, b.id + 1);
       added.push(b);

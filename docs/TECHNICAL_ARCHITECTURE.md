@@ -59,6 +59,32 @@ React HUD (src/ui)  ←  Zustand store (src/store)  ←  EventBus olayları  ←
   bir `terrain` geri alma girdisidir.
 - Hemen yükseltme: `CitySimulation.canUpgrade / upgradePrice / upgradeNow`; seviye gereksinimleri otomatik büyümeyle
   aynıdır, yalnızca bekleme süresi atlanır. Geri alma girdisi binanın önceki şablonunu ve seviyesini tutar.
+- Yürüyüş: `camera/WalkController.ts` saf mantıktır (göz yüksekliği, hız, eksen eksen kayarak çarpışma); Game ona
+  `walkGround` (yol profili ya da arazi) ve `walkBlocked` (`City.buildingAtWorld`, köprüsüz su) verir. Yürürken
+  `cameraCtl.update` çağrılmaz; `cameraCtl.target/distance` yürüyene eşitlenir ki ağaç / bina LOD'u, trafik ve gölge
+  kamerası yakın çekimi görsün. İşaretçi olayları araçlara gitmez; tıklama fare kilidi ister (`Input` kilitliyken
+  hareketi bakış olarak sayar).
+- Görünümler: `rendering/Looks.ts` (`LOOKS`); `DayNightCycle.look` güneş / gök ışığı, pozlama ve pusu çarpanlarını
+  uygular, `inkScaleUniform` tüm `patchInk` malzemelerinin kontur gücünü ölçekler, `PostProcessing.setLook` gerekirse
+  son geçişte doygunluk / kontrast / ton uygular (bloom kapalı ve görünüm Standart ise kompozitör hiç kullanılmaz).
+- Cephe atlası: 4 sütun × 8 satır (256 px karo). Satır 0–3 üst katlar (stil), 4–7 zemin katlar; sütun tasarım çeşidi.
+  `aTile` = stil (+10: duvar yere değiyor). Gölgelendirici çeşidi örnek konumunun karmasından, zemin katta kapıyı
+  bölme karmasından seçer.
+- LOD / ayıklama: `Vegetation.update` hücre eşik geçişinde görünürlüğü değiştirir (her karede değil); kayaların
+  `rockLow` modeli var. `InstancePool` örnek değişince sınır küresini sıfırlar ve `frustumCulled` açıktır;
+  ayrıntı havuzları gölge düşürmez.
+- Yola mıknatıs: `City.magnetPlan` imlece en yakın (yüksek olmayan, otoyol olmayan) yol noktasının teğetinden açıyı,
+  `layFront` ile kirişe paralel ön yüzü ve kaldırıma uzaklığı bulur; çakışmada teğet boyunca kayar, komşuya yanaşır.
+  `planFree` doğrular: değilen hücreler (`freeCells`, yol hücreleri hariç), çizilen dörtgenlerin çakışması, yol yüzeyi,
+  eğim. Bina en yakın çeyrek dönüşe göre bir ızgara parseline dosyalanır (i, j, w, d, rot) ve çizim farkı ox / oz / oyaw
+  olarak sabit kalır; `PlacedBuilding.free` kapladığı hücrelerdir (kayda yazılır, `snap` uygulanmaz). Geri alma `Spot.free`,
+  yol erişimi `City.roadAccessOf` ile.
+- Dilekçeler: `systems/Petitions.ts` (`City.petitions`). `CitySimulation.populationStep` her adımda
+  `petitionWorld(homes)` ile her evin eksiklerini (hizmet alanı < 0,3 ya da çalışan hattın durağı 260 m'den uzak)
+  verir; `Petitions.update` süreleri, tutulan / tutulmayan sözleri denetler, yeni dilekçeyi tohumlu rastgeleyle seçer.
+  `happinessTerm()` mutluluk etkenlerine "Belediyeye güven" olarak girer. Game `petitions` olayını yayar.
+- Komşulara satış: `systems/Exports.ts` (`City.exports`) teklif edilen miktarı tutar; `sold(stats)` gerçek fazlayla
+  (üretim − hizmet verilen) sınırlıdır, `income` günlük oran `exportSales` olarak `Economy`'ye girer.
 - Toplu taşıma: `simulation/Transit.ts` durakları (konum) ve hatları (durak sırası, otobüs sayısı) tutar. Durak en
   yakın araç yoluna bağlanır; hat rotası ardışık duraklar arasında yön kurallı Dijkstra ile bulunur (yol / ağ sürümüne
   göre önbellekli). `Transit.update` trafik adımından önce her ev için otobüs payını hesaplar; `TrafficModel` ev
