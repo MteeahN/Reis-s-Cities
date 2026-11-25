@@ -244,6 +244,27 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   çizimi; yollar Sokaklar / Geniş yollar / Otoyol, konutlar Hepsi / Evler / Az katlı / Yüksek sekmelerinde.
 - **Grafik ayarları:** ön ayar (otomatik/yüksek/orta/düşük) ve tek tek gölge kalitesi, çözünürlük ölçeği, ağaç ve bina detay
   mesafesi, en fazla araç, ışık parlaması (bloom), gündüz/gece. Bir değeri değiştirmek ön ayarı **Özel** yapar.
+- **Araba sahipliği ve park:** bir evin sakinleri aile (2,3 kişi) sayılır; aile başına araba evin kime yapıldığına
+  bağlıdır (mütevazı ~0,3, orta ~0,55, varlıklı ~0,95; seviye ve yüksek eğitim biraz artırır). İşe ve alışverişe
+  yalnızca arabası olanlar arabayla gider; ötekiler yürür ya da otobüse biner. Her yolun park yerleri vardır: evlerin
+  kendi garaj / bahçe yerleri, sokaktaki açık (40) ve katlı (160) otoparklar, otoparklı yolların park şeritleri.
+  Arabalar saate göre yer değiştirir (gece evde, gündüz işte ve dükkânlarda). Yer bulamayan kaldırıma kaçak park
+  eder; polis kapsaması olan yerlerde bir kısmına ceza kesilir (bütçede "Park cezaları"). Kaçak yer de yoksa araç
+  dönüp durur: Kent Sesi ve danışman bunu söyler. Ekranda araç kaybolmaz: yolculuğun sonunda kaldırımdaki boş
+  yere park eder ya da arsaya / garaja döner, yolculuk park edilmiş bir arabanın yanından başlıyorsa o araba
+  park yerinden çıkar; uzun süre takılan araç kenara çeker, yol ağı değişince o an yoldakiler olduğu yerde park
+  eder. Sokaklarda görünen park etmiş arabalar park modelinin o sokak için hesapladığı sayıdır.
+- **Yer açma:** hizmet ve diğer binalar başka binaların üzerine kurulabilir; araç arsadaki binaları turuncu
+  önizlemeyle gösterir ve kurarken yıkar (oyuncu binalarının yarı fiyatı iade edilir). Bir yolu daha geniş bir
+  yola dönüştürürken yeni yolun üzerine gelen binalar yoldan uzağa 1–3 hücre geri çekilir (aynı bina, sakinleri
+  ve seviyesiyle); yer bulamayanlar yıkılır. Plan kartı kaç binanın çekileceğini / yıkılacağını yazar.
+- **Yeni yollar:** Patika (3 m, araçsız, bina aralarından geçer, yanında imar açılmaz), Ağaçlı Refüjlü Sokak (2 şerit,
+  ortası ağaçlı), Çimli Refüjlü Cadde (4 şerit, ortası çimli). Yaya Yolu 6 m'den 5 m'ye indi.
+- **Derinlikli cepheler:** pencere camları duvarın 35 cm içinde çizilir (paralaks: bakış açısıyla pencere
+  pervazları görünür, girinti gölgelidir); üçgen eklemez.
+- **Otobüs modeli:** beyaz gövde, hat renginde bel şeridi ve tavan kenarı, pencere dizisi ve dikmeler, geniş ön cam,
+  turuncu hat tabelası, farlar ve stop lambaları, kaldırım tarafında iki camlı kapı, aynalar, tavan kliması, jantlı
+  tekerlekler.
 - **Şehirde yürü (I ya da üst çubuktaki yürüyen adam):** kameranın baktığı yere en yakın sokağın kaldırımında, yol
   boyunca bakarak göz hizasına (1,7 m) inilir. W A S D yürür, Shift koşar, haritaya tıklayınca fare kilitlenir ve
   fareyle bakılır (ya da Q / E ile dönülür), Esc ya da "Şehre dön" çıkar ve kamera yürüyüşün bittiği yere döner.
@@ -253,6 +274,8 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   soluk) ve Canlı (doygun renkler, belirgin kontur). Güneş ve gök ışığını, pusu, kontur kalınlığını ve son görüntünün
   doygunluk / kontrast / tonunu değiştirir; Standart ek maliyet getirmez, diğerleri tek bir tam ekran geçişi ekler.
   **Günün saati:** Döngü (oyun saati), Sabah, Gündüz, Akşam, Gece — yalnızca ışık; simülasyon saati değişmez.
+  Gün doğumu ve batımı yumuşak: güneş ufuk yakınında daha yavaş yükselir, gece→gündüz geçişi ~90 oyun dakikası sürer
+  ve ana ışık güneşten aya sıçramadan, yönü ve rengi karışarak geçer.
 - **Cephe çeşitleri:** her cephe stilinin (konut, ofis, dükkân, sanayi) dört pencere tasarımı var (panjurlu, Fransız
   balkonlu, kemerli, şerit pencereli, kanatlı cam, tuğla…); hangisi olduğu binanın konumundan seçilir, komşular
   farklı görünür. Yere değen duvarların zemin katı ayrı çizilir: kapılar, vitrinler, tenteler, lobi camları, sanayi

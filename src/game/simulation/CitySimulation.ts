@@ -1,5 +1,6 @@
 import { NEED_TEXT, type PetitionNeed, type PetitionWorld } from '../systems/Petitions';
 import { WALK } from './Transit';
+import type { ParkingStats } from './Parking';
 import { CELL_SIZE, GRID_CELLS, START_MINUTE_OFFSET } from '../core/config';
 import { buildingCapacity, getBuilding, zonedTemplates , growablePrice } from '../data/buildings';
 import { BUS_DAILY_UPKEEP, FARE } from './Transit';
@@ -92,6 +93,8 @@ export interface PopulationStats {
   /** Resident-weighted average noise (0–100). */
   noise: number;
   traffic: TrafficStats;
+  /** Cars owned, families, parking spaces and illegal parking. */
+  parking?: ParkingStats;
   /** Resident-weighted average contribution of each factor to happiness (sums to the target). */
   happinessFactors: { label: string; value: number }[];
 }
@@ -182,6 +185,16 @@ export class CitySimulation {
     c.outsideEdges(); // refreshes the entry attach the traffic model uses
     c.transit.update(c.buildings.items.values(), c.population, employedShare);
     c.traffic.step(c.buildings.items.values(), c.population, employedShare, (gameMinutes + START_MINUTE_OFFSET) % MINUTES_PER_DAY);
+    // Parking follows the hour: cars at home at night, at work and in the shops by day.
+    const hour = Math.floor(((gameMinutes + START_MINUTE_OFFSET) % MINUTES_PER_DAY) / 60);
+    c.parking.update(
+      c.buildings.items.values(),
+      c.population,
+      employedShare,
+      hour,
+      (b) => c.traffic.attach(b),
+      (x, z) => c.services.fields.police[Math.floor(z / CELL_SIZE) * GRID_CELLS + Math.floor(x / CELL_SIZE)] ?? 0,
+    );
   }
 
   isZoneUnlocked(z: ZoneKind): boolean {
@@ -417,6 +430,7 @@ export class CitySimulation {
         transitFares: city.transit.ridersPerDay * FARE,
         upkeepTransit: city.transit.busCount * BUS_DAILY_UPKEEP,
         exportSales: city.exports.income(city.utilities.stats),
+        parkingFines: city.parking.stats.finesPerDay,
       },
       days,
     );
@@ -588,6 +602,7 @@ export class CitySimulation {
       ...this.serviceStats(homes, t.total),
       noise: factorWeight > 0 ? noiseSum / factorWeight : 0,
       traffic: { ...city.traffic.stats, worst: city.traffic.stats.worst.map((w) => ({ ...w })) },
+      parking: { ...city.parking.stats },
       happinessFactors,
     };
     this.cb.onStats(this.stats, this.demand);

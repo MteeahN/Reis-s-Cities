@@ -36,6 +36,8 @@ export interface BuildingPlan {
   roadAccess: boolean;
   valid: boolean;
   errors: string[];
+  /** Buildings standing on the lot that placing this one demolishes (zoned buildings and other player buildings). */
+  bulldoze?: number[];
   /** Placed off the grid along a road: where it is drawn, its offset from the filed grid lot, and the cells it covers. */
   free?: FreeSpot & { cells: number[]; ox: number; oz: number; oyaw: number };
 }

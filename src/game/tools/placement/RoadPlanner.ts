@@ -451,6 +451,8 @@ export interface UpgradePlan {
   netCost: number;
   valid: boolean;
   errors: string[];
+  /** Buildings the wider road stands on: moved back (to) or demolished (null). */
+  displaced?: { id: number; to: { i: number; j: number } | null }[];
 }
 
 /**

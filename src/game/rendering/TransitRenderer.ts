@@ -13,12 +13,43 @@ const BUS_SPEED = 9;
 export const BUS_DWELL = 8;
 const SAMPLE = 3;
 
+const GLASS = '#26323c';
+const BODY = '#f1f1ed';
+/** City bus, 11.4 m, front towards +z. Body (not tinted). */
 const BUS: BuildingPart[] = [
-  { shape: 'box', size: [2.5, 2.7, 11], pos: [0, 0.45, 0], color: '#ffffff' },
-  { shape: 'box', size: [2.56, 0.95, 9.4], pos: [0, 1.55, -0.3], color: '#3a3f46' },
-  { shape: 'box', size: [2.3, 1.1, 0.06], pos: [0, 1.4, 5.5], color: '#3a3f46' },
-  { shape: 'box', size: [1.6, 0.35, 2.2], pos: [0, 3.15, -1], color: '#d8d8d8' },
-  ...[-3.6, 3.4].flatMap((z) => [-1.15, 1.15].map((x): BuildingPart => ({ shape: 'cylinder', size: [0.95, 0.35, 0.95], pos: [x, 0.47, z], color: '#222222', rot: [0, 0, 90], segments: 10 }))),
+  // Body shell: skirt, window belt, roof.
+  { shape: 'box', size: [2.5, 1.05, 11.2], pos: [0, 0.42, 0], color: BODY },
+  { shape: 'box', size: [2.46, 1.2, 11.0], pos: [0, 1.47, -0.05], color: BODY },
+  { shape: 'box', size: [2.38, 0.22, 10.9], pos: [0, 2.67, -0.05], color: '#e4e4df' },
+  // Side window band with pillars (both sides).
+  { shape: 'box', size: [2.52, 0.92, 8.6], pos: [0, 1.62, -0.75], color: GLASS },
+  ...[-4.6, -3.2, -1.8, -0.4, 1.0, 2.4].map((z): BuildingPart => ({ shape: 'box', size: [2.54, 0.92, 0.14], pos: [0, 1.62, z], color: BODY })),
+  // Front: tall windscreen, destination display, headlights, bumper.
+  { shape: 'box', size: [2.32, 1.42, 0.1], pos: [0, 1.15, 5.56], color: GLASS },
+  { shape: 'box', size: [1.9, 0.26, 0.08], pos: [0, 2.32, 5.6], color: '#ffb020' },
+  { shape: 'box', size: [2.5, 0.28, 0.3], pos: [0, 0.24, 5.62], color: '#3a3f46' },
+  ...[-0.86, 0.86].map((x): BuildingPart => ({ shape: 'box', size: [0.42, 0.16, 0.08], pos: [x, 0.66, 5.62], color: '#fff6d2' })),
+  // Rear: window, tail lights, bumper.
+  { shape: 'box', size: [2.2, 0.85, 0.08], pos: [0, 1.66, -5.58], color: GLASS },
+  ...[-1.0, 1.0].map((x): BuildingPart => ({ shape: 'box', size: [0.3, 0.42, 0.08], pos: [x, 0.62, -5.62], color: '#d23a2a' })),
+  { shape: 'box', size: [2.5, 0.28, 0.3], pos: [0, 0.24, -5.62], color: '#3a3f46' },
+  // Doors on the kerb side (right, +x): front and middle, glazed.
+  ...[4.35, 0.35].map((z): BuildingPart => ({ shape: 'box', size: [0.06, 2.0, 1.15], pos: [1.27, 0.42, z], color: GLASS })),
+  ...[4.35, 0.35].map((z): BuildingPart => ({ shape: 'box', size: [0.05, 2.0, 0.06], pos: [1.29, 0.42, z], color: '#9aa0a6' })),
+  // Mirrors.
+  ...[-1.38, 1.38].map((x): BuildingPart => ({ shape: 'box', size: [0.08, 0.34, 0.22], pos: [x, 1.9, 5.3], color: '#2b2e31' })),
+  // Roof: air-conditioning pod.
+  { shape: 'box', size: [1.7, 0.34, 2.6], pos: [0, 2.89, -1.2], color: '#d4d4cf' },
+  // Wheels with hubs, under dark arches.
+  ...[-3.65, 3.35].flatMap((z) => [-1.0, 1.0].map((x): BuildingPart => ({ shape: 'box', size: [0.5, 0.6, 1.3], pos: [x * 1.02, 0.12, z], color: '#1d2024' }))),
+  ...[-3.65, 3.35].flatMap((z) => [-1.15, 1.15].map((x): BuildingPart => ({ shape: 'cylinder', size: [0.96, 0.34, 0.96], pos: [x, 0.48, z], color: '#222222', rot: [0, 0, 90], segments: 12 }))),
+  ...[-3.65, 3.35].flatMap((z) => [-1.33, 1.33].map((x): BuildingPart => ({ shape: 'cylinder', size: [0.5, 0.04, 0.5], pos: [x, 0.48, z], color: '#b8bcc2', rot: [0, 0, 90], segments: 10 }))),
+];
+/** Livery in the line's colour (instance-tinted): a waist stripe, roof edge and front band. */
+const LIVERY: BuildingPart[] = [
+  { shape: 'box', size: [2.53, 0.34, 11.1], pos: [0, 0.86, 0], color: '#ffffff' },
+  { shape: 'box', size: [2.42, 0.12, 10.95], pos: [0, 2.6, -0.05], color: '#ffffff' },
+  { shape: 'box', size: [2.36, 0.12, 0.06], pos: [0, 2.12, 5.63], color: '#ffffff' },
 ];
 
 const SHELTER: BuildingPart[] = [
@@ -39,6 +70,7 @@ const PERSON: BuildingPart[] = [
 /** Heads drawn apart so clothes colours don't tint the skin. */
 const HEAD: BuildingPart[] = [{ shape: 'cylinder', size: [0.34, 0.38, 0.34], pos: [0, 1.8, 0], color: '#d9a982', segments: 8 }];
 const WHITE = new Color(1, 1, 1);
+const BUS_WHITE = WHITE;
 const CLOTHES = ['#e5484d', '#2f7dd1', '#2fa36b', '#e0a321', '#8a4fc2', '#e8e6e0', '#3a3f46', '#c2549b', '#1f8f8f'];
 /** Riders a day per figure drawn waiting at a stop, and the most figures per stop. */
 const RIDERS_PER_FIGURE = 40;
@@ -76,6 +108,8 @@ export class TransitRenderer {
   readonly group = new Group();
   private readonly material: MeshStandardMaterial;
   private readonly busGeo: BufferGeometry;
+  private readonly liveryGeo: BufferGeometry;
+  private livery: InstancedMesh;
   private readonly shelterGeo: BufferGeometry;
   private readonly personGeo: BufferGeometry;
   private readonly headGeo: BufferGeometry;
@@ -100,10 +134,12 @@ export class TransitRenderer {
     this.material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.2 });
     patchInk(this.material, { fade: [250, 900], width: 1 });
     this.busGeo = partsGeometry(BUS);
+    this.liveryGeo = partsGeometry(LIVERY);
     this.shelterGeo = partsGeometry(SHELTER);
     this.personGeo = partsGeometry(PERSON);
     this.headGeo = partsGeometry(HEAD);
     this.buses = this.mesh(this.busGeo, 16);
+    this.livery = this.mesh(this.liveryGeo, 16);
     this.shelters = this.mesh(this.shelterGeo, 16);
     this.people = this.mesh(this.personGeo, 32);
     this.heads = this.mesh(this.headGeo, 32);
@@ -121,12 +157,12 @@ export class TransitRenderer {
     return m;
   }
 
-  private grow(which: 'buses' | 'shelters' | 'people' | 'heads', n: number): InstancedMesh {
+  private grow(which: 'buses' | 'livery' | 'shelters' | 'people' | 'heads', n: number): InstancedMesh {
     const cur = this[which];
     if (cur.instanceMatrix.count >= n) return cur;
     this.group.remove(cur);
     cur.dispose();
-    const geo = which === 'buses' ? this.busGeo : which === 'shelters' ? this.shelterGeo : which === 'people' ? this.personGeo : this.headGeo;
+    const geo = which === 'buses' ? this.busGeo : which === 'livery' ? this.liveryGeo : which === 'shelters' ? this.shelterGeo : which === 'people' ? this.personGeo : this.headGeo;
     this[which] = this.mesh(geo, Math.max(n, cur.instanceMatrix.count * 2));
     return this[which];
   }
@@ -231,6 +267,7 @@ export class TransitRenderer {
     this.placePeople();
     const total = this.paths.reduce((s, p) => s + p.buses, 0);
     const bm = this.grow('buses', total);
+    const lm = this.grow('livery', total);
     const m = new Matrix4();
     const q = new Quaternion();
     const up = new Vector3(0, 1, 0);
@@ -254,13 +291,18 @@ export class TransitRenderer {
         const y = p.ys[lo] + (p.ys[hi] - p.ys[lo]) * f;
         q.setFromAxisAngle(up, Math.atan2(p.xs[hi] - p.xs[lo], p.zs[hi] - p.zs[lo]));
         bm.setMatrixAt(n, m.compose(pos.set(x, y, z), q, one));
-        bm.setColorAt(n, p.color);
+        bm.setColorAt(n, BUS_WHITE);
+        lm.setMatrixAt(n, m);
+        lm.setColorAt(n, p.color);
         n++;
       }
     }
     bm.count = n;
     bm.instanceMatrix.needsUpdate = true;
     if (bm.instanceColor) bm.instanceColor.needsUpdate = true;
+    lm.count = n;
+    lm.instanceMatrix.needsUpdate = true;
+    if (lm.instanceColor) lm.instanceColor.needsUpdate = true;
   }
 
   /** Waiting figures at the stops, refreshed about once a second. */
@@ -315,6 +357,7 @@ export class TransitRenderer {
     this.personGeo.dispose();
     this.headGeo.dispose();
     this.busGeo.dispose();
+    this.liveryGeo.dispose();
     this.shelterGeo.dispose();
     this.material.dispose();
     for (const c of this.routeGroup.children) (c as Line).geometry.dispose();

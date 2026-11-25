@@ -277,7 +277,7 @@ export class StreetFurniture {
       // Trees: medians, roads with tree walks and wide sidewalks, never on bridges.
       const walk = type.width / 2 - type.sidewalk / 2;
       const treeOffsets = [
-        ...(type.median >= 2 ? [0] : []),
+        ...(type.median >= 2 && type.medianTrees !== false ? [0] : []),
         ...(type.trees || (type.median < 2 && type.sidewalk >= 2.5 && type.width >= 16) ? [walk, -walk] : []),
       ];
       const treeStep = type.trees ? 11 : 15;

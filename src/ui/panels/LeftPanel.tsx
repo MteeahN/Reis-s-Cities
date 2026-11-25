@@ -102,6 +102,17 @@ function TrafficStats() {
       <Row k="Ortalama hız" v={t.avgSpeedKmh > 0 ? `${Math.round(t.avgSpeedKmh)} km/s` : '—'} />
       <Row k="İşe ulaşım (ort.)" v={t.commuteMinutes > 0 ? `${t.commuteMinutes.toFixed(1)} dk` : '—'} testId="stat-commute" />
       {t.congestedLength > 0 && <Row k="Tıkalı yol" v={formatMeters(t.congestedLength)} />}
+      {p.parking && p.parking.families > 0 && (
+        <>
+          <Row k="Araba / aile" v={`${formatNumber(Math.round(p.parking.cars))} / ${formatNumber(Math.round(p.parking.families))}`} testId="stat-cars" />
+          <Row k="Kaçak park" v={formatNumber(Math.round(p.parking.illegal))} testId="stat-illegal-parking" />
+          {p.parking.unmet >= 1 && (
+            <p className="hint warn-text" data-testid="parking-unmet">
+              {formatNumber(Math.round(p.parking.unmet))} araç park yeri bulamıyor: otopark ya da otoparklı sokak yapın.
+            </p>
+          )}
+        </>
+      )}
       {t.unroutable >= 1 && (
         <p className="hint warn-text" data-testid="traffic-unroutable">
           Günde {formatNumber(Math.round(t.unroutable))} yolculuk rota bulamıyor: yol ağı bağlantısız.

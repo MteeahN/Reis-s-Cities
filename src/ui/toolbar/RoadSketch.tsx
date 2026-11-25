@@ -88,7 +88,7 @@ export function RoadSketch({ t }: { t: RoadTypeDef }) {
       {median > 0 && !t.oneWay && (
         <>
           <rect x={0} y={medianY} width={W} height={median} fill="#7fb35a" />
-          {[18, 60, 102].map((x) => (
+          {t.medianTrees !== false && [18, 60, 102].map((x) => (
             <circle key={x} cx={x} cy={medianY + median / 2} r={Math.max(2.5, median / 1.6)} fill="#4f8a3a" stroke="#2a3b22" strokeWidth={0.8} />
           ))}
         </>

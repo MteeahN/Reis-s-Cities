@@ -16,6 +16,7 @@ export type FlowCategory =
   | 'transitFares'
   | 'upkeepTransit'
   | 'exportSales'
+  | 'parkingFines'
   | 'constructionInfra'
   | 'constructionRoads'
   | 'constructionBuildings'

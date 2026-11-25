@@ -100,7 +100,7 @@ export class BuildingTool implements Tool {
     const { i, j } = anchorFor(this.def, this.rot, g.x, g.z);
     // Near an angled or curved road the building is pulled to it (any angle), unless the player turned it by hand.
     const magnet = this.manualRotation ? null : city.magnetPlan(this.def.id, g.x, g.z);
-    let plan = magnet ?? city.planBuilding(this.def.id, i, j, this.rot);
+    let plan = magnet ?? city.planBuilding(this.def.id, i, j, this.rot, true);
     if (!magnet && !plan.valid) {
       // Curved and diagonal roads rarely line up with whole cells: try the
       // nearby lots (and turns, unless the player chose one) and take the
@@ -112,12 +112,12 @@ export class BuildingTool implements Tool {
         const a = anchorFor(this.def, r, g.x, g.z);
         for (let dj = -2; dj <= 2; dj++) {
           for (let di = -2; di <= 2; di++) {
-            const p = city.planBuilding(this.def.id, a.i + di, a.j + dj, r);
+            const p = city.planBuilding(this.def.id, a.i + di, a.j + dj, r, true);
             if (!p.valid) continue;
             // Prefer lots whose front meets the road: straight up against it, or turned and moved to its kerb.
             const flush = frontCells(p.i, p.j, p.w, p.d, p.rot, 1).every(([ci, cj]) => city.occupancy.road[cj * GRID_CELLS + ci] > 0);
             const meets = flush || city.roadSnap(p.i, p.j, p.w, p.d, p.rot) !== null;
-            const dd = Math.hypot(p.centerX - g.x, p.centerZ - g.z) + (r === this.rot ? 0 : 2) + (meets ? 0 : 6);
+            const dd = Math.hypot(p.centerX - g.x, p.centerZ - g.z) + (r === this.rot ? 0 : 2) + (meets ? 0 : 6) + (p.bulldoze?.length ? 8 : 0);
             if (dd < bestD) (bestD = dd), (best = p);
           }
         }
@@ -128,7 +128,7 @@ export class BuildingTool implements Tool {
       } else if (!plan.roadAccess) {
         // Slide one cell toward the front so the building hugs a nearby road.
         const [si, sj] = frontStep(this.rot);
-        const slid = city.planBuilding(this.def.id, i + si, j + sj, this.rot);
+        const slid = city.planBuilding(this.def.id, i + si, j + sj, this.rot, true);
         if (slid.roadAccess) plan = slid;
       }
     }
@@ -150,7 +150,8 @@ export class BuildingTool implements Tool {
       this.ring.position.set(plan.centerX, plan.baseY + 1, plan.centerZ);
       this.ring.scale.setScalar(radius);
     }
-    this.ghostMat.color.setHex(plan.valid ? 0x34d399 : 0xf87171);
+    // Orange: it can go here, but demolishes what stands on the lot.
+    this.ghostMat.color.setHex(!plan.valid ? 0xf87171 : plan.bulldoze?.length ? 0xf59e0b : 0x34d399);
     if (plan.free) this.ctx.world.terrainMaterial.clearHover();
     else this.ctx.world.terrainMaterial.setHover(
       plan.i * CELL_SIZE,
@@ -167,6 +168,7 @@ export class BuildingTool implements Tool {
       rot: plan.rot,
       w: plan.w,
       d: plan.d,
+      bulldoze: plan.bulldoze?.length ?? 0,
     });
   }
 

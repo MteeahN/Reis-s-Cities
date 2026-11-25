@@ -273,6 +273,8 @@ export interface RoadPlanView {
   /** Upgrade mode only. */
   fromTypeId?: string;
   refund?: number;
+  /** What else happens (buildings moved back or demolished). */
+  notes?: string[];
 }
 
 export interface BuildingPlanView {
@@ -283,6 +285,8 @@ export interface BuildingPlanView {
   rot: number;
   w: number;
   d: number;
+  /** Buildings on the lot that placing demolishes. */
+  bulldoze?: number;
 }
 
 /** What the bulldozer may pick: everything, or one kind only. */

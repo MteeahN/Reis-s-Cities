@@ -248,6 +248,7 @@ export class RoadTool implements Tool {
       junctions: 0,
       valid: this.upgrade.valid,
       errors: this.upgrade.errors,
+      notes: displacedNotes(this.upgrade.displaced),
     };
     this.ctx.events.emit('roadPlan', view);
   }
@@ -475,4 +476,12 @@ export class RoadTool implements Tool {
   update(dt: number): void {
     this.preview.tick(dt);
   }
+}
+
+/** "3 bina geri çekilir · 1 bina yıkılır" for an upgrade that makes room. */
+function displacedNotes(d: UpgradePlan['displaced']): string[] | undefined {
+  if (!d?.length) return undefined;
+  const moved = d.filter((x) => x.to).length;
+  const gone = d.length - moved;
+  return [moved ? `${moved} bina geri çekilir` : '', gone ? `${gone} bina yıkılır` : ''].filter(Boolean);
 }

@@ -40,44 +40,58 @@ const smooth = (a: number, b: number, x: number) => {
 };
 const mixHex = (a: number, b: number, t: number) => new Color(a).lerp(new Color(b), t).getHex();
 
+/**
+ * Height of the sun's arc (0–1) at a share t of the day: a sine, flattened
+ * near the horizon so dawn and dusk last longer (the sun climbs at about
+ * half the rate a plain sine would give there).
+ */
+const arc = (t: number) => {
+  const s = Math.sin(Math.PI * t);
+  return s * (0.55 + 0.45 * s);
+};
+
 /** Sun elevation and azimuth for a minute of the day (0–1440). */
 export function sunPosition(minuteOfDay: number): { elevation: number; azimuth: number } {
   const h = (((minuteOfDay / 60) % 24) + 24) % 24;
   const dayLen = SUNSET_HOUR - SUNRISE_HOUR;
   if (h >= SUNRISE_HOUR && h <= SUNSET_HOUR) {
     const t = (h - SUNRISE_HOUR) / dayLen;
-    return { elevation: MAX_ELEVATION * Math.sin(Math.PI * t), azimuth: 90 + t * 180 };
+    return { elevation: MAX_ELEVATION * arc(t), azimuth: 90 + t * 180 };
   }
   const nightLen = 24 - dayLen;
   const t = ((h - SUNSET_HOUR + 24) % 24) / nightLen;
-  return { elevation: -NIGHT_DEPTH * Math.sin(Math.PI * t), azimuth: 270 + t * 180 };
+  return { elevation: -NIGHT_DEPTH * arc(t), azimuth: 270 + t * 180 };
 }
 
 /** The lighting state for a minute of the day. Pure, so it can be unit tested. */
 export function skyStateAt(minuteOfDay: number): SkyState {
   const { elevation, azimuth } = sunPosition(minuteOfDay);
-  const day = smooth(-6, 10, elevation); // 0 night … 1 day
-  const golden = 1 - smooth(2, 22, elevation); // warm, low sun (also at dusk)
-  const twilight = smooth(-8, 0, elevation) * (1 - smooth(0, 8, elevation));
+  // Wide, overlapping ranges: dawn and dusk blend over a long stretch of the day.
+  const day = smooth(-9, 16, elevation); // 0 night … 1 day
+  const golden = 1 - smooth(3, 30, elevation); // warm, low sun (also at dusk)
+  const twilight = smooth(-12, 0, elevation) * (1 - smooth(0, 12, elevation));
   const sunI = 2.7 * Math.pow(day, 1.5);
   const moonI = 0.5 * (1 - day);
-  const moonUp = moonI > sunI;
-  const sunColor = mixHex(0xfff0db, 0xffa25a, golden * day);
+  // The key light hands over from the sun to the moon gradually (no jump in direction or colour).
+  const sunW = smooth(-5, 5, elevation);
+  const moonAz = (azimuth + 180) % 360;
+  const dAz = ((((azimuth - moonAz) % 360) + 540) % 360) - 180;
+  const sunColor = mixHex(0xfff0db, 0xff9a52, golden * day);
   return {
     sunElevation: elevation,
     sunAzimuth: azimuth,
-    lightElevation: moonUp ? 42 : Math.max(2, elevation),
-    lightAzimuth: moonUp ? (azimuth + 180) % 360 : azimuth,
-    lightColor: moonUp ? 0x9fb4ff : sunColor,
-    lightIntensity: Math.max(sunI, moonI),
-    hemiSky: mixHex(mixHex(0x34507e, 0xcfe3ff, day), 0xf0b48c, twilight * 0.6),
+    lightElevation: 42 + (Math.max(4, elevation) - 42) * sunW,
+    lightAzimuth: (moonAz + dAz * sunW + 360) % 360,
+    lightColor: mixHex(0x9fb4ff, sunColor, sunW),
+    lightIntensity: sunI * sunW + moonI * (1 - sunW) + Math.min(sunI, moonI) * 0.6 * (1 - Math.abs(2 * sunW - 1)),
+    hemiSky: mixHex(mixHex(0x34507e, 0xcfe3ff, day), 0xf0b48c, twilight * 0.65),
     hemiGround: mixHex(0x1a2026, 0x58663a, day),
     hemiIntensity: 0.42 + 0.13 * day,
     envIntensity: 0.1 + 0.2 * day,
-    fogColor: mixHex(mixHex(0x0b1322, 0xbfd3e2, day), 0xd6a084, twilight * 0.7),
+    fogColor: mixHex(mixHex(0x0b1322, 0xbfd3e2, day), 0xd6a084, twilight * 0.75),
     exposure: 0.95 + 0.15 * (1 - day),
-    night: 1 - smooth(-4, 6, elevation),
-    stars: 1 - smooth(-10, -2, elevation),
+    night: 1 - smooth(-6, 9, elevation),
+    stars: 1 - smooth(-14, -3, elevation),
   };
 }
 

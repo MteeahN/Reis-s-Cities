@@ -59,6 +59,18 @@ React HUD (src/ui)  ←  Zustand store (src/store)  ←  EventBus olayları  ←
   bir `terrain` geri alma girdisidir.
 - Hemen yükseltme: `CitySimulation.canUpgrade / upgradePrice / upgradeNow`; seviye gereksinimleri otomatik büyümeyle
   aynıdır, yalnızca bekleme süresi atlanır. Geri alma girdisi binanın önceki şablonunu ve seviyesini tutar.
+- Park: `simulation/Parking.ts`. `homeCars` aile ve araba sayısını, `carShare` arabayla yapılan iş / alışveriş
+  payını verir; `TrafficModel` ev kökenli seferleri bununla çarpar. `ParkingModel.update` trafik adımında yol
+  parçası başına talep (saate göre evde / işte / dükkânda araç, binanın kendi yeri düşülerek) ile kamuya açık arzı
+  (park şeritleri, `PARKING_BUILDINGS`) karşılaştırır; taşan kaçak, kaçak sınırını aşan "yer bulamayan" olur, ceza
+  polis alanıyla çarpılır (`parkingFines`). `VehicleRenderer` görünür yollara modelin sayısınca park etmiş araba
+  koyar, varan aracı boş yere ya da arsaya (`enter` animasyonu) alır, başlayan yolculuğu park yerinden çıkarır.
+- Yer açma: `City.planBuilding(…, bulldoze)` arsadaki binaları `plan.bulldoze` olarak verir; `placeBuilding` önce
+  onları yıkar. `City.planUpgrade` yolun üzerindeki binalar için `roadDisplacement` (geri çekme hedefi ya da yıkım)
+  hesaplar, `upgradeRoad` uygular (`relocateBuilding` → `BuildingRegistry.relocate`, kimlik korunur). Yol eklenince
+  yakındaki binaların kaldırım hizası (`resnapNear`) yeniden hesaplanır.
+- Cephe derinliği: facade gölgelendiricisi türev tabanlı bir TBN ile bakış yönünü duvar çerçevesine alır, cam maskesini
+  (parlama atlası) derinlik sayıp atlas koordinatını kaydırır ve girintiyi karartır.
 - Yürüyüş: `camera/WalkController.ts` saf mantıktır (göz yüksekliği, hız, eksen eksen kayarak çarpışma); Game ona
   `walkGround` (yol profili ya da arazi) ve `walkBlocked` (`City.buildingAtWorld`, köprüsüz su) verir. Yürürken
   `cameraCtl.update` çağrılmaz; `cameraCtl.target/distance` yürüyene eşitlenir ki ağaç / bina LOD'u, trafik ve gölge

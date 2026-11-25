@@ -27,6 +27,7 @@ import { Treasury } from './Treasury';
 import type { LedgerCategory } from './Treasury';
 import { Petitions } from './Petitions';
 import { Exports } from './Exports';
+import { ParkingModel } from '../simulation/Parking';
 import { BUS_PRICE, DEPOT_BUSES, DEPOT_ID, MAX_BUSES, STOP_COST, Transit } from '../simulation/Transit';
 import { UndoHistory, type CellZoning, type PlacedProp, type Spot, type UndoEntry } from './UndoHistory';
 import { getPaint, getProp, isPropId, PAINT_RES, PAINT_STEP } from '../data/decor';
@@ -76,6 +77,8 @@ export class City {
   readonly petitions = new Petitions();
   /** Surplus utilities sold to the neighbouring towns. */
   readonly exports = new Exports();
+  /** Cars and parking spaces per road (who parks where, fines). */
+  readonly parking = new ParkingModel(this.roads);
   /** Latest utility network solution (recomputed when infrastructure changes). */
   utilities: UtilityResult;
   private utilitiesDirty = true;
@@ -180,6 +183,7 @@ export class City {
         if (!e) continue;
         const type = getRoadType(e.typeId);
         this.occupancy.setRoad(id, e.poly.points, type.width);
+        this.resnapNear(e);
         // Raised roads have no street frontage.
         if (type.zoneable && !this.roads.isElevated(e)) this.zones.addEdge(id, e.poly.points, type.width);
         this.clearVegetationAlong(e);
@@ -823,13 +827,33 @@ export class City {
 
   planUpgrade(edgeId: number, type: RoadTypeDef, surface: RoadSurface = 'asphalt'): UpgradePlan | null {
     const e = this.roads.edges.get(edgeId);
-    return e ? planUpgrade(this.roads, e, type, this.plannerWorld, this.treasury.balance, surface) : null;
+    if (!e) return null;
+    const plan = planUpgrade(this.roads, e, type, this.plannerWorld, this.treasury.balance, surface);
+    const blocked = 'Yol bir binanın üzerinden geçiyor';
+    if (plan.errors.includes(blocked)) {
+      // A wider road pushes the buildings in its way back, or demolishes those that can't move.
+      plan.displaced = this.roadDisplacement(edgeId, type);
+      plan.errors = plan.errors.filter((x) => x !== blocked);
+      plan.valid = plan.errors.length === 0;
+    }
+    return plan;
   }
 
   upgradeRoad(plan: UpgradePlan): boolean {
     if (!plan.valid || !this.roads.edges.has(plan.edgeId)) return false;
     if (!this.treasury.canAfford(plan.netCost)) return false;
     const label = plan.fromTypeId === plan.toTypeId ? 'Yolu yeniden kaplama' : `${getRoadType(plan.toTypeId).name} olarak yenileme`;
+    // Make room first (fresh: the buildings may have changed since the plan).
+    if (plan.displaced?.length) {
+      const now = this.roadDisplacement(plan.edgeId, getRoadType(plan.toTypeId));
+      for (const d of now) {
+        if (d.to && this.relocateBuilding(d.id, d.to.i, d.to.j)) continue;
+        const b = this.buildings.items.get(d.id);
+        if (!b) continue;
+        if (b.zone) this.removeGrowable(d.id);
+        else this.demolishBuilding(d.id);
+      }
+    }
     return this.editRoads(label, () => {
       this.treasury.spend(plan.netCost, 'roads');
       const e = this.roads.edges.get(plan.edgeId)!;
@@ -1225,6 +1249,138 @@ export class City {
         if (!o || (!o.ox && !o.oz && !o.oyaw)) continue;
         const theirs = this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3);
         if (quadsOverlap(theirs, mine) || quadsOverlap(theirs, own)) this.buildings.resnap(id);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- making room for wider roads
+
+  /**
+   * Buildings a road of `type` along edge `e` would stand on, and where each
+   * can be moved back to, away from the road (null: it has to be demolished).
+   * A building moves back by up to three cells, keeping its turn, onto free,
+   * owned, dry land that the new road does not reach and from which its front
+   * still meets a road; buildings placed off the grid are demolished.
+   */
+  roadDisplacement(edgeId: number, type: RoadTypeDef): { id: number; to: { i: number; j: number } | null }[] {
+    const e = this.roads.edges.get(edgeId);
+    if (!e) return [];
+    const half = type.width / 2;
+    const ids = new Set<number>();
+    const pts = sampleBezier(this.roads.curveOf(e), 1.5).points;
+    for (let k = 0; k < pts.length; k++) {
+      const a = pts[Math.max(0, k - 1)];
+      const b = pts[Math.min(pts.length - 1, k + 1)];
+      const tl = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+      const nx = -(b.z - a.z) / tl;
+      const nz = (b.x - a.x) / tl;
+      for (let off = -half + 0.5; off <= half - 0.5 + 1e-6; off += 1) {
+        const id = this.occupancy.buildingAt(Math.floor((pts[k].x + nx * off) / CELL_SIZE), Math.floor((pts[k].z + nz * off) / CELL_SIZE));
+        if (id) ids.add(id);
+      }
+    }
+    const reserved = new Set<number>();
+    const clearOfRoad = (k: number) => {
+      const x = ((k % GRID_CELLS) + 0.5) * CELL_SIZE;
+      const z = (Math.floor(k / GRID_CELLS) + 0.5) * CELL_SIZE;
+      return this.roads.closestOnEdge(e, { x, z }).dist > half + CELL_SIZE * 0.72;
+    };
+    const out: { id: number; to: { i: number; j: number } | null }[] = [];
+    for (const id of ids) {
+      const b = this.buildings.items.get(id);
+      if (!b) continue;
+      let to: { i: number; j: number } | null = null;
+      if (!b.free) {
+        const cx = (b.i + b.w / 2) * CELL_SIZE;
+        const cz = (b.j + b.d / 2) * CELL_SIZE;
+        const near = this.roads.closestOnEdge(e, { x: cx, z: cz });
+        const ax = cx - near.point.x;
+        const az = cz - near.point.z;
+        const [si, sj] = Math.abs(ax) >= Math.abs(az) ? [Math.sign(ax) || 1, 0] : [0, Math.sign(az) || 1];
+        for (let k = 1; k <= 3 && !to; k++) {
+          const ni = b.i + si * k;
+          const nj = b.j + sj * k;
+          const cells = footprintCells(ni, nj, b.w, b.d);
+          let ok = ni >= 0 && nj >= 0 && ni + b.w <= GRID_CELLS && nj + b.d <= GRID_CELLS;
+          for (const c of cells) {
+            if (!ok) break;
+            const ci = c % GRID_CELLS;
+            const cj = Math.floor(c / GRID_CELLS);
+            const other = this.occupancy.building[c];
+            ok =
+              (other === 0 || other === b.id) &&
+              this.occupancy.road[c] === 0 &&
+              !reserved.has(c) &&
+              this.world.isCellUnlocked(ci, cj) &&
+              !this.world.grid.isWater(ci, cj) &&
+              clearOfRoad(c);
+          }
+          if (!ok) continue;
+          let hi = -Infinity;
+          let lo = Infinity;
+          for (let dj = 0; dj <= b.d; dj++) {
+            for (let di = 0; di <= b.w; di++) {
+              const h = this.world.field.vertex(ni + di, nj + dj);
+              hi = Math.max(hi, h);
+              lo = Math.min(lo, h);
+            }
+          }
+          if (hi - lo > MAX_FOUNDATION_DROP) continue;
+          // Still facing a road (the widened one, or another).
+          const reach = frontCells(ni, nj, b.w, b.d, b.rot, 1)
+            .concat(frontCells(ni, nj, b.w, b.d, b.rot, 2), frontCells(ni, nj, b.w, b.d, b.rot, 3))
+            .some(([ci, cj]) => this.occupancy.hasRoad(ci, cj) || !clearOfRoad(cj * GRID_CELLS + ci));
+          if (!reach) continue;
+          to = { i: ni, j: nj };
+          for (const c of cells) reserved.add(c);
+        }
+      }
+      out.push({ id, to });
+    }
+    return out;
+  }
+
+  /** Moves a building to another lot of the same size (keeps its id, residents and state). */
+  relocateBuilding(id: number, i: number, j: number): boolean {
+    const b = this.buildings.items.get(id);
+    if (!b || b.free) return false;
+    this.occupancy.clearBuilding(id, b.cells);
+    const cells = footprintCells(i, j, b.w, b.d);
+    let baseY = -Infinity;
+    let minY = Infinity;
+    for (let dj = 0; dj <= b.d; dj++) {
+      for (let di = 0; di <= b.w; di++) {
+        const h = this.world.field.vertex(i + di, j + dj);
+        baseY = Math.max(baseY, h);
+        minY = Math.min(minY, h);
+      }
+    }
+    const moved = this.buildings.relocate(id, i, j, cells, baseY, minY);
+    if (!moved) {
+      this.occupancy.setBuilding(id, b.cells);
+      return false;
+    }
+    this.occupancy.setBuilding(id, moved.cells);
+    // Growables take their zoning (and look) with them; player buildings clear it.
+    if (moved.zone) this.zones.set(moved.cells, moved.zone, () => false);
+    else this.zones.set(moved.cells, ZoneType.None, () => false);
+    this.clearVegetationOf(moved);
+    this.resnapAround(moved);
+    return true;
+  }
+
+  /** Re-snaps the buildings near a road whose shape or width changed (their kerb moved). */
+  private resnapNear(e: RoadEdge): void {
+    const r = getRoadType(e.typeId).width / 2 + CELL_SIZE * 3;
+    const seen = new Set<number>();
+    for (const p of e.poly.points) {
+      for (let cj = Math.floor((p.z - r) / CELL_SIZE); cj <= Math.floor((p.z + r) / CELL_SIZE); cj++) {
+        for (let ci = Math.floor((p.x - r) / CELL_SIZE); ci <= Math.floor((p.x + r) / CELL_SIZE); ci++) {
+          const id = this.occupancy.buildingAt(ci, cj);
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          this.buildings.resnap(id);
+        }
       }
     }
   }
@@ -1684,6 +1840,16 @@ export class City {
     return 0;
   }
 
+  /** Demolishes buildings in the way of a new one (zoned ones go; player buildings are refunded as usual). */
+  private bulldoze(ids: number[]): void {
+    for (const id of ids) {
+      const b = this.buildings.items.get(id);
+      if (!b) continue;
+      if (b.zone) this.removeGrowable(id);
+      else this.demolishBuilding(id);
+    }
+  }
+
   /** Restores saved buildings (save system): occupancy, zoning index and cleared trees follow. */
   restoreBuildings(items: Parameters<BuildingRegistry['restore']>[0], nextId: number): void {
     // Occupancy first: each building's road snap checks the ones restored before it.
@@ -1720,9 +1886,21 @@ export class City {
 
   // ---------------------------------------------------------------- player buildings
 
-  planBuilding(defId: string, i: number, j: number, rot: Rotation): BuildingPlan {
+  /**
+   * Validates a hand placement. With `bulldoze`, buildings standing on the lot
+   * do not block it: the plan lists them and placing demolishes them first.
+   */
+  planBuilding(defId: string, i: number, j: number, rot: Rotation, bulldoze = false): BuildingPlan {
     const def = getBuilding(defId);
     const plan = planBuilding(def, i, j, rot, this.placementWorld, this.treasury.balance, this.buildings.countOf(defId));
+    const clash = 'Başka bir binayla çakışıyor';
+    if (bulldoze && plan.errors.includes(clash)) {
+      const ids = new Set<number>();
+      for (const k of footprintCells(plan.i, plan.j, plan.w, plan.d)) if (this.occupancy.building[k]) ids.add(this.occupancy.building[k]);
+      plan.bulldoze = [...ids];
+      plan.errors = plan.errors.filter((x) => x !== clash);
+      plan.valid = plan.errors.length === 0;
+    }
     if (def.zone) {
       // Hand-placed growable: the developer's price, and its zone must be open.
       plan.cost = growablePrice(def);
@@ -1747,8 +1925,14 @@ export class City {
   placeGrowable(plan: BuildingPlan, style: ArchStyle, tint: number, tick: number): PlacedBuilding | null {
     const def = getBuilding(plan.defId);
     if (!def.zone) return null;
-    const fresh = plan.free ? this.planFree(plan.defId, plan.free) : this.planBuilding(plan.defId, plan.i, plan.j, plan.rot);
-    if (!fresh.valid || !this.treasury.spend(fresh.cost, 'buildings')) return null;
+    let fresh = plan.free ? this.planFree(plan.defId, plan.free) : this.planBuilding(plan.defId, plan.i, plan.j, plan.rot, !!plan.bulldoze);
+    if (!fresh.valid || !this.treasury.canAfford(fresh.cost)) return null;
+    if (fresh.bulldoze?.length) {
+      this.bulldoze(fresh.bulldoze);
+      fresh = this.planBuilding(plan.defId, plan.i, plan.j, plan.rot);
+      if (!fresh.valid) return null;
+    }
+    if (!this.treasury.spend(fresh.cost, 'buildings')) return null;
     const b = this.buildings.create({
       defId: def.id,
       i: fresh.i,
@@ -1778,8 +1962,13 @@ export class City {
   }
 
   placeBuilding(plan: BuildingPlan): PlacedBuilding | null {
-    const fresh = plan.free ? this.planFree(plan.defId, plan.free) : this.planBuilding(plan.defId, plan.i, plan.j, plan.rot);
+    let fresh = plan.free ? this.planFree(plan.defId, plan.free) : this.planBuilding(plan.defId, plan.i, plan.j, plan.rot, !!plan.bulldoze);
     if (!fresh.valid) return null;
+    if (fresh.bulldoze?.length) {
+      this.bulldoze(fresh.bulldoze);
+      fresh = this.planBuilding(plan.defId, plan.i, plan.j, plan.rot);
+      if (!fresh.valid) return null;
+    }
     const group = getBuilding(plan.defId).group ?? 'landmark';
     if (!this.treasury.spend(fresh.cost, group === 'landmark' ? 'buildings' : 'infra')) return null;
     const b = this.buildings.add(fresh);

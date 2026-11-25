@@ -675,10 +675,38 @@ float reisDoor = step(reisHash(vec2(reisCell.x * 1.7, 5.3) + reisSeed), 0.28);
 float reisCol = mix(reisVariant, reisDoor * 2.0 + mod(reisVariant, 2.0), reisGround);
 float reisRow = reisStyle + reisGround * 4.0;
 vec2 reisTileSize = vec2(${(1 / COLS).toFixed(4)}, ${(1 / ROWS).toFixed(4)});
-vec2 reisUv = vec2(reisCol, reisRow) * reisTileSize + (fract(vMapUv) * 0.96 + 0.02) * reisTileSize;
+vec2 reisBase = vec2(reisCol, reisRow) * reisTileSize;
 vec2 reisDx = dFdx(vMapUv) * reisTileSize * 0.96;
 vec2 reisDy = dFdy(vMapUv) * reisTileSize * 0.96;
-diffuseColor *= textureGrad(map, reisUv, reisDx, reisDy);`,
+// Windows sit in the wall: the glass (marked in the glow atlas) is ~0.35 m deep. Offset the
+// lookup along the view direction in the wall's own frame (parallax), so the reveals show
+// as the camera moves, and darken the recess.
+float reisDepth = 0.0;
+vec2 reisOff = vec2(0.0);
+#ifndef FLAT_SHADED
+{
+  vec3 rp = -vViewPosition;
+  vec3 rdx = dFdx(rp);
+  vec3 rdy = dFdy(rp);
+  vec2 rux = dFdx(vMapUv);
+  vec2 ruy = dFdy(vMapUv);
+  vec3 rn = normalize(vNormal);
+  vec3 r2 = cross(rdy, rn);
+  vec3 r1 = cross(rn, rdx);
+  vec3 rT = r2 * rux.x + r1 * ruy.x;
+  vec3 rB = r2 * rux.y + r1 * ruy.y;
+  float rInv = inversesqrt(max(max(dot(rT, rT), dot(rB, rB)), 1e-12));
+  vec3 rV = normalize(vViewPosition);
+  vec3 rVt = vec3(dot(rV, rT * rInv), dot(rV, rB * rInv), dot(rV, rn));
+  reisDepth = textureGrad(uGlowAtlas, reisBase + (fract(vMapUv) * 0.96 + 0.02) * reisTileSize, reisDx, reisDy).r;
+  // Bay units: 0.35 m over a 3.2 m bay and a 3.4 m floor; grazing angles are capped.
+  reisOff = -rVt.xy / max(0.3, rVt.z) * reisDepth * vec2(0.11, 0.1);
+}
+#endif
+vec2 reisUv = reisBase + (fract(vMapUv + reisOff) * 0.96 + 0.02) * reisTileSize;
+diffuseColor *= textureGrad(map, reisUv, reisDx, reisDy);
+// Shade inside the reveal (deeper toward the edge the view looks into).
+diffuseColor.rgb *= 1.0 - reisDepth * (0.18 + 0.5 * clamp(length(reisOff) * 9.0, 0.0, 1.0));`,
       )
       .replace(
         '#include <emissivemap_fragment>',
@@ -691,7 +719,7 @@ vec3 reisWarm = mix(vec3(1.0, 0.7, 0.36), vec3(0.8, 0.88, 1.0), step(0.78, fract
 totalEmissiveRadiance += reisWarm * reisOn * 1.7;`,
       );
   };
-  mat.customProgramCacheKey = () => 'reis-facade-v4';
+  mat.customProgramCacheKey = () => 'reis-facade-v5';
 }
 
 let materials: { plain: MeshStandardMaterial; facade: MeshStandardMaterial } | null = null;

@@ -6,6 +6,7 @@ import { frontCells } from '../../entities/building/BuildingPlacement';
 import type { PlacedBuilding } from '../../entities/building/BuildingRegistry';
 import type { RoadGraph } from '../../entities/road/RoadGraph';
 import { residentsOf, type Population } from '../Population';
+import { carShare, homeCars } from '../Parking';
 
 /**
  * Aggregate traffic model (no per-citizen agents).
@@ -43,7 +44,6 @@ export const BPR_BETA = 4;
 export const FLOW_BLEND = 0.35;
 /** Daily car trips are multiplied by this (visitors, errands, services). */
 export const TRIP_SCALE = 3;
-export const CAR_SHARE = 0.75;
 export const SHOP_TRIPS_PER_RESIDENT = 0.25;
 export const FREIGHT_PER_WORKER = 0.4;
 /** Travel-time decay of destination choice (s). */
@@ -527,10 +527,13 @@ export class TrafficModel {
         if (!hh) continue;
         const residents = residentsOf(hh);
         if (residents <= 0) continue;
-        // Trips made by bus are off the roads.
+        // Only families with a car drive (wealthier homes own more); bus trips are off the roads too.
         const bus = this.transitShare ? this.transitShare(b.id) : { work: 0, shop: 0 };
-        addOrigin(b, at, 'work', hh.ages[2] * employmentRate * CAR_SHARE * (1 - bus.work));
-        addOrigin(b, at, 'shop', residents * SHOP_TRIPS_PER_RESIDENT * (1 - bus.shop));
+        const own = homeCars(def, b, hh);
+        const workers = hh.ages[2] * employmentRate;
+        const byCar = carShare(own.cars, workers, own.families);
+        addOrigin(b, at, 'work', workers * byCar.work * (1 - bus.work));
+        addOrigin(b, at, 'shop', residents * SHOP_TRIPS_PER_RESIDENT * byCar.shop * (1 - bus.shop));
       }
       if (isWork) addDest('work', at, b.occupants);
       if (isShop && b.occupants > 0) {

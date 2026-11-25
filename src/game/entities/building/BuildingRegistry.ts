@@ -193,6 +193,19 @@ export class BuildingRegistry {
     this.emit({ added: [b], removed: [before] });
   }
 
+  /** Moves a building to another lot of the same size, keeping its id and state (its snap is recomputed). */
+  relocate(id: number, i: number, j: number, cells: number[], baseY: number, minY: number): PlacedBuilding | null {
+    const b = this.items.get(id);
+    if (!b || b.free) return null;
+    const before = { ...b, cells: [...b.cells] };
+    const moved = this.snap({ ...b, i, j, baseY, minY });
+    delete b.oyaw;
+    delete b.seat;
+    Object.assign(b, moved, { cells });
+    this.emit({ added: [b], removed: [before] });
+    return b;
+  }
+
   remove(id: number): PlacedBuilding | null {
     const b = this.items.get(id);
     if (!b) return null;

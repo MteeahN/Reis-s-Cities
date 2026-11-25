@@ -236,7 +236,7 @@ export class Game {
     this.infoView = new InfoLayerView(this.city, this.world.terrainMaterial, this.buildingRenderer);
     this.trafficOverlay = new TrafficOverlay(this.city.traffic, this.city.roads, this.roadRenderer);
     this.signals = new TrafficSignals(this.city.roads);
-    this.vehicles = new VehicleRenderer(this.city.traffic, this.city.roads, this.roadRenderer, this.signals);
+    this.vehicles = new VehicleRenderer(this.city.traffic, this.city.roads, this.roadRenderer, this.signals, 600, this.city.parking);
     this.transitRenderer = new TransitRenderer(this.city.transit, this.city.roads, this.roadRenderer);
     this.scene.add(this.transitRenderer.group);
     this.pedestrians = new PedestrianRenderer(this.city.roads, this.city.buildings, this.city.occupancy, this.roadRenderer, this.signals);
@@ -491,7 +491,7 @@ export class Game {
       population: st.total,
       happiness: st.happiness,
       balance: this.city.treasury.balance,
-      income: r.taxResidential + r.taxCommercial + r.taxIndustrial + (r.transitFares ?? 0) + (r.exportSales ?? 0),
+      income: r.taxResidential + r.taxCommercial + r.taxIndustrial + (r.transitFares ?? 0) + (r.exportSales ?? 0) + (r.parkingFines ?? 0),
       expenses: r.upkeepRoads + r.upkeepBuildings + r.upkeepPower + r.upkeepWater + r.upkeepServices + (r.upkeepTransit ?? 0) + r.loanPayments,
       unemployment: st.unemploymentRate,
       jobs: st.jobs,

@@ -44,6 +44,29 @@ describe('Day/night cycle', () => {
       prev = s;
     }
   });
+
+  it('dawn and dusk are long and gentle; the key light hands over from sun to moon without a jump', () => {
+    // Minutes from "still night" to "full day" around sunrise.
+    const span = (lo: number, hi: number) => {
+      let start = -1;
+      let end = -1;
+      for (let m = (SUNRISE_HOUR - 3) * 60; m <= (SUNRISE_HOUR + 6) * 60; m++) {
+        const n = skyStateAt(m).night;
+        if (start < 0 && n < hi) start = m;
+        if (end < 0 && n < lo) end = m;
+      }
+      return end - start;
+    };
+    expect(span(0.05, 0.95)).toBeGreaterThan(80); // was ~45 game minutes before the softer arc
+    let prev = skyStateAt(0);
+    for (let m = 1; m <= 1440; m++) {
+      const s = skyStateAt(m);
+      const d = Math.abs(((s.lightAzimuth - prev.lightAzimuth + 540) % 360) - 180);
+      expect(d).toBeLessThan(6);
+      expect(Math.abs(s.lightElevation - prev.lightElevation)).toBeLessThan(2);
+      prev = s;
+    }
+  });
 });
 
 describe('Window lights at night', () => {

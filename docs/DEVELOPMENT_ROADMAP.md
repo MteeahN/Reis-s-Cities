@@ -43,6 +43,9 @@
 29. ✅ Cephe atlası: stil başına dört pencere tasarımı, zemin katta kapı / vitrin / kepenk
 30. ✅ Performans: ağaç ve kaya LOD'u, bina havuzlarında görüş alanı ayıklama, ayrıntılarda gölgesiz çizim
 31. ✅ Şehirde yürüyüş: birinci şahıs kamera, kaldırımdan başlar, bina ve suyla çarpışma, fare kilidiyle bakış
+32. ✅ Araba sahipliği (aile ve zenginliğe göre), park modeli, kaçak park ve polis cezası; araçlar kaybolmaz, park eder
+33. ✅ Yol genişleyince binalar geri çekilir / yıkılır; bina kurarken arsadaki binalar yıkılır
+34. ✅ Patika, ağaçlı refüjlü sokak, çimli refüjlü cadde; derinlikli pencereler; ayrıntılı otobüs; yumuşak gün doğumu
 
 ## Bilinen sınırlar (dürüst durum)
 

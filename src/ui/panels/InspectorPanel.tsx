@@ -245,6 +245,7 @@ function RoadPlanCard() {
           {plan.refund !== undefined && <KV k="Eski yol iadesi" v={formatMoney(plan.refund)} />}
           <KV k={plan.mode === 'upgrade' ? 'Net maliyet' : 'İnşaat maliyeti'} v={formatMoney(plan.cost)} cls="text-blue" testId="plan-cost" />
           <KV k="Haftalık bakım" v={formatMoney(plan.weeklyMaintenance)} />
+          {plan.valid && plan.notes?.length ? <p className="hint text-yellow" data-testid="plan-notes">Yol genişlerken: {plan.notes.join(' · ')}</p> : null}
           <Errors valid={plan.valid} errors={plan.errors} okText="Geçerli — tıklayarak inşa edin" />
         </>
       ) : (
@@ -314,6 +315,7 @@ function BuildingPlanCard() {
       {def.service && <KV k="Kapsama / kapasite" v={`${def.service.radius * 8} m · ${formatNumber(def.service.capacity)}`} />}
       {def.pollution > 0 && <KV k="Kirlilik" v={def.pollution} cls="text-yellow" />}
       {(def.utility?.water || def.utility?.sewage) && <p className="hint">Bir su borusuna en fazla 2 hücre uzaklıkta olmalı.</p>}
+      {plan?.valid && plan.bulldoze ? <p className="hint text-yellow" data-testid="plan-bulldoze">Arsadaki {plan.bulldoze} bina yıkılır (oyuncu binalarının yarı fiyatı iade edilir)</p> : null}
       {plan ? <Errors valid={plan.valid} errors={plan.errors} okText="Uygun konum — tıklayarak inşa edin" /> : <p className="hint">Binayı bir yolun kenarına yerleştirin.</p>}
       <p className="hint"><kbd>R</kbd> döndür · ön cephe yola bakmalı</p>
     </section>

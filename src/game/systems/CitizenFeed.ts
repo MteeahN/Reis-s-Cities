@@ -147,6 +147,18 @@ const TOPICS: Topic[] = [
     solved: ['Trafik rahatladı, işe vaktinde yetiştim 🙌'],
   },
   {
+    id: 'parking',
+    kind: 'complaint',
+    active: (c) => people(c) >= 100 && (c.stats.parking?.unmet ?? 0) >= 5,
+    texts: [
+      'Akşam eve geldim, sokakta park yeri yok. Yarım saat dönüp durdum 🚗',
+      'Dükkânın önünde park yeri yok, müşteriler gelip geri dönüyor. Otopark ya da otoparklı sokak lazım.',
+      'Arabalar kaldırıma kadar dizilmiş, yürüyecek yer kalmadı.',
+    ],
+    affected: (c) => `${Math.round(c.stats.parking?.unmet ?? 0)} araç park yeri bulamıyor`,
+    solved: ['Sonunda park yeri bulmak kolaylaştı, teşekkürler 🅿️'],
+  },
+  {
     id: 'commute',
     kind: 'complaint',
     active: (c) => people(c) >= 100 && c.stats.traffic.commuteMinutes > 35,
