@@ -41,6 +41,21 @@ interface Vehicle {
   reverse: boolean;
   /** Turning into a driveway or lot at the end of the trip: 0 → 1 (then it is inside). */
   enter: number;
+  /** Parking into a kerb space, or pulling out of one: a curve between the two poses. */
+  manoeuvre: Manoeuvre | null;
+}
+
+/** A car steering from one pose to another along a smooth S (cubic Bézier), over `dur` game seconds. */
+interface Manoeuvre {
+  kind: 'in' | 'out';
+  t: number;
+  dur: number;
+  a: LanePoint;
+  b: LanePoint;
+  /** The space it is parking into (in). */
+  space?: Parked;
+  /** Where along its link it carries on driving (out). */
+  outS?: number;
 }
 
 /** A car standing in a space at the kerb (parking lane, or illegally). */
@@ -172,7 +187,7 @@ export class VehicleRenderer {
   }
 
   /** A free kerb space on an edge nearest to `s` metres from node a, on `side` (both sides if none). */
-  private freeSpace(edgeId: number, s: number, side: 1 | -1 | 0): { slot: number; side: 1 | -1 } | null {
+  private freeSpace(edgeId: number, s: number, side: 1 | -1 | 0, ahead = 0): { slot: number; side: 1 | -1 } | null {
     const { n } = this.spacesOf(edgeId);
     if (n === 0) return null;
     const taken = this.taken.get(edgeId);
@@ -180,6 +195,8 @@ export class VehicleRenderer {
     for (let d = 0; d < n; d++) {
       for (const k of d === 0 ? [k0] : [k0 + d, k0 - d]) {
         if (k < 0 || k >= n) continue;
+        // Driving on: only spaces level with or ahead of the car (+1 towards node b, −1 towards a).
+        if (ahead !== 0 && (8 + (k + 0.5) * SPACE_LENGTH - s) * ahead < 6) continue;
         for (const sd of side === 0 ? ([1, -1] as const) : [side]) if (!taken?.has(`${k}:${sd}`)) return { slot: k, side: sd };
       }
       if (d > 6) break; // within ~40 m
@@ -203,8 +220,11 @@ export class VehicleRenderer {
     return p;
   }
 
-  /** A trip ending (or a car pulling over) on an edge: park at the kerb if the street has room, else false. */
-  private parkAt(v: Vehicle, edgeId: number, s: number, kerbOnly: boolean): boolean {
+  /**
+   * A trip ending (or a car pulling over) on an edge: steer into a kerb space if the street has room
+   * (false: none). With `instant` the car is put in the space at once (the network is being rebuilt).
+   */
+  private parkAt(v: Vehicle, edgeId: number, s: number, kerbOnly: boolean, instant = false): boolean {
     if (v.truck) return false;
     const { lane } = this.spacesOf(edgeId);
     const model = this.parking?.edges.get(edgeId);
@@ -214,10 +234,73 @@ export class VehicleRenderer {
     if (illegal && !kerbOnly && !(model && model.illegal > 0)) return false;
     // Drive on the right: the near kerb is the right side of the direction of travel.
     const side: 1 | -1 = v.reverse ? -1 : 1;
-    const space = this.freeSpace(edgeId, s, side);
+    const space = this.freeSpace(edgeId, s, side, instant ? 0 : side);
     if (!space) return false;
-    this.park(edgeId, space.slot, space.side, illegal, v.color, v.model);
+    const rec: Parked = { edge: edgeId, slot: space.slot, side: space.side, illegal, color: v.color, model: v.model };
+    if (instant) {
+      this.park(edgeId, rec.slot, rec.side, illegal, v.color, v.model);
+      return true;
+    }
+    const a = this.placement(v, { x: 0, y: 0, z: 0, dx: 0, dz: 1 });
+    const b = this.parkedPose(rec, { x: 0, y: 0, z: 0, dx: 0, dz: 1 });
+    if (!a || !b) return false;
+    this.reserve(edgeId, rec.slot, rec.side);
+    const dist = Math.hypot(b.x - a.x, b.z - a.z);
+    v.manoeuvre = { kind: 'in', t: 0, dur: Math.max(2.2, Math.min(6, dist / 2.6)), a: { ...a }, b: { ...b }, space: rec };
     return true;
+  }
+
+  private reserve(edgeId: number, slot: number, side: 1 | -1): void {
+    let set = this.taken.get(edgeId);
+    if (!set) this.taken.set(edgeId, (set = new Set()));
+    set.add(`${slot}:${side}`);
+  }
+
+  /** Where a manoeuvring car is at u (0–1), without its heading. */
+  private manoeuvreAt(m: Manoeuvre, u: number): { x: number; z: number } {
+    // In the frame of the start pose: forward f, right r = (−dz, dx).
+    const fx = m.a.dx;
+    const fz = m.a.dz;
+    const dx = m.b.x - m.a.x;
+    const dz = m.b.z - m.a.z;
+    const along = dx * fx + dz * fz;
+    const across = dx * -fz + dz * fx;
+    const ease = (x: number) => {
+      const c = Math.max(0, Math.min(1, x));
+      return c * c * (3 - 2 * c);
+    };
+    // Parking in: roll on along the lane, then ease sideways into the space (clear of the car behind it).
+    // Pulling out: ease sideways out of the space first, then roll on along the lane.
+    const w = ease(u);
+    const side = m.kind === 'in' ? ease((u - 0.3) / 0.7) : ease(u / 0.7);
+    return { x: m.a.x + fx * along * w + -fz * across * side, z: m.a.z + fz * along * w + fx * across * side };
+  }
+
+  /** Pose on a manoeuvre at its progress: position and heading (from the path's direction). */
+  private manoeuvrePose(m: Manoeuvre, out: LanePoint): LanePoint {
+    const u = Math.max(0, Math.min(1, m.t));
+    const p = this.manoeuvreAt(m, u);
+    const q0 = this.manoeuvreAt(m, Math.max(0, u - 0.02));
+    const q1 = this.manoeuvreAt(m, Math.min(1, u + 0.02));
+    out.x = p.x;
+    out.z = p.z;
+    out.y = m.a.y + (m.b.y - m.a.y) * u;
+    let tx = q1.x - q0.x;
+    let tz = q1.z - q0.z;
+    const tl = Math.hypot(tx, tz);
+    // Standing still at the ends: keep the start / end heading.
+    if (tl < 1e-4) (tx = u < 0.5 ? m.a.dx : m.b.dx), (tz = u < 0.5 ? m.a.dz : m.b.dz);
+    else (tx /= tl), (tz /= tl);
+    // Settle into the space's own heading at the very end (and out of it at the start).
+    const settle = m.kind === 'in' ? Math.max(0, (u - 0.85) / 0.15) : Math.max(0, 1 - u / 0.15);
+    const hx = m.kind === 'in' ? m.b.dx : m.a.dx;
+    const hz = m.kind === 'in' ? m.b.dz : m.a.dz;
+    tx += (hx - tx) * settle;
+    tz += (hz - tz) * settle;
+    const hl = Math.hypot(tx, tz) || 1;
+    out.dx = tx / hl;
+    out.dz = tz / hl;
+    return out;
   }
 
   /** Streets coming into view get the parked cars the parking model has on them; streets leaving it drop theirs. */
@@ -243,12 +326,13 @@ export class VehicleRenderer {
   }
 
   /** A parked car near `s` on an edge (for a trip starting there), as its index. */
-  private parkedNear(edgeId: number, s: number): number {
+  private parkedNear(edgeId: number, s: number, side: 1 | -1): number {
     let best = -1;
     let bd = 30;
     for (let i = 0; i < this.parked.length; i++) {
       const p = this.parked[i];
-      if (p.edge !== edgeId) continue;
+      // Only from the kerb of the way it will drive (it pulls straight out into its lane).
+      if (p.edge !== edgeId || p.side !== side) continue;
       const d = Math.abs(8 + (p.slot + 0.5) * SPACE_LENGTH - s);
       if (d < bd) (bd = d), (best = i);
     }
@@ -264,7 +348,8 @@ export class VehicleRenderer {
     const s = 8 + (p.slot + 0.5) * SPACE_LENGTH;
     sampleProfile(prof, (s / e.length) * prof.length, this.pt);
     const kerb = t.width / 2 - t.sidewalk;
-    const off = (t.parking ? kerb - t.parking / 2 : kerb - 1.05) * p.side;
+    // In a parking lane; or, illegally, half up on the pavement (clear of the traffic lane).
+    const off = (t.parking ? kerb - t.parking / 2 : kerb + 0.55) * p.side;
     // Right of a→b is (−tz, tx).
     out.x = this.pt.x - this.pt.tz * off;
     out.y = this.pt.y;
@@ -287,10 +372,17 @@ export class VehicleRenderer {
       for (const v of this.vehicles) {
         const e = this.roads.edges.get(v.edge);
         if (!e || v.enter > 0) continue;
+        if (v.manoeuvre?.kind === 'in' && v.manoeuvre.space) {
+          const sp = v.manoeuvre.space;
+          this.park(sp.edge, sp.slot, sp.side, sp.illegal, sp.color, sp.model);
+          continue;
+        }
         const s = (v.reverse ? 1 - v.frac : v.frac) * e.length;
-        this.parkAt(v, v.edge, s, true);
+        this.parkAt(v, v.edge, s, true, true);
       }
       this.vehicles.length = 0;
+      this.taken.clear();
+      for (const p of this.parked) this.reserve(p.edge, p.slot, p.side);
     }
     // Close enough to see individual vehicles?
     this.radius = Math.min(900, Math.max(260, camDistance * 1.3));
@@ -353,18 +445,21 @@ export class VehicleRenderer {
       const edgeId = t.linkEdge[link];
       const reverse = t.linkReverse[link] === 1;
       // A trip that starts here takes a car parked near its start (it pulls out of the space).
+      let pullOut: LanePoint | null = null;
       let color = truck ? TRUCK_COLORS[Math.floor(this.rand() * TRUCK_COLORS.length)] : CAR_COLORS[Math.floor(this.rand() * CAR_COLORS.length)];
       let model = truck ? Math.floor(this.rand() * this.trucks.length) : pickWeighted(CAR_MIX, this.rand());
       if (!truck && idx === 0 && !initialFill) {
         const e = this.roads.edges.get(edgeId);
         const fromA = reverse && e ? e.length - s : s;
-        const k = this.parkedNear(edgeId, fromA);
+        const k = this.parkedNear(edgeId, fromA, reverse ? -1 : 1);
         if (k >= 0) {
+          const pose = this.parkedPose(this.parked[k], { x: 0, y: 0, z: 0, dx: 0, dz: 1 });
           const p = this.unpark(k);
           color = p.color;
           model = p.model;
           const at = 8 + (p.slot + 0.5) * SPACE_LENGTH;
           s = Math.max(from, Math.min(to - 1, reverse && e ? e.length - at : at));
+          pullOut = pose;
         }
       }
       if (this.blocked(link, lane, s, truck ? TRUCK_GAP : CAR_GAP)) continue;
@@ -387,7 +482,14 @@ export class VehicleRenderer {
         frac: len0 > 0 ? s / len0 : 0,
         reverse,
         enter: 0,
+        manoeuvre: null,
       });
+      if (pullOut) {
+        const v = this.vehicles[this.vehicles.length - 1];
+        const outS = Math.min(to - 0.5, s + 7);
+        const b = this.lanePoint(link, outS, lane, { x: 0, y: 0, z: 0, dx: 0, dz: 1 });
+        if (b) v.manoeuvre = { kind: 'out', t: 0, dur: 2.6, a: { ...pullOut }, b: { ...b }, outS };
+      }
     }
   }
 
@@ -486,6 +588,22 @@ export class VehicleRenderer {
       for (let i = 0; i < list.length; i++) {
         const v = list[i];
         const link = v.path.links[v.idx];
+        if (v.manoeuvre) {
+          const m = v.manoeuvre;
+          m.t += dt / m.dur;
+          v.speed = 0;
+          if (m.t >= 1) {
+            if (m.kind === 'in' && m.space) {
+              // In the space: it stands there now.
+              this.parked.push(m.space);
+              remove.add(v);
+            } else {
+              v.s = m.outS ?? v.s;
+              v.manoeuvre = null;
+            }
+          }
+          continue;
+        }
         if (v.enter > 0) {
           // Turning into the driveway / lot: once inside, it is parked there.
           v.enter += dt / ENTER_TIME;
@@ -516,7 +634,6 @@ export class VehicleRenderer {
           const e = this.roads.edges.get(t.linkEdge[link]);
           const fromA = e ? (t.linkReverse[link] === 1 ? e.length - v.s : v.s) : 0;
           if (!this.parkAt(v, t.linkEdge[link], fromA, true)) v.enter = 1e-6;
-          else remove.add(v);
           continue;
         }
         v.s = Math.max(v.s, Math.min(v.s + v.speed * dt, limit));
@@ -531,11 +648,8 @@ export class VehicleRenderer {
             // Trip over: park at the kerb if the street has a space for it, else turn into the lot / garage.
             const e = this.roads.edges.get(t.linkEdge[l]);
             const fromA = e ? (t.linkReverse[l] === 1 ? e.length - end : end) : 0;
-            if (this.parkAt(v, t.linkEdge[l], fromA, false)) remove.add(v);
-            else {
-              v.s = end;
-              v.enter = 1e-6;
-            }
+            v.s = end;
+            if (!this.parkAt(v, t.linkEdge[l], fromA, false)) v.enter = 1e-6;
             break;
           }
           v.s -= len;
@@ -550,7 +664,7 @@ export class VehicleRenderer {
         v.reverse = t.linkReverse[cur] === 1;
         v.frac = t.linkLen[cur] > 0 ? Math.min(1, v.s / t.linkLen[cur]) : 0;
         // Left the area around the camera.
-        if (!remove.has(v) && v.enter === 0 && !this.visibleEdges.has(t.linkEdge[v.path.links[v.idx]])) remove.add(v);
+        if (!remove.has(v) && v.enter === 0 && !v.manoeuvre && !this.visibleEdges.has(t.linkEdge[v.path.links[v.idx]])) remove.add(v);
       }
     }
     if (remove.size > 0) {
@@ -666,7 +780,7 @@ export class VehicleRenderer {
     const nCar = this.cars.map(() => 0);
     const nTruck = this.trucks.map(() => 0);
     for (const v of this.vehicles) {
-      const p = this.placement(v, this.lp);
+      const p = v.manoeuvre ? this.manoeuvrePose(v.manoeuvre, this.lp) : this.placement(v, this.lp);
       if (!p) continue;
       let ang = Math.atan2(p.dx, p.dz);
       if (v.enter > 0) {

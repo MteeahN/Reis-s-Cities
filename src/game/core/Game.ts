@@ -401,6 +401,12 @@ export class Game {
     this.sim.tick = c.tick;
     this.sim.gameMinutes = c.gameMinutes;
     restoreCity(this.city, this.citySim, save.city, c.tick, c.gameMinutes);
+    // The entry road is wider now: make room on it in cities saved before.
+    const fit = this.city.fitEntryRoads();
+    if (fit.moved + fit.removed > 0) {
+      const parts = [fit.moved ? `${fit.moved} bina geri çekildi` : '', fit.removed ? `${fit.removed} bina yıkıldı` : ''].filter(Boolean).join(', ');
+      setTimeout(() => this.events.emit('toast', { kind: 'info', text: `Şehir giriş yolu genişledi: ${parts}` }), 1500);
+    }
     this.achievements.restore(save.achievements);
     this.history.restore(save.history);
     this.speedBeforePause = c.speed;
@@ -1309,6 +1315,14 @@ export class Game {
 
   setRoadSurface(s: RoadSurface): void {
     this.tools.road.setSurface(s);
+  }
+
+  /** Road tool in renew mode with the parking street: the street clicked gets parking lanes on both sides. */
+  startParkingLane(): void {
+    this.setTool('road');
+    this.setRoadType('parking_street');
+    this.setRoadMode('upgrade');
+    this.events.emit('toast', { kind: 'info', text: 'Park şeridi eklemek istediğiniz sokağa tıklayın' });
   }
 
   setRoadMode(mode: RoadMode): void {

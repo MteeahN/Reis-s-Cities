@@ -139,7 +139,7 @@ export function useCatalog(list: BuildingDef[]) {
     </div>
   );
   const empty = items.length === 0 ? <div className="subtoolbar-note">{favOnly ? 'Bu listede favori yok. Kartlardaki ★ ile ekleyin.' : 'Aramaya uyan bina yok.'}</div> : null;
-  return { items, controls, empty };
+  return { items, controls, empty, searching: query.trim().length > 0 || favOnly };
 }
 
 /** Star on a card: toggles the favourite without picking the building. */

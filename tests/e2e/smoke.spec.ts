@@ -70,7 +70,13 @@ test('creates a city, renders the world and drives the HUD', async ({ page }) =>
   await expect(page.getByTestId('tool-power')).toHaveClass(/active/);
   await expect(page.getByTestId('layer-legend')).toContainText('Elektrik');
   await page.keyboard.press('j');
+  // Services are grouped in tabs: the fire station is under safety, the hospital under health.
+  await expect(page.getByTestId('building-type-fire_station')).toBeVisible();
+  await page.getByTestId('service-tab-health').click();
   await expect(page.getByTestId('building-type-hospital')).toBeDisabled(); // unlocks at 1,000 residents
+  await page.getByTestId('service-tab-city').click();
+  await expect(page.getByTestId('building-type-parking_small')).toBeVisible();
+  await expect(page.getByTestId('parking-lane-tool')).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByTestId('tool-layers').click();
   await page.getByTestId('layer-crime').click();

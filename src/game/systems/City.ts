@@ -1369,6 +1369,33 @@ export class City {
     return true;
   }
 
+  /**
+   * The city's entry road became the widest road: in a city saved before that, buildings
+   * standing on its new width move back (or are demolished when they can't). Returns how many.
+   */
+  fitEntryRoads(): { moved: number; removed: number } {
+    let moved = 0;
+    let removed = 0;
+    for (const e of [...this.roads.edges.values()]) {
+      if (e.typeId !== 'citylink') continue;
+      for (const d of this.roadDisplacement(e.id, getRoadType('citylink'))) {
+        if (d.to && this.relocateBuilding(d.id, d.to.i, d.to.j)) {
+          moved++;
+          continue;
+        }
+        const b = this.buildings.items.get(d.id);
+        if (!b) continue;
+        if (b.zone) this.removeGrowable(d.id);
+        else {
+          this.buildings.remove(d.id);
+          this.occupancy.clearBuilding(d.id, b.cells);
+        }
+        removed++;
+      }
+    }
+    return { moved, removed };
+  }
+
   /** Re-snaps the buildings near a road whose shape or width changed (their kerb moved). */
   private resnapNear(e: RoadEdge): void {
     const r = getRoadType(e.typeId).width / 2 + CELL_SIZE * 3;

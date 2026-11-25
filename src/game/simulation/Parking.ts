@@ -27,7 +27,7 @@ export const CARS_PER_FAMILY: Record<1 | 2 | 3, number> = { 1: 0.3, 2: 0.55, 3: 
 /** Length of kerb one parked car takes (m). */
 export const SPACE_LENGTH = 6;
 /** Spaces in public parking buildings. */
-export const PARKING_BUILDINGS: Record<string, number> = { parking_lot: 40, parking_garage: 160 };
+export const PARKING_BUILDINGS: Record<string, number> = { parking_small: 6, parking_lot: 40, parking_garage: 160, parking_underground: 220 };
 /** Fine for an illegally parked car that police write up (₺). */
 export const PARKING_FINE = 12;
 /** Share of illegally parked cars written up per day at full police coverage. */

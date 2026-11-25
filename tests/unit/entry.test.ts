@@ -86,7 +86,14 @@ describe('City entry road', () => {
       }
     }
     const cells: number[] = [];
-    for (let k = 0; k < GRID_CELLS * GRID_CELLS; k++) if (city.zones.zoneable[k] > 0) cells.push(k);
+    // Keep the corridor where the link road will be extended free (the link road is wide).
+    const inCorridor = (k: number) => {
+      const x = ((k % GRID_CELLS) + 0.5) * CELL_SIZE - end.x;
+      const z = (Math.floor(k / GRID_CELLS) + 0.5) * CELL_SIZE - end.z;
+      const along = x * d.x + z * d.z;
+      return along > -4 && along < 260 && Math.abs(x * side.x + z * side.z) < 22;
+    };
+    for (let k = 0; k < GRID_CELLS * GRID_CELLS; k++) if (city.zones.zoneable[k] > 0 && !inCorridor(k)) cells.push(k);
     city.setZone(cells, ZoneType.Residential);
     const run = sim(city);
     run(1500);
@@ -162,5 +169,13 @@ describe('Style massing', () => {
       const shapes = new Set(ARCH_STYLES.map((a) => JSON.stringify(variantParts(def, 0, a).filter((p) => p.facade).map((p) => [p.size.map((n) => n.toFixed(1)), p.pos.map((n) => n.toFixed(1)), p.rot ?? null]))));
       expect(shapes.size, def.id).toBeGreaterThanOrEqual(ARCH_STYLES.length - 2);
     }
+  });
+});
+
+describe('Entry boulevard', () => {
+  it('the city entry road is the widest road in the game', async () => {
+    const { ROAD_TYPES } = await import('../../src/game/data/roads');
+    const entry = ROAD_TYPES.find((t) => t.id === 'citylink')!;
+    for (const t of ROAD_TYPES) if (t.id !== 'citylink') expect(entry.width).toBeGreaterThan(t.width);
   });
 });

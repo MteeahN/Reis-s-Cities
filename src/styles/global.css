@@ -2490,3 +2490,16 @@ kbd {
 .hud.walking .petition-card {
   display: none;
 }
+
+/* Pickers never run off the screen: they scroll sideways instead. */
+.toolbar-wrap > .subtoolbar {
+  max-width: calc(100vw - 32px);
+  overflow-x: auto;
+}
+.infra-picker.tabbed {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.infra-picker.tabbed .build-tabs {
+  width: 100%;
+}

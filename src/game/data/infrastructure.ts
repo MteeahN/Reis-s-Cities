@@ -1,5 +1,5 @@
 import type { BuildingDef } from './buildings';
-import { allotmentsModel, busDepotModel, carouselParkModel, clinicModel, formalGardenModel, kindergartenModel, libraryModel, parkingGarageModel, parkingLotModel, playgroundModel, sportsFieldModel, swimmingPoolModel, universityModel } from './models/civic2';
+import { allotmentsModel, busDepotModel, carouselParkModel, parkingSmallModel, parkingUndergroundModel, clinicModel, formalGardenModel, kindergartenModel, libraryModel, parkingGarageModel, parkingLotModel, playgroundModel, sportsFieldModel, swimmingPoolModel, universityModel } from './models/civic2';
 import { coalPlantModel, fireStationModel, garbageModel, highSchoolModel, hospitalModel, parkLargeModel, parkSmallModel, policeModel, schoolModel, sewageOutletModel, waterPumpModel, waterTowerModel, waterTreatmentModel, windTurbineModel } from './models/services';
 
 /**
@@ -419,8 +419,8 @@ export const INFRA_BUILDINGS: readonly BuildingDef[] = [
   infra({
     id: 'parking_lot',
     name: 'Açık Otopark',
-    description: 'Çizgili park yerleri. Oyun park yeri arayan sürücüleri ayrıca hesaplamaz: otopark görünüm içindir ve bir görevliye iş verir.',
-    group: 'landmark',
+    description: 'Çizgili park yerleri: önündeki yola 40 araçlık yer açar. Sokakta yer bulamayan sürücüler buraya park eder.',
+    group: 'service',
     footprint: [2, 2],
     cost: 1000,
     maintenance: 20,
@@ -432,8 +432,8 @@ export const INFRA_BUILDINGS: readonly BuildingDef[] = [
   infra({
     id: 'parking_garage',
     name: 'Katlı Otopark',
-    description: 'Dört katlı açık otopark. Oyun park yeri arayan sürücüleri ayrıca hesaplamaz: otopark görünüm içindir ve yedi kişiye iş verir.',
-    group: 'landmark',
+    description: 'Dört katlı açık otopark: önündeki yola 160 araçlık yer açar; yedi kişiye iş verir.',
+    group: 'service',
     footprint: [2, 2],
     cost: 1500,
     maintenance: 60,
@@ -441,5 +441,32 @@ export const INFRA_BUILDINGS: readonly BuildingDef[] = [
     pollution: 0,
     unlockPopulation: 300,
     model: parkingGarageModel(),
+  }),
+  infra({
+    id: 'parking_small',
+    name: 'Sokak Otoparkı',
+    description: 'İki sıra küçük açık otopark: önündeki yola 6 araçlık yer açar. Bina aralarına sığar.',
+    group: 'service',
+    footprint: [1, 2],
+    cost: 450,
+    maintenance: 10,
+    workers: 0,
+    pollution: 0,
+    unlockPopulation: 0,
+    model: parkingSmallModel(),
+  }),
+  infra({
+    id: 'parking_underground',
+    name: 'Yeraltı Otoparkı',
+    description: 'Üstü küçük bir park olan yeraltı otoparkı: önündeki yola 220 araçlık yer açar, yakınındaki arazinin değerini biraz artırır.',
+    group: 'service',
+    footprint: [2, 2],
+    cost: 4200,
+    maintenance: 120,
+    workers: 6,
+    pollution: 0,
+    unlockPopulation: 1000,
+    landValueEffect: { amount: 4, radius: 4 },
+    model: parkingUndergroundModel(),
   }),
 ];

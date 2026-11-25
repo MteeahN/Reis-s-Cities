@@ -254,6 +254,16 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   yere park eder ya da arsaya / garaja döner, yolculuk park edilmiş bir arabanın yanından başlıyorsa o araba
   park yerinden çıkar; uzun süre takılan araç kenara çeker, yol ağı değişince o an yoldakiler olduğu yerde park
   eder. Sokaklarda görünen park etmiş arabalar park modelinin o sokak için hesapladığı sayıdır.
+- **Otoparklar (Hizmetler → Ulaşım ve otopark):** Sokak Otoparkı (1×2, 6 araç, ₺450), Açık Otopark (2×2, 40),
+  Katlı Otopark (2×2, 160; 300 nüfus), Yeraltı Otoparkı (2×2, 220, üstü park; 1.000 nüfus). Her biri önündeki
+  yolun park yerlerine eklenir. "Sokağa park şeridi" yol aracını yenileme kipinde açar: tıklanan sokak iki yanı
+  park şeritli Otoparklı Sokak olur. Hizmet seçicisi sekmelere ayrıldı (Güvenlik, Sağlık, Eğitim, Ulaşım ve otopark,
+  Parklar) ve ekrandan taşmaz; itfaiye Güvenlik sekmesindedir (500 nüfusta açılır).
+- **Park manevrası:** araç park yerine şeritte ilerleyip yanaşarak girer, park yerinden önce yana açılıp sonra
+  şeride katılarak çıkar. Kaçak park edenler yarısı kaldırımda durur, yoldan geçen araçların önünü kesmez.
+- **Şehir Giriş Bulvarı:** şehirlerarası yoldan şehre giren yol şehrin en geniş yoludur: 32 m, 6 şerit, ortası
+  ağaçlı refüj. Eski kayıtlar yüklenince yolun yeni genişliğine düşen binalar geri çekilir (yer yoksa yıkılır) ve
+  oyun bunu bildirir.
 - **Yer açma:** hizmet ve diğer binalar başka binaların üzerine kurulabilir; araç arsadaki binaları turuncu
   önizlemeyle gösterir ve kurarken yıkar (oyuncu binalarının yarı fiyatı iade edilir). Bir yolu daha geniş bir
   yola dönüştürürken yeni yolun üzerine gelen binalar yoldan uzağa 1–3 hücre geri çekilir (aynı bina, sakinleri

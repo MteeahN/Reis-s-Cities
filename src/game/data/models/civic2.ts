@@ -312,3 +312,53 @@ export function busDepotModel(): Parts {
   fenceRect(p, 23.4, 15.4, 1.6, C.metalDark, 7);
   return p;
 }
+
+/** Small street car park (1×2): eight bays either side of a drive aisle, a pay machine and a hedge. */
+export function parkingSmallModel(): Parts {
+  const p: Parts = [];
+  box(p, [7.6, 0.22, 15.6], [0, 0, 0], C.asphalt);
+  // Two rows of parallel bays along the lot, the drive aisle between them.
+  for (const x of [-2.45, 2.45]) for (const z of [-7.6, -2.6, 2.6]) box(p, [1.9, 0.02, 0.12], [x, 0.22, z], C.white);
+  box(p, [0.12, 0.02, 13], [0, 0.22, 0], '#e0b23a');
+  for (let k = 0; k < 3; k++) {
+    if (k !== 1) vehicle(p, -2.45, -5.1 + k * 5.2, CAR_COLORS[(k + 2) % CAR_COLORS.length], C.dark, true, 4.2, 1.4);
+    if (k !== 2) vehicle(p, 2.45, -5.1 + k * 5.2, CAR_COLORS[(k + 5) % CAR_COLORS.length], C.dark, true, 4.2, 1.4);
+  }
+  box(p, [0.4, 1.3, 0.3], [3.4, 0.22, 7.2], C.metalDark);
+  box(p, [0.32, 0.4, 0.06], [3.4, 1.1, 7.36], '#2f6db5');
+  box(p, [7.4, 0.9, 0.5], [0, 0.22, -7.5], C.greenDark);
+  lamp(p, -3.4, 7.2, 4.5);
+  return p;
+}
+
+/** Underground car park (2×2): a small park on the roof, the ramp down, a stair kiosk and vents. */
+export function parkingUndergroundModel(): Parts {
+  const p: Parts = [];
+  box(p, [15.6, 0.25, 15.6], [0, 0, 0], C.lawn);
+  // Ramp down with walls and a height bar.
+  box(p, [4.2, 0.06, 9.5], [5, 0.25, 2.2], C.asphalt);
+  for (const x of [2.8, 7.2]) box(p, [0.3, 1.0, 9.5], [x, 0.25, 2.2], C.concrete);
+  box(p, [4.6, 0.25, 0.25], [5, 2.6, 6.8], '#e0b23a');
+  for (const x of [2.9, 7.1]) box(p, [0.2, 2.6, 0.2], [x, 0.25, 6.8], C.metalDark);
+  box(p, [3.6, 0.04, 2.4], [5, 0.31, -2.6], '#1d2024');
+  box(p, [1.6, 1.5, 0.08], [5, 0.25, -1.4], '#2f6db5');
+  box(p, [0.9, 0.9, 0.06], [5, 1.0, -1.34], C.white);
+  // Stair kiosk and ventilation stacks.
+  box(p, [2.6, 2.8, 2.6], [-5, 0.25, 4.8], C.concreteDark);
+  box(p, [3.0, 0.3, 3.0], [-5, 3.05, 4.8], '#5d6166');
+  box(p, [1.2, 2.0, 0.08], [-5, 0.25, 6.12], C.glassDark);
+  for (const [x, z] of [[-6, -5.5], [-2.5, -5.5]] as const) {
+    box(p, [1.2, 1.4, 1.2], [x, 0.25, z], C.concrete);
+    box(p, [1.3, 0.2, 1.3], [x, 1.65, z], C.metalDark);
+  }
+  // The roof garden: paths, benches, trees.
+  box(p, [1.4, 0.04, 15.6], [0.4, 0.26, 0], C.paving);
+  box(p, [8.6, 0.04, 1.4], [-3.4, 0.26, 0.6], C.paving);
+  bench(p, -3, 2.2);
+  bench(p, -5.8, -2.2, true);
+  tree(p, -6.4, 1.6, 0.8);
+  tree(p, -1.6, -3.2, 0.9, 'round');
+  tree(p, -6.2, -7.0, 0.7, 'cone');
+  lamp(p, -0.8, 6.6, 4);
+  return p;
+}

@@ -46,6 +46,7 @@
 32. ✅ Araba sahipliği (aile ve zenginliğe göre), park modeli, kaçak park ve polis cezası; araçlar kaybolmaz, park eder
 33. ✅ Yol genişleyince binalar geri çekilir / yıkılır; bina kurarken arsadaki binalar yıkılır
 34. ✅ Patika, ağaçlı refüjlü sokak, çimli refüjlü cadde; derinlikli pencereler; ayrıntılı otobüs; yumuşak gün doğumu
+35. ✅ Şehir Giriş Bulvarı (en geniş yol), sekmeli hizmet seçicisi, dört otopark türü ve park şeridi aracı, park manevraları
 
 ## Bilinen sınırlar (dürüst durum)
 

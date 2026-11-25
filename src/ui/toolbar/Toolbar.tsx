@@ -532,16 +532,55 @@ function buildingMeta(b: BuildingDef): string {
 
 const LINE_TOOL = { power: 'powerline', water: 'pipe' } as const;
 
+/** Service buildings by purpose (the picker shows one tab at a time; search looks through all). */
+const SERVICE_TABS: { id: string; name: string; ids: string[] }[] = [
+  { id: 'safety', name: 'Güvenlik', ids: ['police_station', 'fire_station'] },
+  { id: 'health', name: 'Sağlık', ids: ['clinic', 'hospital'] },
+  { id: 'education', name: 'Eğitim', ids: ['kindergarten', 'school', 'high_school', 'university', 'library'] },
+  { id: 'city', name: 'Ulaşım ve otopark', ids: ['parking_small', 'parking_lot', 'parking_garage', 'parking_underground', 'bus_depot', 'garbage_depot'] },
+  { id: 'parks', name: 'Parklar', ids: ['park_small', 'park_large', 'formal_garden', 'carousel_park', 'playground', 'allotments', 'sports_field', 'swimming_pool'] },
+];
+
 function InfraPicker({ group, lineKind }: { group: 'power' | 'water' | 'service'; lineKind?: 'power' | 'pipe' }) {
   const buildingType = useGameStore((s) => s.buildingType);
   const tool = useGameStore((s) => s.tool);
   const maxPop = useGameStore((s) => (s.sandbox ? Infinity : s.maxPopulation));
   const lineTool = group === 'power' ? LINE_TOOL.power : group === 'water' ? LINE_TOOL.water : null;
   const buildingTool = group === 'service' ? 'services' : group;
-  const catalog = useCatalog(buildingsInGroup(group));
+  const all = buildingsInGroup(group);
+  // Open on the tab of the building in hand.
+  const [tab, setTab] = useState(() => SERVICE_TABS.find((t) => t.ids.includes(buildingType))?.id ?? 'safety');
+  const inTab = (id: string) => {
+    const t = SERVICE_TABS.find((x) => x.id === tab);
+    // Anything not listed in a tab shows under the last one, so nothing is ever hidden.
+    return t ? t.ids.includes(id) || (tab === 'parks' && !SERVICE_TABS.some((x) => x.ids.includes(id))) : true;
+  };
+  const catalog = useCatalog(all);
+  const tabbed = group === 'service';
+  const items = tabbed && !catalog.searching ? catalog.items.filter((b) => inTab(b.id)) : catalog.items;
   return (
-    <div className="subtoolbar panel" data-testid={`picker-${group}`}>
+    <div className={`subtoolbar panel infra-picker ${tabbed ? 'tabbed' : ''}`} data-testid={`picker-${group}`}>
+      {tabbed && (
+        <div className="mode-group row build-tabs" role="tablist" aria-label="Hizmet türleri">
+          {SERVICE_TABS.map((t) => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} className={`mode-btn ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)} data-testid={`service-tab-${t.id}`}>
+              {t.name}
+            </button>
+          ))}
+        </div>
+      )}
       {catalog.controls}
+      {tabbed && tab === 'city' && (
+        <button
+          className="road-type building-card line-card"
+          onClick={() => getGame()?.startParkingLane()}
+          title="Yol aracını yenileme kipinde açar: tıkladığınız sokak otoparklı sokağa dönüşür (iki yanda park şeridi)."
+          data-testid="parking-lane-tool"
+        >
+          <span className="road-name">Sokağa park şeridi</span>
+          <span className="road-meta">yolu otoparklı sokağa çevir</span>
+        </button>
+      )}
       {lineKind && lineTool && (
         <button
           className={`road-type building-card line-card ${tool === lineTool ? 'active' : ''}`}
@@ -554,7 +593,7 @@ function InfraPicker({ group, lineKind }: { group: 'power' | 'water' | 'service'
         </button>
       )}
       {catalog.empty}
-      {catalog.items.map((b) => {
+      {items.map((b) => {
         const locked = maxPop < b.unlockPopulation;
         return (
           <button
