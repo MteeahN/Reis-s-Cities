@@ -2,20 +2,25 @@ import { Group, Mesh, MeshBasicMaterial, type Vector3 } from 'three';
 import { CELL_SIZE, GRID_CELLS } from '../core/config';
 import { MouseButton, type PointerInfo } from '../core/Input';
 import { getBuilding } from '../data/buildings';
-import { anchorFor, type BuildingPlan, type Rotation } from '../entities/building/BuildingPlacement';
+import { type BuildingPlan, type Rotation } from '../entities/building/BuildingPlacement';
 import { buildingGeometry } from '../entities/building/BuildingModels';
+import { gridPlanNear } from './placement/nearLot';
 import type { Tool, ToolContext } from './Tool';
 
 /**
  * Moves hand-placed buildings (landmarks, services, utilities) for free:
  * click a building to pick it up, a ghost follows the cursor (R rotates),
- * click again to drop it. Right click or ESC puts it back. Zoned buildings
+ * click again to drop it. Right click or ESC puts it back. Like a new
+ * building it turns to face the nearest road and is pulled to an angled or
+ * curved road's kerb (R turns it by hand, which stops both). Zoned buildings
  * grow where they stand and cannot be moved.
  */
 export class MoveTool implements Tool {
   readonly id = 'move' as const;
   private picked: number | null = null;
   private rot: Rotation = 0;
+  /** Turned with R: keep that turn, no road magnet. */
+  private manualRotation = false;
   private plan: BuildingPlan | null = null;
   private lastGround: Vector3 | null = null;
   private readonly ghost = new Group();
@@ -52,6 +57,7 @@ export class MoveTool implements Tool {
     }
     this.picked = id;
     this.rot = b.rot;
+    this.manualRotation = false;
     this.ghost.clear();
     const g = buildingGeometry(getBuilding(b.defId), 0, true, 'modern');
     for (const geo of [g.plain, g.facade, g.detail]) if (geo) this.ghost.add(new Mesh(geo, this.ghostMat));
@@ -66,15 +72,27 @@ export class MoveTool implements Tool {
     }
     const b = this.ctx.city.buildings.items.get(this.picked);
     if (!b) return this.drop();
-    const { i, j } = anchorFor(getBuilding(b.defId), this.rot, g.x, g.z);
-    const plan = this.ctx.city.planMove(this.picked, i, j, this.rot);
+    const city = this.ctx.city;
+    const id = this.picked;
+    const def = getBuilding(b.defId);
+    // Pulled to an angled road like a new building, else the nearest lot facing a road.
+    const magnet = this.manualRotation ? null : city.magnetMove(id, g.x, g.z);
+    const plan = magnet ?? gridPlanNear(city, def, g.x, g.z, this.rot, this.manualRotation, (i, j, r) => city.planMove(id, i, j, r)!);
+    if (!magnet && !this.manualRotation) this.rot = plan.rot;
     this.plan = plan;
-    if (!plan) return;
     this.ghost.visible = true;
-    this.ghost.position.set(plan.centerX, plan.baseY + 0.05, plan.centerZ);
-    this.ghost.rotation.y = (plan.rot * Math.PI) / 2;
+    // Drawn where it will stand: at the kerb (turned to an angled road, or moved up to a straight one).
+    if (plan.free) {
+      this.ghost.position.set(plan.free.x, plan.baseY + 0.05, plan.free.z);
+      this.ghost.rotation.y = plan.free.yaw;
+    } else {
+      const snap = city.roadSnap(plan.i, plan.j, plan.w, plan.d, plan.rot);
+      this.ghost.position.set(plan.centerX + (snap?.x ?? 0), plan.baseY + 0.05, plan.centerZ + (snap?.z ?? 0));
+      this.ghost.rotation.y = (plan.rot * Math.PI) / 2 + (snap?.yaw ?? 0);
+    }
     this.ghostMat.color.setHex(plan.valid ? 0x34d399 : 0xf87171);
-    this.ctx.world.terrainMaterial.setHover(plan.i * CELL_SIZE, plan.j * CELL_SIZE, (plan.i + plan.w) * CELL_SIZE, (plan.j + plan.d) * CELL_SIZE, plan.valid ? 0x34d399 : 0xff6b6b);
+    if (plan.free) this.ctx.world.terrainMaterial.clearHover();
+    else this.ctx.world.terrainMaterial.setHover(plan.i * CELL_SIZE, plan.j * CELL_SIZE, (plan.i + plan.w) * CELL_SIZE, (plan.j + plan.d) * CELL_SIZE, plan.valid ? 0x34d399 : 0xff6b6b);
   }
 
   onPointerMove(_p: PointerInfo, ground: Vector3 | null): void {
@@ -105,7 +123,7 @@ export class MoveTool implements Tool {
       return;
     }
     const name = getBuilding(plan.defId).name;
-    if (this.ctx.city.moveBuilding(this.picked, plan.i, plan.j, plan.rot)) {
+    if (this.ctx.city.moveBuilding(this.picked, plan.i, plan.j, plan.rot, plan.free)) {
       this.ctx.events.emit('sfx', 'place');
       this.ctx.events.emit('toast', { kind: 'success', text: `${name} taşındı` });
     }
@@ -117,6 +135,7 @@ export class MoveTool implements Tool {
   onKey(code: string): boolean {
     if (code === 'KeyR' && this.picked !== null) {
       this.rot = ((this.rot + 1) % 4) as Rotation;
+      this.manualRotation = true;
       this.refresh();
       return true;
     }

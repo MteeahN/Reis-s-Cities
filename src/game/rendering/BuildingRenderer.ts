@@ -258,10 +258,11 @@ export class BuildingRenderer {
       const tilted = !!b.seat && (b.seat.gx !== 0 || b.seat.gz !== 0);
       if (!tilted && base - b.minY > 0.05) {
         const depth = base - b.minY + 0.6;
+        // Turned with the building (a lot turned to an angled road has its plinth turned too).
         const f = new Matrix4().compose(
           new Vector3((b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0), base - depth + 0.05, (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0)),
-          new Quaternion(),
-          new Vector3(b.w * CELL_SIZE - 0.4, depth, b.d * CELL_SIZE - 0.4),
+          new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), (b.rot * Math.PI) / 2 + (b.oyaw ?? 0)),
+          new Vector3(def.footprint[0] * CELL_SIZE - 0.4, depth, def.footprint[1] * CELL_SIZE - 0.4),
         );
         this.foundation.add(b.id, f, WHITE);
       }

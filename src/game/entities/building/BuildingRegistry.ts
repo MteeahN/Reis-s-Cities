@@ -206,6 +206,32 @@ export class BuildingRegistry {
     return b;
   }
 
+  /**
+   * Lays a building off the grid, turned to a road, keeping its id and state
+   * (who lives or works there): its new nominal lot, the cells it covers and
+   * its fixed drawn offset.
+   */
+  relay(id: number, at: { i: number; j: number; rot: Rotation; w: number; d: number; baseY: number; minY: number }, free: { cells: number[]; ox: number; oz: number; oyaw: number }): PlacedBuilding | null {
+    const b = this.items.get(id);
+    if (!b) return null;
+    const before = { ...b, cells: [...b.cells] };
+    delete b.seat;
+    delete b.oyaw;
+    Object.assign(b, at, { free: [...free.cells], cells: [...free.cells], ox: free.ox, oz: free.oz }, free.oyaw ? { oyaw: free.oyaw } : {});
+    this.emit({ added: [b], removed: [before] });
+    return b;
+  }
+
+  /** Puts a building back exactly as it was (`to`: a copy taken before it changed). */
+  reset(id: number, to: PlacedBuilding): void {
+    const b = this.items.get(id);
+    if (!b) return;
+    const before = { ...b, cells: [...b.cells] };
+    for (const k of Object.keys(b)) delete (b as unknown as Record<string, unknown>)[k];
+    Object.assign(b, to, { cells: [...to.cells] });
+    this.emit({ added: [b], removed: [before] });
+  }
+
   remove(id: number): PlacedBuilding | null {
     const b = this.items.get(id);
     if (!b) return null;

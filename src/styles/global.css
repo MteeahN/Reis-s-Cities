@@ -2503,3 +2503,53 @@ kbd {
 .infra-picker.tabbed .build-tabs {
   width: 100%;
 }
+
+/*
+ * Bottom bar layout: the minimap and the demand meter stand at the bottom
+ * left; the toolbar (and the pickers above it) is centred in the space to
+ * their right, so it never covers them, and gets more compact on narrower
+ * screens (labels go last; the hotkey stays in each button's tooltip).
+ */
+.toolbar-wrap {
+  left: 312px;
+  right: 10px;
+  transform: none;
+}
+.toolbar-wrap > .toolbar {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.toolbar-wrap > .subtoolbar {
+  max-width: 100%;
+}
+@media (max-width: 1760px) {
+  .tool {
+    width: 60px;
+  }
+}
+@media (max-width: 1560px) {
+  .tool {
+    width: 52px;
+    padding: 7px 2px 5px;
+  }
+  .tool-label {
+    font-size: 9.5px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tool kbd {
+    display: none;
+  }
+}
+@media (max-width: 1340px) {
+  .tool {
+    width: 42px;
+    padding: 9px 2px;
+  }
+  .tool-label {
+    display: none;
+  }
+}

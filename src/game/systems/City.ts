@@ -6,14 +6,14 @@ import { UtilityLines } from '../entities/infra/UtilityLines';
 import { bezierTangent, sampleBezier, type P2 } from '../entities/road/curve';
 import { ServiceCoverage } from '../simulation/Services';
 import { computeUtilities, type UtilityResult } from '../simulation/Utilities';
-import { getBuilding, storeysOf } from '../data/buildings';
+import { getBuilding, storeysOf, zonedTemplates, type BuildingDef } from '../data/buildings';
 import { getRoadType, type RoadSurface, type RoadTypeDef } from '../data/roads';
 import { getZone, ZoneType, type ZoneKind } from '../data/zones';
 import { footprintCells, frontCells, frontStep, hasRoadAccess, MAX_FOUNDATION_DROP, planBuilding, type BuildingPlan, type FreeSpot, type PlacementWorld, type Rotation } from '../entities/building/BuildingPlacement';
 import { BuildingRegistry, type GroundSeat, type PlacedBuilding } from '../entities/building/BuildingRegistry';
 import { RoadGraph, type RoadEdge } from '../entities/road/RoadGraph';
 import { LandValueMap, waterProximity } from '../simulation/LandValue';
-import type { Lot, LotWorld } from '../simulation/LotFinder';
+import { MAX_LOT_SLOPE, roadFacings, type Lot, type LotWorld } from '../simulation/LotFinder';
 import { Population } from '../simulation/Population';
 import { ATTACH_RADIUS, TrafficModel, type Attach } from '../simulation/traffic/TrafficModel';
 import { commitRoad, planRoad, planUpgrade, type Anchor, type PlannerWorld, type RoadPlan, type UpgradePlan } from '../tools/placement/RoadPlanner';
@@ -1048,9 +1048,8 @@ export class City {
     const j = Math.floor(k / GRID_CELLS);
     if (this.zones.zoneable[k] === 0 || this.occupancy.road[k] > 0) return false;
     if (!this.world.isCellUnlocked(i, j) || !this.world.grid.isBuildable(i, j)) return false;
-    const bid = this.occupancy.building[k];
-    if (bid && !this.buildings.items.get(bid)?.zone) return false; // player-placed building
-    return true;
+    // Not under a player-placed building.
+    return this.occupancy.ownersAt(k).every((id) => !!this.buildings.items.get(id)?.zone);
   }
 
   /**
@@ -1111,10 +1110,9 @@ export class City {
         if ((sIdx >= 0 && this.districtStyle[k] !== sIdx) || this.rulesDiffer(k, rules)) restyle.push(k);
         continue;
       }
-      const bid = this.occupancy.building[k];
-      const b = bid ? this.buildings.items.get(bid) : undefined;
-      if (b && !b.zone) continue; // never touch player buildings
-      if (b && b.zone !== type) bulldoze.add(b.id);
+      const on = this.occupancy.ownersAt(k).map((id) => this.buildings.items.get(id)).filter((b) => !!b);
+      if (on.some((b) => !b.zone)) continue; // never touch player buildings
+      for (const b of on) if (b.zone !== type) bulldoze.add(b.id);
       valid.push(k);
     }
     for (const id of bulldoze) this.removeGrowable(id);
@@ -1188,23 +1186,33 @@ export class City {
 
   // ---------------------------------------------------------------- growables
 
-  spawnGrowable(lot: Lot, tick: number, tint: number): PlacedBuilding {
+  /**
+   * Puts up a growable on a lot the simulation found. Beside an angled or
+   * curved road it is turned to the road and laid at the kerb next to its
+   * neighbours (see growAlongRoad); null when it fits neither that way nor
+   * square at the kerb (the zone there waits for another lot).
+   */
+  spawnGrowable(lot: Lot, tick: number, tint: number): PlacedBuilding | null {
+    const along = this.growAlongRoad(lot);
+    if (along === 'skip') return null;
+    const at = along ? this.nominalLot(lot.def.footprint, along.spot) : { ...lot, ox: 0, oz: 0, oyaw: 0 };
     const b = this.buildings.create({
       defId: lot.def.id,
-      i: lot.i,
-      j: lot.j,
-      rot: lot.rot,
-      w: lot.w,
-      d: lot.d,
-      baseY: lot.baseY,
-      minY: lot.minY,
+      i: at.i,
+      j: at.j,
+      rot: at.rot,
+      w: at.w,
+      d: at.d,
+      baseY: along ? along.baseY : lot.baseY,
+      minY: along ? along.minY : lot.minY,
       cost: 0,
       zone: lot.def.zone!,
       level: lot.def.level ?? 1,
       state: 'construction',
       tint,
       sinceTick: tick,
-      style: this.styleOfLot(lot.i, lot.j, lot.w, lot.d),
+      style: this.styleOfLot(at.i, at.j, at.w, at.d),
+      ...(along ? { free: along.cells, ox: at.ox, oz: at.oz, ...(at.oyaw ? { oyaw: at.oyaw } : {}) } : {}),
     });
     this.occupancy.setBuilding(b.id, b.cells);
     this.resnapAround(b);
@@ -1428,47 +1436,337 @@ export class City {
     const def = getBuilding(defId);
     if (def.utility?.requiresShore) return null;
     const first = this.magnetSpot(def.footprint, x, z);
-    if (!first) return null;
     // Square to the grid already: the grid placement is the same, and neater.
-    const quarter = Math.PI / 2;
-    const off = first.yaw / quarter - Math.round(first.yaw / quarter);
-    if (Math.abs(off * quarter) < (3 * Math.PI) / 180) return null;
+    if (!first || squareToGrid(first.yaw)) return null;
     const fits = (s: FreeSpot) => this.freeGeometryErrors(def.footprint, s).length === 0;
-    // Slide along the road to a free place nearest the cursor.
+    return this.planFree(defId, this.magnetSlide(def.footprint, x, z, first, fits, 2.5) ?? first);
+  }
+
+  /**
+   * From the magnet spot nearest (x, z), slides along the road to the nearest
+   * place that `fits` (up to `span` m either way, 1.5 lot widths by default), then closes a gap of
+   * up to `close` m to a neighbour, so buildings stand side by side. Null when
+   * nothing fits.
+   */
+  private magnetSlide(
+    footprint: readonly [number, number] | number[],
+    x: number,
+    z: number,
+    first: FreeSpot & { tx: number; tz: number },
+    fits: (s: FreeSpot) => boolean,
+    close: number,
+    span = Math.max(footprint[0], footprint[1]) * CELL_SIZE * 1.5,
+  ): FreeSpot | null {
     let best: { spot: FreeSpot; shift: number } | null = fits(first) ? { spot: first, shift: 0 } : null;
-    const step = 0.5;
-    const span = Math.max(def.footprint[0], def.footprint[1]) * CELL_SIZE * 1.5;
-    for (let k = 1; !best && k * step <= span; k++) {
+    for (let k = 1; !best && k <= span; k++) {
       for (const sgn of [1, -1]) {
-        const s = this.magnetSpot(def.footprint, x + first.tx * sgn * k * step, z + first.tz * sgn * k * step);
+        const s = this.magnetSpot(footprint, x + first.tx * sgn * k, z + first.tz * sgn * k);
         if (s && fits(s)) {
-          best = { spot: s, shift: sgn * k * step };
+          best = { spot: s, shift: sgn * k };
           break;
         }
       }
     }
-    if (!best) return this.planFree(defId, first);
-    // Magnet to a neighbour: close a gap of up to 2.5 m along the road.
-    let snapped = best.spot;
+    if (!best) return null;
+    const from = best;
+    // Magnet to the nearer neighbour: close the gap along the road (none when it already touches one),
+    // a metre at a time, then the last metre a quarter at a time.
+    const steps: number[] = [];
+    for (let t = 1; t < close; t++) steps.push(t);
+    steps.push(close);
+    let pick: { spot: FreeSpot; travel: number } | null = null;
     for (const sgn of [1, -1]) {
-      let last: FreeSpot | null = null;
+      const at = (t: number) => this.magnetSpot(footprint, x + first.tx * (from.shift + sgn * t), z + first.tz * (from.shift + sgn * t));
+      let last: { spot: FreeSpot; travel: number } | null = null;
       let hit = false;
-      for (let k = 1; k <= 10; k++) {
-        const d = best.shift + sgn * k * 0.25;
-        const s = this.magnetSpot(def.footprint, x + first.tx * d, z + first.tz * d);
+      let stop = Infinity;
+      for (const t of steps) {
+        const s = at(t);
         if (!s) break;
         if (!fits(s)) {
-          hit = this.freeGeometryErrors(def.footprint, s).includes('Başka bir binayla çakışıyor');
+          hit = this.freeGeometryErrors(footprint, s).includes('Başka bir binayla çakışıyor');
+          stop = t;
           break;
         }
-        last = s;
+        last = { spot: s, travel: t };
       }
-      if (hit && last) {
-        snapped = last;
-        break;
+      if (!hit) continue;
+      for (let t = (last?.travel ?? 0) + 0.25; t < stop - 1e-6; t += 0.25) {
+        const s = at(t);
+        if (!s || !fits(s)) break;
+        last = { spot: s, travel: t };
+      }
+      if (!last) return from.spot;
+      if (!pick || last.travel < pick.travel) pick = last;
+    }
+    return pick?.spot ?? from.spot;
+  }
+
+  /**
+   * Where a growable found on a grid lot is built when that lot faces an
+   * angled or curved road: turned to the road with its front at the kerb, up
+   * against its neighbours, on cells of its own zone (the way lots run along
+   * a street, not a stair of squares with grass wedges between them and the
+   * road). Null: the road runs with the grid, build the lot as found. 'skip':
+   * no such place fits here and the square lot would not meet the road either.
+   */
+  private growAlongRoad(lot: Lot): { spot: FreeSpot; cells: number[]; baseY: number; minY: number } | null | 'skip' {
+    const def = lot.def;
+    const fits = this.growFits(def);
+    if (lot.free) return fits(lot.free) ? this.freeGround(def, lot.free) : 'skip';
+    const cx = (lot.i + lot.w / 2) * CELL_SIZE;
+    const cz = (lot.j + lot.d / 2) * CELL_SIZE;
+    const first = this.magnetSpot(def.footprint, cx, cz);
+    if (!first || squareToGrid(first.yaw)) return null;
+    const spot = this.magnetSlide(def.footprint, cx, cz, first, fits, CELL_SIZE * 1.25);
+    if (spot) return this.freeGround(def, spot);
+    // No room along the road: the square lot, only if it too is drawn at the kerb.
+    const flush = frontCells(lot.i, lot.j, lot.w, lot.d, lot.rot, 1).every(([ci, cj]) => this.occupancy.hasRoad(ci, cj));
+    return flush || this.roadSnap(lot.i, lot.j, lot.w, lot.d, lot.rot) ? null : 'skip';
+  }
+
+  /**
+   * Growables built square on the grid beside an angled or curved road before
+   * they grew along it (older saves): each one whose front does not meet the
+   * kerb is turned to the road and moved up to it, next to its neighbours, on
+   * cells of its own zone, keeping its id, level and who lives or works there.
+   * Its neighbours on the grid already turned to that road are laid along it
+   * with it (their cells stand in the way otherwise). One with no room stays
+   * as it was. Returns how many that stood off the kerb now meet it.
+   */
+  fitGrowablesToRoads(): number {
+    const growables = [...this.buildings.items.values()].filter((b) => b.zone && !b.free && b.state !== 'burning');
+    const gaps = new Map(growables.map((b) => [b.id, this.drawnFrontGap(b)]));
+    const off = new Set(growables.filter((b) => this.looseBesideAngledRoad(b)).map((b) => b.id));
+    if (off.size === 0) return 0;
+    const turned = (b: PlacedBuilding) => Math.abs(b.oyaw ?? 0) > (3 * Math.PI) / 180;
+    const loose = growables.filter((b) => off.has(b.id) || turned(b));
+    // A second row: far back from the kerb, behind the stair of lots (last: the street may have no room for it).
+    const deep = (b: PlacedBuilding) => off.has(b.id) && gaps.get(b.id)! >= CELL_SIZE * 0.75;
+    // Front row first, each in order along its road so it closes up to the one before (as a street fills).
+    const along = new Map(
+      loose.map((b) => {
+        const hit = this.roads.nearestEdge((b.i + b.w / 2) * CELL_SIZE, (b.j + b.d / 2) * CELL_SIZE, CELL_SIZE * 6, true);
+        return [b.id, (deep(b) ? 1e6 : 0) + (hit ? hit.edge.id * 2 + hit.t : 1e5)];
+      }),
+    );
+    loose.sort((x, y) => along.get(x.id)! - along.get(y.id)! || x.id - y.id);
+    this.relayTogether(loose);
+    // Any left where they were may still find room one at a time.
+    this.relayOneByOne(loose.filter((b) => this.buildings.items.has(b.id) && !b.free && off.has(b.id)));
+    return loose.filter((b) => off.has(b.id) && b.free).length;
+  }
+
+  /**
+   * Is this building's drawn front off the kerb of an angled or curved road:
+   * some of it 1.5 m or more away (a square lot on a diagonal touches it with
+   * one corner at most)?
+   */
+  private looseBesideAngledRoad(b: PlacedBuilding): boolean {
+    const gap = this.drawnFrontGap(b, true);
+    if (gap < 1.5 || !Number.isFinite(gap)) return false;
+    const first = this.magnetSpot(getBuilding(b.defId).footprint, (b.i + b.w / 2) * CELL_SIZE, (b.j + b.d / 2) * CELL_SIZE);
+    return !!first && !squareToGrid(first.yaw);
+  }
+
+  /**
+   * Re-lays the loose buildings all at once: off their cells first, so
+   * neighbours in a stair along the road don't block each other, then each
+   * laid at the kerb in turn. One with no room stays where it was, and the
+   * others are laid again around it; a re-laid building still in the way of
+   * one left in place goes back to where it was too (the old places never
+   * clashed, so this ends).
+   */
+  private relayTogether(loose: PlacedBuilding[]): void {
+    const before = new Map(loose.map((b) => [b.id, { ...b, cells: [...b.cells] }]));
+    const touched = new Set<number>();
+    for (const b of loose) for (const k of b.cells) touched.add(k);
+    const keep = new Set<number>();
+    let placed: PlacedBuilding[] = [];
+    let pending: PlacedBuilding[] = [];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const movers = loose.filter((b) => !keep.has(b.id));
+      for (const b of movers) this.occupancy.clearBuilding(b.id, b.cells);
+      pending = movers;
+      // Twice: the ones with no room at first may find it once the street has closed up.
+      for (let round = 0; round < 2 && pending.length; round++) {
+        const next: PlacedBuilding[] = [];
+        for (const b of pending) {
+          const found = this.relayTarget(b);
+          if (!found) {
+            next.push(b);
+            continue;
+          }
+          this.applyRelay(b, found);
+          for (const k of found.cells) touched.add(k);
+          placed.push(b);
+        }
+        pending = next;
+      }
+      for (const b of pending) this.occupancy.setBuilding(b.id, b.cells);
+      // Done when those left over that must stay stand clear; else try again with them kept in place.
+      const stuck = pending.filter((b) => this.inTheWayOf(b).length > 0);
+      if (stuck.length === 0 || attempt === 2) break;
+      for (const b of stuck) keep.add(b.id);
+      for (const q of placed) {
+        this.occupancy.clearBuilding(q.id, q.cells);
+        this.buildings.reset(q.id, before.get(q.id)!);
+        this.occupancy.setBuilding(q.id, q.cells);
+      }
+      placed = [];
+    }
+    pending = loose.filter((b) => !placed.includes(b));
+    const moved = new Set(placed.map((b) => b.id));
+    const queue = [...pending];
+    while (queue.length) {
+      const k = queue.pop()!;
+      for (const id of this.inTheWayOf(k)) {
+        if (!moved.has(id)) continue;
+        const q = this.buildings.items.get(id)!;
+        this.occupancy.clearBuilding(id, q.cells);
+        this.buildings.reset(id, before.get(id)!);
+        this.occupancy.setBuilding(id, q.cells);
+        moved.delete(id);
+        queue.push(q);
       }
     }
-    return this.planFree(defId, snapped);
+    for (const b of placed) {
+      if (!moved.has(b.id)) continue;
+      this.resnapAround(b);
+      this.clearVegetationOf(b);
+    }
+    // The zone map saw cells come and go on the way: settle it on the end state.
+    for (const k of touched) this.zones.refresh(k, this.isCellFree(k));
+    this.zones.touch([...touched]);
+  }
+
+  /** Re-lays loose buildings one at a time (each only where it has room now); two passes. */
+  private relayOneByOne(loose: PlacedBuilding[]): number {
+    let moved = 0;
+    for (let pass = 0; pass < 2; pass++) {
+      let now = 0;
+      for (const b of loose) {
+        if (b.free || !this.buildings.items.has(b.id)) continue;
+        const found = this.withoutOwnCells(b, () => this.relayTarget(b));
+        if (!found) continue;
+        this.applyRelay(b, found);
+        this.resnapAround(b);
+        this.clearVegetationOf(b);
+        now++;
+      }
+      moved += now;
+      if (now === 0) break;
+    }
+    return moved;
+  }
+
+  /** Where a loose growable (its cells counted free) stands along the road: at the kerb, by its neighbours, on its zone. */
+  private relayTarget(b: PlacedBuilding): { spot: FreeSpot; cells: number[]; baseY: number; minY: number } | null {
+    const def = getBuilding(b.defId);
+    // From where it is drawn: one already at the kerb stays about where it is.
+    const cx = (b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0);
+    const cz = (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0);
+    const first = this.magnetSpot(def.footprint, cx, cz);
+    if (!first || squareToGrid(first.yaw)) return null;
+    const spot = this.magnetSlide(def.footprint, cx, cz, first, this.growFits(def), CELL_SIZE * 1.25, CELL_SIZE * 1.5);
+    return spot && this.freeGround(def, spot);
+  }
+
+  private applyRelay(b: PlacedBuilding, found: { spot: FreeSpot; cells: number[]; baseY: number; minY: number }): void {
+    const at = this.nominalLot(getBuilding(b.defId).footprint, found.spot);
+    // Cells first, so the zone map sees the lot it leaves and the one it takes.
+    this.occupancy.clearBuilding(b.id, b.cells);
+    this.occupancy.setBuilding(b.id, found.cells);
+    this.buildings.relay(b.id, { i: at.i, j: at.j, rot: at.rot, w: at.w, d: at.d, baseY: found.baseY, minY: found.minY }, { cells: found.cells, ox: at.ox, oz: at.oz, oyaw: at.oyaw });
+  }
+
+  /** Buildings standing on building b's cells or over it as drawn. */
+  private inTheWayOf(b: PlacedBuilding): number[] {
+    const out = new Set<number>();
+    for (const k of b.cells) for (const id of this.occupancy.ownersAt(k)) if (id !== b.id) out.add(id);
+    const mine = this.drawnCorners(b.i, b.j, b.w, b.d, { x: b.ox ?? 0, z: b.oz ?? 0, yaw: b.oyaw ?? 0 }, 0.3);
+    const seen = new Set<number>([b.id]);
+    for (let cj = b.j - 3; cj < b.j + b.d + 3; cj++) {
+      for (let ci = b.i - 3; ci < b.i + b.w + 3; ci++) {
+        if (ci < 0 || cj < 0 || ci >= GRID_CELLS || cj >= GRID_CELLS) continue;
+        for (const id of this.occupancy.ownersAt(cj * GRID_CELLS + ci)) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const o = this.buildings.items.get(id);
+          if (o && quadsOverlap(mine, this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3))) out.add(id);
+        }
+      }
+    }
+    return [...out];
+  }
+
+  /** Gap (m) from a building's drawn front (centre and both corners) to the nearest kerb: the smallest (or the largest). */
+  private drawnFrontGap(b: PlacedBuilding, largest = false): number {
+    const yaw = (b.rot * Math.PI) / 2 + (b.oyaw ?? 0);
+    const fp = getBuilding(b.defId).footprint;
+    const hw = (fp[0] * CELL_SIZE) / 2;
+    const hd = (fp[1] * CELL_SIZE) / 2;
+    const cx = (b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0);
+    const cz = (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0);
+    const accept = (e: RoadEdge) => !this.roads.isElevated(e);
+    let gap = largest ? -Infinity : Infinity;
+    for (const s of [0, 0.95, -0.95]) {
+      const x = cx + Math.sin(yaw) * hd + Math.cos(yaw) * hw * s;
+      const z = cz + Math.cos(yaw) * hd - Math.sin(yaw) * hw * s;
+      const near = this.roads.nearestEdge(x, z, CELL_SIZE * 4, true, accept);
+      const g = near ? near.dist - getRoadType(near.edge.typeId).width / 2 : Infinity;
+      gap = largest ? Math.max(gap, g) : Math.min(gap, g);
+    }
+    return gap;
+  }
+
+  /**
+   * A lot for seed cell k beside an angled or curved road where no square
+   * grid lot fits any more (the gaps left between buildings turned to the
+   * road): the first of the zone's templates that fits along the road there.
+   * Null beside roads that run with the grid, or when nothing fits.
+   */
+  freeLotAt(k: number, zone: ZoneKind, rand: () => number): Lot | null {
+    const i = k % GRID_CELLS;
+    const j = Math.floor(k / GRID_CELLS);
+    if (this.zones.zone[k] !== zone || roadFacings(i, j, this.lotWorld).length === 0) return null;
+    const x = (i + 0.5) * CELL_SIZE;
+    const z = (j + 0.5) * CELL_SIZE;
+    const templates = zonedTemplates(zone, 1, undefined, this.rulesAt(i, j));
+    for (let n = templates.length - 1; n > 0; n--) {
+      const m = Math.floor(rand() * (n + 1));
+      [templates[n], templates[m]] = [templates[m], templates[n]];
+    }
+    for (const def of templates) {
+      const first = this.magnetSpot(def.footprint, x, z);
+      if (!first || squareToGrid(first.yaw)) return null;
+      // Only close by: the seed's own gap, not a place further along the street.
+      const spot = this.magnetSlide(def.footprint, x, z, first, this.growFits(def), CELL_SIZE * 1.25, CELL_SIZE / 2);
+      if (!spot) continue;
+      const at = this.nominalLot(def.footprint, spot);
+      const g = this.freeGround(def, spot);
+      return { def, i: at.i, j: at.j, rot: at.rot, w: at.w, d: at.d, baseY: g.baseY, minY: g.minY, free: spot };
+    }
+    return null;
+  }
+
+  /** Can a growable stand at this free spot: clear of roads and buildings as drawn, on dry cells of its own zone, on gentle ground? */
+  private growFits(def: BuildingDef): (s: FreeSpot) => boolean {
+    const zone = def.zone!;
+    return (s) => {
+      if (this.freeGeometryErrors(def.footprint, s).length) return false;
+      for (const k of this.freeCells(def.footprint, s).cells) {
+        if (this.zones.zone[k] !== zone || !this.world.grid.isBuildable(k % GRID_CELLS, Math.floor(k / GRID_CELLS))) return false;
+      }
+      const g = this.freeGround(def, s);
+      return g.baseY - g.minY <= MAX_LOT_SLOPE;
+    };
+  }
+
+  /** Cells and ground heights (highest, lowest) under a free spot. */
+  private freeGround(def: BuildingDef, spot: FreeSpot): { spot: FreeSpot; cells: number[]; baseY: number; minY: number } {
+    const h = [...this.freeQuad(def.footprint, spot), spot].map((p) => this.world.heightAt(p.x, p.z));
+    return { spot, cells: this.freeCells(def.footprint, spot).cells, baseY: Math.max(...h), minY: Math.min(...h) };
   }
 
   /**
@@ -1591,7 +1889,9 @@ export class City {
         if (this.occupancy.hasRoad(i, j)) continue;
         if (!this.world.isCellUnlocked(i, j)) errors.add('Satın alınmamış arazi');
         if (this.world.grid.isWater(i, j)) errors.add('Su üzerine inşa edilemez');
-        if (this.occupancy.buildingAt(i, j) !== 0) errors.add('Başka bir binayla çakışıyor');
+        // A cell another building turned to the road also stands on is shared (their
+        // drawn lots are checked apart); a building square on the grid owns its cells.
+        if (this.occupancy.ownersAt(j * GRID_CELLS + i).some((id) => !this.buildings.items.get(id)?.free)) errors.add('Başka bir binayla çakışıyor');
         cells.push(j * GRID_CELLS + i);
       }
     }
@@ -1609,14 +1909,16 @@ export class City {
     const r = 2;
     let clash = false;
     for (let cj = Math.floor(Math.min(...zs) / CELL_SIZE) - r; cj <= Math.floor(Math.max(...zs) / CELL_SIZE) + r && !clash; cj++) {
-      for (let ci = Math.floor(Math.min(...xs) / CELL_SIZE) - r; ci <= Math.floor(Math.max(...xs) / CELL_SIZE) + r; ci++) {
-        const id = this.occupancy.buildingAt(ci, cj);
-        if (!id || seen.has(id)) continue;
-        seen.add(id);
-        const o = this.buildings.items.get(id);
-        if (o && quadsOverlap(mine, this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3))) {
-          clash = true;
-          break;
+      for (let ci = Math.floor(Math.min(...xs) / CELL_SIZE) - r; ci <= Math.floor(Math.max(...xs) / CELL_SIZE) + r && !clash; ci++) {
+        if (ci < 0 || cj < 0 || ci >= GRID_CELLS || cj >= GRID_CELLS) continue;
+        for (const id of this.occupancy.ownersAt(cj * GRID_CELLS + ci)) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const o = this.buildings.items.get(id);
+          if (o && quadsOverlap(mine, this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3))) {
+            clash = true;
+            break;
+          }
         }
       }
     }
@@ -2034,23 +2336,49 @@ export class City {
 
   // ---------------------------------------------------------------- moving
 
-  /** Can player building `id` stand at (i, j, rot)? Its own cells count as free. Moving is free. */
-  planMove(id: number, i: number, j: number, rot: Rotation): BuildingPlan | null {
+  /**
+   * Can player building `id` stand at (i, j, rot), or off the grid at `free`
+   * (turned to an angled road)? Its own place counts as free. Moving is free.
+   */
+  planMove(id: number, i: number, j: number, rot: Rotation, free?: FreeSpot): BuildingPlan | null {
     const b = this.buildings.items.get(id);
     if (!b || b.zone) return null;
-    this.occupancy.clearBuilding(id, b.cells);
-    const plan = planBuilding(getBuilding(b.defId), i, j, rot, this.placementWorld, Infinity, 0);
-    this.occupancy.setBuilding(id, b.cells);
+    return this.asMove(this.withoutOwnCells(b, () => (free ? this.planFree(b.defId, free) : planBuilding(getBuilding(b.defId), i, j, rot, this.placementWorld, Infinity, 0))));
+  }
+
+  /**
+   * Moving a player building near an angled or curved road: pulled to the
+   * road like a new one (see magnetPlan). Null when no such road is near.
+   */
+  magnetMove(id: number, x: number, z: number): BuildingPlan | null {
+    const b = this.buildings.items.get(id);
+    if (!b || b.zone) return null;
+    const plan = this.withoutOwnCells(b, () => this.magnetPlan(b.defId, x, z));
+    return plan && this.asMove(plan);
+  }
+
+  /** Runs `fn` with building b's cells counted as free (planning where it moves to). */
+  private withoutOwnCells<T>(b: PlacedBuilding, fn: () => T): T {
+    this.occupancy.clearBuilding(b.id, b.cells);
+    try {
+      return fn();
+    } finally {
+      this.occupancy.setBuilding(b.id, b.cells);
+    }
+  }
+
+  /** A placement plan as a move: free of charge, and the building may be one of a kind (it is itself). */
+  private asMove(plan: BuildingPlan): BuildingPlan {
     plan.cost = 0;
-    plan.errors = plan.errors.filter((e) => e !== 'Yetersiz bütçe' && !e.startsWith('Bu binadan'));
+    plan.errors = plan.errors.filter((e) => e !== 'Yetersiz bütçe' && !e.startsWith('Bu binadan') && !e.endsWith('zaten inşa edildi'));
     plan.valid = plan.errors.length === 0;
     return plan;
   }
 
-  /** Moves a hand-placed (non-zoned) building. Returns the building at its new spot. */
-  moveBuilding(id: number, i: number, j: number, rot: Rotation): PlacedBuilding | null {
+  /** Moves a hand-placed (non-zoned) building, onto the grid or off it (`free`). Returns the building at its new spot. */
+  moveBuilding(id: number, i: number, j: number, rot: Rotation, free?: FreeSpot): PlacedBuilding | null {
     const b = this.buildings.items.get(id);
-    const plan = this.planMove(id, i, j, rot);
+    const plan = this.planMove(id, i, j, rot, free);
     if (!b || !plan?.valid) return null;
     const from = spotOf(b);
     this.buildings.remove(id);
@@ -2188,7 +2516,7 @@ export class City {
       }
       if (e.kind === 'move') {
         const to = dir === 'undo' ? e.from : e.to;
-        const moved = this.buildings.items.has(e.id) ? this.moveBuilding(e.id, to.i, to.j, to.rot) : null;
+        const moved = this.buildings.items.has(e.id) ? this.moveBuilding(e.id, to.i, to.j, to.rot, to.free) : null;
         if (!moved) return 'Bina eski yerine sığmıyor';
         e.id = moved.id;
         return null;
@@ -2255,6 +2583,11 @@ const spotOf = (b: PlacedBuilding): Spot => ({
 });
 /** How far (m) beyond a building's own depth the road magnet reaches. */
 const MAGNET_REACH = CELL_SIZE * 2;
+/** Is this turn within 3° of a quarter turn (a road running with the grid)? */
+const squareToGrid = (yaw: number): boolean => {
+  const quarter = Math.PI / 2;
+  return Math.abs((yaw / quarter - Math.round(yaw / quarter)) * quarter) < (3 * Math.PI) / 180;
+};
 const ledgerOf = (defId: string) => ((getBuilding(defId).group ?? 'landmark') === 'landmark' ? 'buildings' : 'infra') as 'buildings' | 'infra';
 
 /** Do two convex quads (corner lists) overlap? Separating-axis test. */

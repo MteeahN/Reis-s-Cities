@@ -1,10 +1,11 @@
 import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, type Vector3 } from 'three';
-import { CELL_SIZE, GRID_CELLS } from '../core/config';
+import { CELL_SIZE } from '../core/config';
 import { MouseButton, type PointerInfo } from '../core/Input';
 import { buildingsInGroup, getBuilding, type BuildingDef } from '../data/buildings';
 import type { ArchStyle } from '../data/styles';
 import { layerForBuilding } from '../rendering/InfoLayers';
-import { anchorFor, bestRotation, frontCells, frontStep, type BuildingPlan, type Rotation } from '../entities/building/BuildingPlacement';
+import { type BuildingPlan, type Rotation } from '../entities/building/BuildingPlacement';
+import { gridPlanNear } from './placement/nearLot';
 import { buildingGeometry } from '../entities/building/BuildingModels';
 import type { Tool, ToolContext } from './Tool';
 
@@ -96,42 +97,10 @@ export class BuildingTool implements Tool {
       return;
     }
     const city = this.ctx.city;
-    if (!this.manualRotation) this.rot = bestRotation(this.def, g.x, g.z, this.rot, city.placementWorld);
-    const { i, j } = anchorFor(this.def, this.rot, g.x, g.z);
     // Near an angled or curved road the building is pulled to it (any angle), unless the player turned it by hand.
     const magnet = this.manualRotation ? null : city.magnetPlan(this.def.id, g.x, g.z);
-    let plan = magnet ?? city.planBuilding(this.def.id, i, j, this.rot, true);
-    if (!magnet && !plan.valid) {
-      // Curved and diagonal roads rarely line up with whole cells: try the
-      // nearby lots (and turns, unless the player chose one) and take the
-      // closest that fits and faces a road.
-      const rots: Rotation[] = this.manualRotation ? [this.rot] : [this.rot, ((this.rot + 1) % 4) as Rotation, ((this.rot + 3) % 4) as Rotation, ((this.rot + 2) % 4) as Rotation];
-      let best: typeof plan | null = null;
-      let bestD = Infinity;
-      for (const r of rots) {
-        const a = anchorFor(this.def, r, g.x, g.z);
-        for (let dj = -2; dj <= 2; dj++) {
-          for (let di = -2; di <= 2; di++) {
-            const p = city.planBuilding(this.def.id, a.i + di, a.j + dj, r, true);
-            if (!p.valid) continue;
-            // Prefer lots whose front meets the road: straight up against it, or turned and moved to its kerb.
-            const flush = frontCells(p.i, p.j, p.w, p.d, p.rot, 1).every(([ci, cj]) => city.occupancy.road[cj * GRID_CELLS + ci] > 0);
-            const meets = flush || city.roadSnap(p.i, p.j, p.w, p.d, p.rot) !== null;
-            const dd = Math.hypot(p.centerX - g.x, p.centerZ - g.z) + (r === this.rot ? 0 : 2) + (meets ? 0 : 6) + (p.bulldoze?.length ? 8 : 0);
-            if (dd < bestD) (bestD = dd), (best = p);
-          }
-        }
-      }
-      if (best) {
-        plan = best;
-        if (!this.manualRotation) this.rot = best.rot;
-      } else if (!plan.roadAccess) {
-        // Slide one cell toward the front so the building hugs a nearby road.
-        const [si, sj] = frontStep(this.rot);
-        const slid = city.planBuilding(this.def.id, i + si, j + sj, this.rot, true);
-        if (slid.roadAccess) plan = slid;
-      }
-    }
+    const plan = magnet ?? gridPlanNear(city, this.def, g.x, g.z, this.rot, this.manualRotation, (i, j, r) => city.planBuilding(this.def.id, i, j, r, true));
+    if (!magnet && !this.manualRotation) this.rot = plan.rot;
     this.plan = plan;
     this.ghost.visible = true;
     // Drawn up to the kerb, as the placed building will be.

@@ -83,6 +83,20 @@ test('creates a city, renders the world and drives the HUD', async ({ page }) =>
   await expect(page.getByTestId('layer-legend')).toContainText('Suç');
   await page.getByTestId('tool-layers').click();
 
+  // The toolbar never covers the demand meter or the minimap, and stays on screen, on narrow screens too.
+  for (const width of [1024, 1366, 1600]) {
+    await page.setViewportSize({ width, height: 768 });
+    const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
+    const bar = await box('.toolbar');
+    const demand = await box('.demand');
+    const minimap = await box('.minimap');
+    for (const o of [demand, minimap]) expect(bar.x >= o.x + o.width || bar.y >= o.y + o.height).toBe(true);
+    expect(bar.x).toBeGreaterThanOrEqual(0);
+    expect(bar.x + bar.width).toBeLessThanOrEqual(width);
+    await expect(page.getByTestId('tool-select')).toBeInViewport();
+  }
+  await page.setViewportSize({ width: 1600, height: 900 });
+
   // Walking the streets in first person: the build toolbar hides, Esc returns to the city camera.
   await page.getByTestId('btn-walk').click();
   await expect(page.getByTestId('walk-hud')).toBeVisible();

@@ -233,10 +233,10 @@ export class CitySimulation {
       const empty = city.zones.empty[zone];
       for (let attempt = 0; attempt < 8 && empty.size > 0; attempt++) {
         const k = empty.pick(this.rand)!;
-        const lot = findLot(k % 256, Math.floor(k / 256), zone, 1, this.rand, city.lotWorld);
+        // Beside angled roads, gaps no square lot fits any more are filled along the road.
+        const lot = findLot(k % 256, Math.floor(k / 256), zone, 1, this.rand, city.lotWorld) ?? city.freeLotAt(k, zone, this.rand);
         // Builders and their materials come in by the entry road: no connection, no construction.
-        if (lot && city.reachesOutside(lot.i, lot.j, lot.w, lot.d, lot.rot)) {
-          city.spawnGrowable(lot, tick, this.rand());
+        if (lot && city.reachesOutside(lot.i, lot.j, lot.w, lot.d, lot.rot) && city.spawnGrowable(lot, tick, this.rand())) {
           building++;
           break;
         }

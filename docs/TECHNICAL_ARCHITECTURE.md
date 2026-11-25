@@ -90,7 +90,22 @@ React HUD (src/ui)  ←  Zustand store (src/store)  ←  EventBus olayları  ←
   `planFree` doğrular: değilen hücreler (`freeCells`, yol hücreleri hariç), çizilen dörtgenlerin çakışması, yol yüzeyi,
   eğim. Bina en yakın çeyrek dönüşe göre bir ızgara parseline dosyalanır (i, j, w, d, rot) ve çizim farkı ox / oz / oyaw
   olarak sabit kalır; `PlacedBuilding.free` kapladığı hücrelerdir (kayda yazılır, `snap` uygulanmaz). Geri alma `Spot.free`,
-  yol erişimi `City.roadAccessOf` ile.
+  yol erişimi `City.roadAccessOf` ile. `magnetSlide` kaydırma ve komşuya yanaşmayı (yakın olan tarafa) yapar.
+- Paylaşılan hücreler: `Occupancy.setBuilding` dolu bir hücreye ikinci bina yazınca ikisini `shared` haritasında tutar;
+  `clearBuilding` hücreyi kalan sahibe bırakır, `ownersAt(k)` hepsini verir. `freeCells` yalnızca serbest (yola dönmüş)
+  binaların hücresini paylaşmaya izin verir; ızgara binasının hücresi dolu sayılır. Bölgeleme `ownersAt` ile bakar.
+- Eğik yolda büyüme: `City.spawnGrowable` önce `growAlongRoad(lot)` dener: parsel ızgaraya ±3°'den fazla açılı bir yola
+  bakıyorsa bina `magnetSlide` ile (uyma koşulu `growFits`: çakışma yok, hücreler aynı bölge ve kuru, eğim ≤ 3 m) serbest
+  yerleşir, komşuya 10 m'ye kadar yanaşır. Uymazsa ızgara parseli yalnız kaldırıma yaslanıyorsa kurulur, yoksa atlanır
+  (null). `findLot` boş dönerse `City.freeLotAt(k)` tohum hücresinin yanındaki yol boyunca şablon arar (`Lot.free`).
+  `magnetSlide` önce 1 m, son metrede 0,25 m adımla ilerler.
+- Eski kayıtlar: `Game.restoreSave` → `City.fitGrowablesToRoads()`. Aday: eğik yola bakan, ön yüzünün en uzak noktası
+  kaldırımdan ≥ 1,5 m olan ızgara büyüyenleri ve yola dönmüş (oyaw > 3°) ızgara komşuları. `relayTogether` hepsini
+  hücrelerinden kaldırır, yol boyunca sırayla (arka sıra en son) `relayTarget` ile dizer (`BuildingRegistry.relay` id ve
+  durumu korur); yer bulamayan yerinde kalır, ona çarpan dizilmişler `reset` ile geri alınır (en çok 3 deneme, sonra
+  zincirleme geri alma). Kalanlar `relayOneByOne` ile tek tek denenir. Bölge haritası sonda yeniden hesaplanır.
+- Taşıma: `City.magnetMove` ve `planMove(…, free)` binanın kendi hücrelerini boş sayar (`withoutOwnCells`), `asMove` ücreti
+  ve tekillik hatasını kaldırır. `tools/placement/nearLot.gridPlanNear` bina ve taşıma araçlarının ortak ızgara araması.
 - Dilekçeler: `systems/Petitions.ts` (`City.petitions`). `CitySimulation.populationStep` her adımda
   `petitionWorld(homes)` ile her evin eksiklerini (hizmet alanı < 0,3 ya da çalışan hattın durağı 260 m'den uzak)
   verir; `Petitions.update` süreleri, tutulan / tutulmayan sözleri denetler, yeni dilekçeyi tohumlu rastgeleyle seçer.

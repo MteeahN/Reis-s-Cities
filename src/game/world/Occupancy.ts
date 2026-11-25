@@ -117,12 +117,42 @@ export class Occupancy {
     this.roadCells.delete(edgeId);
   }
 
+  /**
+   * Cells two or more buildings stand on (each over part of it): buildings
+   * turned to an angled road share the cells where their lots meet. `building`
+   * holds the latest of them; this keeps them all, so removing one leaves the
+   * cell to the others.
+   */
+  private readonly shared = new Map<number, number[]>();
+
   setBuilding(id: number, cells: number[]): void {
-    for (const c of cells) this.building[c] = id;
+    for (const c of cells) {
+      const was = this.building[c];
+      if (was !== 0 && was !== id) {
+        const list = this.shared.get(c) ?? [was];
+        if (!list.includes(id)) list.push(id);
+        this.shared.set(c, list);
+      }
+      this.building[c] = id;
+    }
   }
 
   clearBuilding(id: number, cells: number[]): void {
-    for (const c of cells) if (this.building[c] === id) this.building[c] = 0;
+    for (const c of cells) {
+      const list = this.shared.get(c);
+      if (list) {
+        const rest = list.filter((x) => x !== id);
+        if (rest.length > 1) this.shared.set(c, rest);
+        else this.shared.delete(c);
+        if (rest.length === 0) this.building[c] = 0;
+        else if (this.building[c] === id || !rest.includes(this.building[c])) this.building[c] = rest[rest.length - 1];
+      } else if (this.building[c] === id) this.building[c] = 0;
+    }
+  }
+
+  /** Every building standing on cell k (usually none or one). */
+  ownersAt(k: number): number[] {
+    return this.shared.get(k) ?? (this.building[k] !== 0 ? [this.building[k]] : []);
   }
 
   hasRoad(i: number, j: number): boolean {

@@ -255,8 +255,9 @@ describe('Road magnet (hand placement along curved roads)', () => {
     const c = city as unknown as { drawnCorners(i: number, j: number, w: number, d: number, s: { x: number; z: number; yaw: number } | null, inset?: number): { x: number; z: number }[] };
     const quads = all.map((b) => c.drawnCorners(b.i, b.j, b.w, b.d, { x: b.ox ?? 0, z: b.oz ?? 0, yaw: b.oyaw ?? 0 }, 0.3));
     for (let a = 0; a < quads.length; a++) for (let b = a + 1; b < quads.length; b++) expect(quadsOverlap(quads[a], quads[b])).toBe(false);
-    // Each building owns the cells it covers; a grid building can't go there.
-    for (const b of all) for (const k of b.free!) expect(city.occupancy.building[k]).toBe(b.id);
+    // Each building holds the cells it covers (neighbours share the cells where they meet); a grid building can't go there.
+    for (const b of all) for (const k of b.free!) expect(city.occupancy.ownersAt(k)).toContain(b.id);
+    for (const b of all) for (const k of b.free!) expect(city.planBuilding('res1_house_a', k % GRID_CELLS, Math.floor(k / GRID_CELLS), 0).valid).toBe(false);
     // Undo and redo put it back exactly.
     const last = city.buildings.items.get(placed.at(-1)!)!;
     const where = { ox: last.ox, oz: last.oz, oyaw: last.oyaw, cells: [...last.cells] };

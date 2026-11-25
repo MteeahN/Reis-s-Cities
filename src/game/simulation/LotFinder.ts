@@ -1,7 +1,7 @@
 import { GRID_CELLS } from '../core/config';
 import { zonedTemplates, type BuildingDef, type DistrictRules } from '../data/buildings';
 import type { ZoneKind } from '../data/zones';
-import { footprintSize, type Rotation } from '../entities/building/BuildingPlacement';
+import { footprintSize, type FreeSpot, type Rotation } from '../entities/building/BuildingPlacement';
 
 export interface LotWorld {
   zoneAt(i: number, j: number): number;
@@ -23,6 +23,8 @@ export interface Lot {
   d: number;
   baseY: number;
   minY: number;
+  /** Found along an angled road: built turned to it at this spot (i, j, rot, w, d are its nominal lot). */
+  free?: FreeSpot;
 }
 
 export const MAX_LOT_SLOPE = 3;

@@ -93,7 +93,8 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   yaklaşınca bina yola çekilir: yolun o noktadaki yönüne her açıda döner (90°'lik adımlarla değil), ön yüzü kaldırıma
   paralel yaslanır ve imleçle yol boyunca kayar. Başka bir binaya çarpacaksa yana kayar; 2,5 m'den yakın komşusuna
   yanaşır. Bina ızgaraya bağlı değildir: değdiği hücreleri sahiplenir (ızgara binaları üstüne kurulamaz), yol hücrelerini
-  yolla paylaşır. Izgaraya paralel yollarda ve R ile elle döndürünce ızgara yerleşimi geçerlidir. Geri alma, kayıt ve
+  yolla paylaşır; yola dönmüş iki komşu buluştukları hücreyi paylaşır, böylece otoparklar ve evler arada boşluk
+  kalmadan yan yana dizilir (çakışmayı çizilen parseller belirler). Kaidesi de binayla birlikte döner. Izgaraya paralel yollarda ve R ile elle döndürünce ızgara yerleşimi geçerlidir. Geri alma, kayıt ve
   yol erişimi bu yerleşimi olduğu gibi tanır.
 - **Yola yaslanan binalar:** binalar önündeki yola yaslanarak çizilir: düz yolda arada çim şerit kalırsa kaldırım
   kenarına çekilir; kavisli ya da çapraz yolda en çok 50° döner: ön cephe, iki köşesinin karşısındaki yol noktalarını birleştiren
@@ -107,8 +108,18 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   değiştirmez (örneğin konutun yanına sanayi çizerken konut korunur). Fırça modu ve "Kaldır" eskisi gibi her şeye işler.
 - **Yol eklemleri:** aynı türden iki yol hafif açıyla birleştiğinde uçları ortak bir gönye çizgisinde buluşur;
   araya yırtık gibi görünen boşluk girmez.
-- **Taşı (M):** simge, hizmet ve altyapı binaları ücretsiz taşınır; binaya tıklayın, R ile döndürün, yeni yere tıklayın.
-  Bölgede büyüyen binalar taşınmaz.
+- **Taşı (M):** simge, hizmet ve altyapı binaları ücretsiz taşınır; binaya tıklayın, yeni yere tıklayın. Taşınan bina
+  yeni bina gibi en yakın yola döner ve kıvrık ya da çapraz yolun kaldırımına mıknatısla çekilir; R ile elle
+  döndürülünce ikisi de durur. Bölgede büyüyen binalar taşınmaz.
+- **Eğik yolda büyüme:** çapraz ya da kıvrık yol kenarındaki bölgede binalar ızgara karelerine basamak basamak
+  (yolla arasında çim üçgenler kalarak) değil, yola dönük ve ön yüzü kaldırımda, komşusuna (10 m'ye kadar kayarak)
+  yaslanarak büyür; yalnızca kendi bölgesinin hücrelerine taşar. Izgara parselinin artık sığmadığı aralar da yol
+  boyunca uyan en uygun şablonla dolar. Izgaraya paralel yollarda büyüme eskisi gibidir. Eski kayıtlar yüklenince
+  eğik yol kenarında kaldırıma değmeyen (köşesiyle değen dahil) bölge binaları, yola dönmüş komşularıyla birlikte
+  yola dizilir; bina, seviyesi ve oturanları aynı kalır, oyun kaç binanın yaslandığını bildirir. Önünde yola yaslı
+  ev olan arka sıra evleri sığacak yer olmadığı için yerinde kalır (yıkılmaz).
+- **Alt çubuk:** araç çubuğu mini harita ve talep göstergesinin sağındaki alanda ortalanır, onların üstüne binmez;
+  dar ekranda araçlar küçülür (en dar hâlde yalnız simge, adı ve kısayolu ipucunda), ekrandan taşmaz.
 - **Katalog:** her bina menüsünde arama, sıralama (ad, fiyat, boyut) ve favoriler (★, tarayıcıda saklanır).
 - **Görevler ve şehir seviyesi:** her başarım bir görevdir; tamamlanınca bütçeye gerçek para ödülü yatar
   (ekonomi raporunda "Görev ödülleri") ve şehir XP kazanır. Üst çubukta şehir seviyesi ve XP çubuğu görünür.

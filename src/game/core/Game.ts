@@ -407,6 +407,9 @@ export class Game {
       const parts = [fit.moved ? `${fit.moved} bina geri çekildi` : '', fit.removed ? `${fit.removed} bina yıkıldı` : ''].filter(Boolean).join(', ');
       setTimeout(() => this.events.emit('toast', { kind: 'info', text: `Şehir giriş yolu genişledi: ${parts}` }), 1500);
     }
+    // Houses grown square beside angled roads before they grew along them: turned to the road and moved to the kerb.
+    const relaid = this.city.fitGrowablesToRoads();
+    if (relaid > 0) setTimeout(() => this.events.emit('toast', { kind: 'info', text: `Eğik yol kenarındaki ${relaid} bina yola yaslandı` }), 3000);
     this.achievements.restore(save.achievements);
     this.history.restore(save.history);
     this.speedBeforePause = c.speed;
