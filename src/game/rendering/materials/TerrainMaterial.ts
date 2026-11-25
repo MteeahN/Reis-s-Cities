@@ -75,7 +75,7 @@ export class TerrainMaterial extends MeshStandardMaterial {
         .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAGMENT_COLOR}`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAGMENT_EMISSIVE}`);
     };
-    this.customProgramCacheKey = () => 'reis-terrain-v4';
+    this.customProgramCacheKey = () => 'reis-terrain-v5';
   }
 
   private syncUnlockMask(): void {
@@ -199,7 +199,8 @@ const FRAGMENT_COLOR = /* glsl */ `
     vec4 zt = texture2D(uZoneTex, p / WORLD);
     float zid = floor(zt.r * 255.0 / 60.0 + 0.5);
     float cellEdge = rcGridLine(p / CELL);
-    if (uInfoMode < 0.5 && zid > 0.5 && zt.b < 0.5) {
+    // Zone colours show only while the zoning tool is open.
+    if (uInfoMode < 0.5 && uZoneMode > 0.5 && zid > 0.5 && zt.b < 0.5) {
       vec3 zcol = zid < 1.5 ? vec3(0.10, 0.62, 0.22) : zid < 2.5 ? vec3(0.12, 0.36, 0.85) : zid < 3.5 ? vec3(0.85, 0.62, 0.02) : vec3(0.55, 0.36, 0.92);
       diffuseColor.rgb = mix(diffuseColor.rgb, zcol, 0.32 + uZoneMode * 0.18 + cellEdge * 0.3);
     } else if (uInfoMode < 0.5 && uZoneMode > 0.5 && zt.g > 0.5 && zt.b < 0.5) {
@@ -243,9 +244,9 @@ const FRAGMENT_EMISSIVE = /* glsl */ `
     vec4 zt = texture2D(uZoneTex, p / WORLD);
     if (zt.a > 0.5) totalEmissiveRadiance += uPreviewColor * 0.35;
     float zid = floor(zt.r * 255.0 / 60.0 + 0.5);
-    if (uInfoMode < 0.5 && zid > 0.5 && zt.b < 0.5) {
+    if (uInfoMode < 0.5 && uZoneMode > 0.5 && zid > 0.5 && zt.b < 0.5) {
       vec3 zglow = zid < 1.5 ? vec3(0.05, 0.55, 0.12) : zid < 2.5 ? vec3(0.06, 0.25, 0.75) : zid < 3.5 ? vec3(0.7, 0.5, 0.0) : vec3(0.42, 0.22, 0.8);
-      // Zones glow softly; at night only while the zoning tool is open.
+      // Zones glow softly while the zoning tool is open.
       totalEmissiveRadiance += zglow * (0.05 + uZoneMode * 0.12 + rcGridLine(p / CELL) * 0.1) * mix(1.0, 0.12 + uZoneMode * 0.5, uNight);
     }
   }

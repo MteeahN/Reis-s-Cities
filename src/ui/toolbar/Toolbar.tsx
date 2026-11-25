@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DecorToolState, DemolishFilter, PaintToolState, RoadMode, TerrainToolState, ToolId, TrafficToolMode, ZoneToolState } from '../../game/core/events';
 import { getProp, PAINTS, PROP_GROUPS, PROPS, type PropGroup } from '../../game/data/decor';
+import { BUS_DAILY_UPKEEP, BUS_PRICE, DEPOT_BUSES, STOP_COST as BUS_STOP_COST } from '../../game/simulation/Transit';
 import { LIGHTS_COST, STOP_COST } from '../../game/tools/TrafficTool';
 import { TERRAIN_BRUSH, TERRAIN_PRICE } from '../../game/tools/TerrainTool';
 import { ZONES } from '../../game/data/zones';
@@ -38,6 +39,7 @@ const TOOLS: ToolEntry[] = [
   { id: 'paint', label: 'Kaplama', icon: 'brush', tool: 'paint', hotkey: 'Q' },
   { id: 'decor', label: 'Süsler', icon: 'bench', tool: 'decor', hotkey: 'N' },
   { id: 'traffic', label: 'Trafik', icon: 'traffic', tool: 'traffic', hotkey: 'K' },
+  { id: 'transit', label: 'Otobüs', icon: 'bus', tool: 'transit', hotkey: 'O' },
   { id: 'move', label: 'Taşı', icon: 'move', tool: 'move', hotkey: 'M' },
   { id: 'demolish', label: 'Yıkım', icon: 'demolish', tool: 'demolish', hotkey: 'X' },
 ];
@@ -169,6 +171,96 @@ function DemolishPicker() {
         ))}
       </div>
       <span className="muted small">Tab: değiştir</span>
+    </div>
+  );
+}
+
+function LineName({ id, name }: { id: number; name: string }) {
+  const [edit, setEdit] = useState<string | null>(null);
+  if (edit === null)
+    return (
+      <span className="line-name" onDoubleClick={() => setEdit(name)} title="Çift tıklayın: adını değiştir">
+        {name}
+      </span>
+    );
+  const done = () => {
+    if (edit.trim()) getGame()?.renameBusLine(id, edit);
+    setEdit(null);
+  };
+  return (
+    <input
+      className="line-name-input"
+      value={edit}
+      autoFocus
+      maxLength={24}
+      onChange={(e) => setEdit(e.target.value)}
+      onBlur={done}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') done();
+        if (e.key === 'Escape') setEdit(null);
+      }}
+      aria-label="Hat adı"
+    />
+  );
+}
+
+function TransitPicker() {
+  const st = useGameStore((s) => s.transitTool);
+  const t = useGameStore((s) => s.transit);
+  return (
+    <div className="subtoolbar panel transit-picker" data-testid="transit-picker">
+      <div className="mode-group" role="group" aria-label="Otobüs aracı">
+        <button className={`mode-btn ${st.mode === 'stop' ? 'active' : ''}`} onClick={() => getGame()?.setTransitMode('stop')} title={`Yola tıklayın: durak (${formatMoney(BUS_STOP_COST)}); durağa tıklayın: kaldır`} data-testid="transit-mode-stop">
+          Durak
+        </button>
+        <button className={`mode-btn ${st.mode === 'line' ? 'active' : ''}`} onClick={() => getGame()?.setTransitMode('line')} title="Durakları sırayla seçin; ilk durağa ya da Enter: hattı aç" data-testid="transit-mode-line">
+          Hat çiz
+        </button>
+        <button className="mode-btn" onClick={() => getGame()?.placeBusDepot()} title={`Otobüs garajı kur: her garaj ${DEPOT_BUSES} otobüs barındırır`} data-testid="transit-depot">
+          Garaj
+        </button>
+      </div>
+      <div className="divider vertical" />
+      <div className="transit-lines" data-testid="transit-lines">
+        {t.lines.length === 0 ? (
+          <span className="muted small">Henüz hat yok. Garaj kurun, durak koyun, sonra "Hat çiz" ile durakları sırayla seçin.</span>
+        ) : (
+          t.lines.map((l) => {
+            const editing = st.mode === 'edit' && st.editLine === l.id;
+            return (
+              <div key={l.id} className={`transit-line ${editing ? 'editing' : ''}`} data-testid="transit-line">
+                <button className="line-swatch" style={{ background: l.color }} onClick={() => getGame()?.cycleLineColor(l.id)} title="Rengini değiştir" aria-label="Hat rengi" />
+                <LineName id={l.id} name={l.name} />
+                <span className="muted small">
+                  {l.stops} durak · {l.km.toFixed(1)} km · {Math.round(l.riders).toLocaleString('tr-TR')}/{l.capacity.toLocaleString('tr-TR')} yolcu/gün
+                  {l.transfers > 0 && ` · ${l.transfers} hatla aktarma`}
+                  {!l.ok && <span className="text-red"> · duraklar arasında yol yok</span>}
+                  {l.ok && l.running < l.buses && <span className="text-red"> · {l.buses - l.running} otobüs garajda yer yok</span>}
+                </span>
+                <button className={`mode-btn ${editing ? 'active' : ''}`} onClick={() => getGame()?.setTransitMode(editing ? 'line' : 'edit', l.id)} title="Durak ekle / çıkar: duraklara tıklayın" data-testid="transit-line-edit">
+                  Düzenle
+                </button>
+                <button className="mode-btn" onClick={() => getGame()?.setLineBuses(l.id, l.buses - 1)} disabled={l.buses <= 0} title="Otobüs sat (yarı fiyatı iade)">−</button>
+                <span className="line-buses" title="Otobüs sayısı">{l.buses} 🚌</span>
+                <button className="mode-btn" onClick={() => getGame()?.setLineBuses(l.id, l.buses + 1)} title={`Otobüs al (${formatMoney(BUS_PRICE)}, günde ${formatMoney(BUS_DAILY_UPKEEP)} bakım)`} data-testid="transit-bus-add">+</button>
+                <button className="icon-btn small" onClick={() => getGame()?.removeBusLine(l.id)} title="Hattı kapat (otobüsler yarı fiyatına satılır)">
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+      <div className="divider vertical" />
+      <div className="transit-summary muted small">
+        <div>{t.stops} durak · {Math.round(t.ridersPerDay).toLocaleString('tr-TR')} yolcu/gün</div>
+        <div className={t.depotCapacity === 0 || t.buses > t.depotCapacity ? 'text-red' : ''} data-testid="transit-depots">
+          {t.depotCapacity === 0 ? 'Garaj yok: otobüsler çalışmaz' : `Garaj: ${t.buses}/${t.depotCapacity} otobüs`}
+        </div>
+        <div>bilet {formatMoney(Math.round(t.faresPerDay))}/gün · işletme {formatMoney(Math.round(t.upkeepPerDay))}/gün</div>
+        <div className="transit-hint">{st.hint ?? (st.mode === 'line' && st.draft.length ? `${st.draft.length} durak seçildi` : '')}</div>
+      </div>
     </div>
   );
 }
@@ -675,6 +767,7 @@ export function Toolbar() {
       {tool === 'traffic' && <TrafficPicker />}
       {tool === 'terrain' && <TerrainPicker />}
       {tool === 'paint' && <PaintPicker />}
+      {tool === 'transit' && <TransitPicker />}
       {tool === 'decor' && <DecorPicker />}
       {(tool === 'power' || tool === 'powerline') && <InfraPicker group="power" lineKind="power" />}
       {(tool === 'water' || tool === 'pipe') && <InfraPicker group="water" lineKind="pipe" />}

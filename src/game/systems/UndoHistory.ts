@@ -2,6 +2,7 @@ import type { Rotation } from '../entities/building/BuildingPlacement';
 import type { ArchStyle } from '../data/styles';
 import type { RoadGraphData } from '../entities/road/RoadGraph';
 import type { LineKind } from '../data/infrastructure';
+import type { TransitData } from '../simulation/Transit';
 
 /** A decoration standing in the city. */
 export interface PlacedProp {
@@ -54,7 +55,9 @@ export type UndoEntry =
   | { kind: 'line'; label: string; lineKind: LineKind; op: 'add' | 'remove'; line: LineRecord; net: number }
   | { kind: 'terrain'; label: string; vertices: number[]; before: number[]; after: number[]; net: number }
   | { kind: 'paint'; label: string; texels: number[]; before: number[]; after: number[]; net: number }
-  | { kind: 'prop'; label: string; op: 'place' | 'remove'; prop: PlacedProp; net: number };
+  | { kind: 'prop'; label: string; op: 'place' | 'remove'; prop: PlacedProp; net: number }
+  | { kind: 'transit'; label: string; before: TransitData; after: TransitData; net: number }
+  | { kind: 'upgrade'; label: string; id: number; from: { defId: string; level: number }; to: { defId: string; level: number }; net: number };
 
 export const UNDO_LIMIT = 50;
 

@@ -1,4 +1,5 @@
 import type { ArchStyle } from '../data/styles';
+import type { Advice } from '../systems/Advisors';
 import type { RoadSurface } from '../data/roads';
 import type { FeedPost } from '../systems/CitizenFeed';
 import type { QualityLevel, QualitySetting } from '../rendering/QualityManager';
@@ -15,7 +16,28 @@ import type { GameSpeed } from './config';
 import type { AchievementView } from '../systems/Achievements';
 import type { StatsSample } from '../systems/StatsHistory';
 
-export type ToolId = 'select' | 'road' | 'building' | 'demolish' | 'zone' | 'power' | 'water' | 'services' | 'powerline' | 'pipe' | 'traffic' | 'move' | 'terrain' | 'paint' | 'decor';
+export type ToolId = 'select' | 'road' | 'building' | 'demolish' | 'zone' | 'power' | 'water' | 'services' | 'powerline' | 'pipe' | 'traffic' | 'move' | 'terrain' | 'paint' | 'decor' | 'transit';
+
+/** Transit tool: placing stops or drawing a line (stops picked so far). */
+export interface TransitToolState {
+  /** stop: place / remove stops; line: draw a new line; edit: add / take out stops of `editLine`. */
+  mode: 'stop' | 'line' | 'edit';
+  draft: number[];
+  editLine: number | null;
+  hint: string | null;
+}
+
+/** Bus network summary for the panel. */
+export interface TransitView {
+  stops: number;
+  ridersPerDay: number;
+  faresPerDay: number;
+  upkeepPerDay: number;
+  /** Buses bought / the depots' room for them. */
+  buses: number;
+  depotCapacity: number;
+  lines: { id: number; name: string; color: string; stops: number; buses: number; running: number; transfers: number; riders: number; capacity: number; km: number; ok: boolean }[];
+}
 
 /** Ground paint brush: paint id (0 erases) and radius (m). */
 export interface PaintToolState {
@@ -159,6 +181,8 @@ export interface BuildingInfo {
   happiness: number | null;
   /** Why it can't level up yet (empty when it can, or at max level). */
   levelBlockers: string[];
+  /** Price to upgrade now (null: not ready). */
+  upgradePrice: number | null;
   /** Tax this building pays per game day (null for civic buildings). */
   dailyTax: number | null;
   /** Utility service at this building (null for producers / non-consumers). */
@@ -263,6 +287,10 @@ export type GameEvents = {
   trafficTool: TrafficToolState;
   terrainTool: TerrainToolState;
   paintTool: PaintToolState;
+  transitTool: TransitToolState;
+  transit: TransitView;
+  /** What the advisors say now (most urgent first). */
+  advice: Advice[];
   decorTool: DecorToolState;
   budget: number;
   cityStats: CityStats;

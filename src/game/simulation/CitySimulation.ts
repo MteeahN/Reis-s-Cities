@@ -1,5 +1,6 @@
 import { GRID_CELLS, START_MINUTE_OFFSET } from '../core/config';
-import { buildingCapacity, getBuilding, zonedTemplates } from '../data/buildings';
+import { buildingCapacity, getBuilding, zonedTemplates , growablePrice } from '../data/buildings';
+import { BUS_DAILY_UPKEEP, FARE } from './Transit';
 import { DEBT_HAPPINESS_PENALTY, PROFIT_PER_WORKER, TAX } from '../data/economy';
 import { LINE_TYPES } from '../data/infrastructure';
 import { getRoadType } from '../data/roads';
@@ -175,6 +176,7 @@ export class CitySimulation {
     const employedShare = e.labor > 0 ? e.employed / e.labor : 0;
     // Clock time of day (the city is founded at 08:00).
     c.outsideEdges(); // refreshes the entry attach the traffic model uses
+    c.transit.update(c.buildings.items.values(), c.population, employedShare);
     c.traffic.step(c.buildings.items.values(), c.population, employedShare, (gameMinutes + START_MINUTE_OFFSET) % MINUTES_PER_DAY);
   }
 
@@ -379,6 +381,8 @@ export class CitySimulation {
         upkeepPower: upkeep.power,
         upkeepWater: upkeep.water,
         upkeepServices: upkeep.service,
+        transitFares: city.transit.ridersPerDay * FARE,
+        upkeepTransit: city.transit.busCount * BUS_DAILY_UPKEEP,
       },
       days,
     );
@@ -617,7 +621,11 @@ export class CitySimulation {
     city.landValue.recompute(city.buildings.items.values(), city.zones.zoneable, bonus, this.roadLoads());
   }
 
+  /** Tick of the last slow step (when the player upgrades a building). */
+  private lastTick = 0;
+
   slowStep(tick: number): void {
+    this.lastTick = tick;
     const city = this.city;
     // Re-solved only if buildings or lines changed since the last solve (every change marks it dirty).
     const util = city.refreshUtilities();
@@ -711,6 +719,37 @@ export class CitySimulation {
       if (h < req.happiness) out.push(`Mutluluk ${Math.round(h)} / ${req.happiness}`);
     }
     return out;
+  }
+
+/** Can the player upgrade this building right now (all requirements met)? */
+  canUpgrade(b: PlacedBuilding): boolean {
+    return !!b.zone && b.level < 3 && b.state === 'active' && this.levelBlockers(b).length === 0 && this.nextTemplates(b).length > 0;
+  }
+
+  /** Price of upgrading now instead of waiting: half a hand-built next-level building of the same lot size. */
+  upgradePrice(b: PlacedBuilding): number {
+    const next = this.nextTemplates(b);
+    return next.length ? Math.round(growablePrice(next[0]) * 0.5) : 0;
+  }
+
+  /**
+   * Upgrades a building now (the green arrow): requirements must be met; the
+   * price is paid and the building becomes a next-level template at once
+   * (instead of waiting for the developers). Undoable. Returns an error or null.
+   */
+  upgradeNow(id: number): string | null {
+    const b = this.city.buildings.items.get(id);
+    if (!b) return 'Bina yok';
+    if (!this.canUpgrade(b)) return this.levelBlockers(b)[0] ?? 'Bu bina yükseltilemez';
+    const price = this.upgradePrice(b);
+    if (!this.city.treasury.canAfford(price)) return 'Yetersiz bütçe';
+    const next = this.nextTemplates(b);
+    const pick = next[Math.floor(this.rand() * next.length)];
+    const from = { defId: b.defId, level: b.level };
+    this.city.treasury.spend(price, 'buildings');
+    this.city.buildings.replace(b.id, { defId: pick.id, level: b.level + 1, sinceTick: this.lastTick });
+    this.city.recordUndo({ kind: 'upgrade', label: `${getBuilding(pick.id).name} yükseltme`, id: b.id, from, to: { defId: pick.id, level: from.level + 1 }, net: -price });
+    return null;
   }
 
   /** Templates a building may become at its next level, under its district's rules. */

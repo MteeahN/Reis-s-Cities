@@ -2247,3 +2247,138 @@ kbd {
   align-self: center;
   max-width: 220px;
 }
+
+/* Bus transit */
+.transit-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+  min-width: 360px;
+  justify-content: center;
+}
+.transit-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+}
+.line-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex: none;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  padding: 0;
+  cursor: pointer;
+}
+.transit-line.editing {
+  outline: 1px solid var(--accent);
+  border-radius: 4px;
+}
+.line-name-input {
+  width: 80px;
+  font: inherit;
+  font-weight: 700;
+}
+.line-name {
+  font-weight: 700;
+  min-width: 42px;
+  cursor: text;
+}
+.line-buses {
+  min-width: 34px;
+  text-align: center;
+  font-weight: 700;
+}
+.transit-summary {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 190px;
+}
+.transit-hint {
+  color: var(--accent);
+}
+
+/* Advisors */
+.advisors-panel {
+  width: 380px;
+  max-height: calc(100vh - 150px);
+  display: flex;
+  flex-direction: column;
+}
+.advisors-panel .panel-header .muted {
+  margin-left: auto;
+  margin-right: 8px;
+}
+.advice-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.advice {
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  background: var(--bg-elev);
+}
+.advice.level-high { border-left-color: #e5484d; }
+.advice.level-medium { border-left-color: #e0a321; }
+.advice.level-low { border-left-color: #4c8dff; }
+.advice-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10.5px;
+}
+.advice-level {
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+}
+.advice-level.level-high { color: #ff8a8d; }
+.advice-level.level-medium { color: #f0c05a; }
+.advice-level.level-low { color: #7fb0ff; }
+.advice-advisor {
+  color: var(--muted);
+}
+.advice-title {
+  margin-top: 4px;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+.advice-text {
+  margin: 3px 0 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.advice-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.upgrade-btn {
+  margin-top: 6px;
+  justify-content: center;
+  background: #1f7a52;
+  color: #fff;
+}
+.settlement {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-left: 6px;
+}
+

@@ -184,7 +184,7 @@ export class BuildingRenderer {
   }
 
   static modelMatrix(b: PlacedBuilding, out = new Matrix4(), scale = new Vector3(1, 1, 1)): Matrix4 {
-    const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), (b.rot * Math.PI) / 2);
+    const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), (b.rot * Math.PI) / 2 + (b.oyaw ?? 0));
     const seat = b.seat;
     if (seat && (seat.gx !== 0 || seat.gz !== 0)) {
       // Tilt so the lot lies on the slope: local up becomes the ground normal.

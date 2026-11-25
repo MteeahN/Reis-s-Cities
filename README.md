@@ -16,6 +16,37 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   sorun sürdükçe birkaç günde bir tekrar yazılır, çözülünce teşekkür gelir. "Göster" kamerayı sorunun yerine
   götürür. Okunmamış gönderi sayısı simgede görünür. Akış kayda yazılmaz; yüklenen şehirde şehrin o anki
   durumundan yeniden başlar.
+- **Hemen yükselt (yeşil ok):** seviye atlama gereksinimlerini karşılayan büyüyen binaların üstünde yeşil ok çıkar.
+  Bina panelindeki "Şimdi yükselt" düğmesi, bir sonraki seviyenin elle yapım bedelinin yarısını ödeyerek binayı hemen
+  büyütür (beklemezseniz bina zamanla kendiliğinden de büyür). Geri alınır.
+- **Yerleşim unvanı:** şehir adının altında gerçek nüfusa göre Köy (0), Belde (500), Kasaba (2.000), Şehir (10.000),
+  Büyükşehir (50.000), Metropol (200.000).
+- **Yeni hizmet, park ve otoparklar:** Anaokulu ve Sağlık Ocağı (300 nüfus; okul ve hastaneden küçük, ucuz), Üniversite
+  (3.000 nüfus, 4×4, geniş ileri eğitim), Kubbeli Kütüphane ve Açık Yüzme Havuzu (500 nüfus, arazi değeri); Düzenli
+  Bahçe, Atlıkarıncalı Park, Oyun Parkı, Hobi Bahçeleri, Spor Sahası (arazi değeri). Binalar sekmesinde Açık Otopark ve
+  Katlı Otopark: oyun park yeri arayan sürücüleri hesaplamaz, bu yüzden otoparklar görünüm içindir; yalnızca görevli
+  işleri gerçektir (açıklamalarında yazıyor).
+- **Bölge renkleri:** konut / ticaret / sanayi / ofis renkleri artık yalnızca bölgeleme aracı açıkken görünür.
+- **Danışmanlar (üst çubuk):** şehrin o an en çok neye ihtiyacı olduğunu altyapı, güvenlik, sağlık, eğitim, ekonomi,
+  imar, ulaşım, bütçe ve halkla ilişkiler danışmanları söyler. Her madde simülasyonun ölçtüğü rakamı yazar
+  ("6 bina elektriksiz", "talep %100, boş ev 0") ve sorunu çözen aracı tek tıkla açar. Acil olanlar önce gelir ve
+  simgede sayılır; mutsuzlukta en çok aşağı çeken etkenler adıyla yazılır.
+- **Otobüs (O):** "Durak" modunda yola tıklayınca durak (₺500) ve bekleme kulübesi kurulur, durağa tıklayınca kaldırılır.
+  "Hat çiz" modunda duraklar sırayla seçilir; ilk durağa tıklamak ya da Enter hattı açar (ilk otobüs ₺1.200). Otobüsler
+  hattı durak sırasıyla, sonra ilk durağa dönerek yol ağında dolaşır (tek yönlü yollara uyar, sağ şeritten gider).
+  Panelde her hattın durak sayısı, uzunluğu, günlük yolcusu / kapasitesi; otobüs alma (+) ve satma (−, yarı fiyat)
+  ve hattı kapatma var. Yolcu hesabı gerçek şehirden yapılır: bir durağa 260 m yürüme mesafesindeki evler, hattın
+  ulaştığı işyeri ve dükkân payına ve sefer sıklığına (km başına otobüs) göre iş ve alışveriş yolculuklarının bir
+  kısmını (en çok %45) otobüsle yapar; bu yolculuklar yollardaki araç trafiğinden düşülür. Otobüs başına günde 600
+  yolcu kapasitesi; dolu hat yolcuyu geri çevirir (onlar arabayla gider). Bilet ₺2 gelir, otobüs başına günde ₺60
+  işletme gideri bütçede ayrı satırlardır. Otobüsler her durakta 8 saniye bekler. Geri alınır, kayda yazılır.
+  Otobüsler **Otobüs Garajı**nda (Hizmetler ya da paneldeki "Garaj", ₺5.000, 3×2) durur: garaj olmadan otobüs
+  alınamaz, her garaj 30 otobüs alır; garaj yıkılınca sığmayan otobüsler çalışmaz (panel ve danışman söyler).
+  Durakları 40 m'den yakın hatlar arasında **aktarma** yapılır: bir hattın yolcusu, bağlı hatların ulaştığı işlerin
+  ve dükkânların da %70'ini hesaba katar. Panelde "Düzenle" ile durağa tıklayıp hatta eklenir (en az sapma yapan
+  yere) ya da çıkarılır; ada çift tıklayıp değiştirilir, renk kutusu rengi değiştirir. Araç açıkken **Toplu
+  taşıma** katmanı durakların yürüme alanlarını ve otobüse binen evleri gösterir. Duraklarda bekleyen insanlar o
+  durağın günlük binen yolcusuna göre çizilir (40 yolcuda bir kişi, en çok 8).
 - **Zemin kaplama (Q):** parke taşı, karo, tuğla, çakıl, kum, biçilmiş çim, ahşap döşeme, asfalt ve silgi; 2 / 4 / 8 m
   fırça, basılı tutup boyanır. Meydan, avlu, patika için; yalnızca şehre ait kuru arazi. m² fiyatı ₺1–5, silmek
   ücretsiz. Her basış tek Ctrl+Z ile geri alınır; kayda yazılır. Görünüm içindir (arazi değeri, mutluluk değişmez).
@@ -47,9 +78,11 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
 - **Eğimli arazide binalar:** dört kata kadar binalar %12'ye kadar eğimde araziyle birlikte eğilir (parsel zemine
   oturur, kaide görünmez). Daha yüksek binalar ve dik eğimler dik durur, en alçak köşeye kadar yamaca gömülür
   (yukarı tarafta en fazla 2,5 m; fazlasını kaide tamamlar). Görüntüdür; hücreler ve oyun kuralları değişmez.
-- **Yola yaslanan binalar:** önündeki düz yolla arasında çim şerit kalan binalar kaldırım kenarına kadar
-  çekilerek çizilir (yalnızca görüntü; hücreleri yerinde kalır, seçme / yıkma / taşıma çizildiği yerden çalışır).
-  Kavisli ya da çapraz yollarda ve arada başka bir bina varsa kaydırılmaz.
+- **Yola yaslanan binalar:** binalar önündeki yola yaslanarak çizilir: düz yolda arada çim şerit kalırsa kaldırım
+  kenarına çekilir; kavisli ya da çapraz yolda yola bakacak kadar (en çok 50°) döner ve ön cephesinin yola en yakın
+  noktası kaldırıma değene dek ileri ya da geri kaydırılır. Yerleştirirken imleç yol eğrisine denk gelmeyen bir
+  hücredeyse araç yakındaki (±2 hücre) uygun parsel ve yönlerden en yakınını seçer. Yalnızca görüntü: hücreler yerinde
+  kalır, seçme / yıkma / taşıma çizildiği yerden çalışır. Arada başka bir bina varsa kaydırılmaz.
 - **Yol kenarı bölgeleme:** seçim yalnızca işaret edilen yola bakan araziyi alır; köşede kesişen yolun cephesine
   taşmaz. Başka türde bölgelenmiş arazi sınırdır: yeni bölge onun sınırına kadar uzanır, onu ve arkasını
   değiştirmez (örneğin konutun yanına sanayi çizerken konut korunur). Fırça modu ve "Kaldır" eskisi gibi her şeye işler.

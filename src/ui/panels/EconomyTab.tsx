@@ -53,8 +53,8 @@ export function EconomyTab() {
   const eco = useGameStore((s) => s.economy);
   if (!eco) return null;
   const r = eco.rates;
-  const income = r.taxResidential + r.taxCommercial + r.taxIndustrial;
-  const expenses = r.upkeepRoads + r.upkeepBuildings + r.upkeepPower + r.upkeepWater + r.upkeepServices + r.loanPayments;
+  const income = r.taxResidential + r.taxCommercial + r.taxIndustrial + (r.transitFares ?? 0);
+  const expenses = r.upkeepRoads + r.upkeepBuildings + r.upkeepPower + r.upkeepWater + r.upkeepServices + (r.upkeepTransit ?? 0) + r.loanPayments;
   const t = eco.today.lines;
   const construction = (t.constructionRoads ?? 0) + (t.constructionBuildings ?? 0) + (t.constructionInfra ?? 0);
 
@@ -110,6 +110,7 @@ export function EconomyTab() {
       <Line k="Konut vergisi" v={r.taxResidential} testId="eco-tax-r" />
       <Line k="Ticaret vergisi" v={r.taxCommercial} />
       <Line k="Sanayi vergisi" v={r.taxIndustrial} />
+      {(r.transitFares ?? 0) > 0 && <Line k="Otobüs biletleri" v={r.transitFares} testId="eco-transit-fares" />}
       <div className="section-title">Günlük gider</div>
       <Line k="Yol bakımı" v={-r.upkeepRoads} testId="eco-upkeep-roads" />
       <Line k="Bina bakımı" v={-r.upkeepBuildings} />
@@ -117,6 +118,7 @@ export function EconomyTab() {
       <Line k="Elektrik" v={-r.upkeepPower} note="santraller, hatlar" testId="eco-upkeep-power" />
       <Line k="Su ve kanalizasyon" v={-r.upkeepWater} note="tesisler, borular" />
       <Line k="Kamu hizmetleri" v={-r.upkeepServices} note="polis, itfaiye, sağlık, eğitim, çöp, park" />
+      {(r.upkeepTransit ?? 0) > 0 && <Line k="Otobüs işletmesi" v={-r.upkeepTransit} note="otobüs başına günlük bakım" />}
       <div className="kv total">
         <span>Toplam</span>
         <strong className={income - expenses >= 0 ? 'text-green' : 'text-red'}>{signed(income - expenses)}/gün</strong>

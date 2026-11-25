@@ -94,3 +94,54 @@ describe('Buildings drawn up to the kerb', () => {
     expect(city.buildingAtWorld((i + 0.5) * CELL_SIZE, frontZ + 1)).toBe(b.id);
   });
 });
+
+describe('Buildings on curved roads', () => {
+  it('turn to face the curve and meet the kerb with their front', () => {
+    const city = newCity();
+    let built: { cx: number; cz: number } | null = null;
+    for (let cx = 760; cx < 1300 && !built; cx += 60) {
+      for (let cz = 760; cz < 1300 && !built; cz += 60) {
+        const plan = planRoad(city.roads, free(cx - 90, cz), free(cx + 90, cz), { x: cx, z: cz + 80 }, getRoadType('city'), city.plannerWorld, 1e9);
+        if (plan.valid) {
+          city.buildRoad(plan);
+          built = { cx, cz };
+        }
+      }
+    }
+    expect(built).not.toBeNull();
+    const { cx, cz } = built!;
+    const half = getRoadType('city').width / 2;
+    let turned = 0;
+    let checked = 0;
+    // Lots along the outside of the curve, facing it.
+    for (let x = cx - 60; x <= cx + 60; x += 8) {
+      for (let z = cz + 30; z <= cz + 80; z += 8) {
+        const i = Math.floor(x / CELL_SIZE);
+        const j = Math.floor(z / CELL_SIZE);
+        for (const rot of [0, 1, 2, 3] as const) {
+          const p = city.planBuilding('plaza', i, j, rot);
+          if (!p.valid) continue;
+          const s = city.roadSnap(p.i, p.j, p.w, p.d, p.rot);
+          if (!s) continue;
+          checked++;
+          if (Math.abs(s.yaw) > 0.05) turned++;
+          // The turned and moved front touches the kerb (its closest point) without cutting into the road.
+          const [sx, sz] = [[0, 1], [1, 0], [0, -1], [-1, 0]][rot];
+          const hd = (sx !== 0 ? p.w : p.d) * CELL_SIZE * 0.5;
+          const hw = (sx !== 0 ? p.d : p.w) * CELL_SIZE * 0.5 * 0.95;
+          const gaps = [0, 1, -1].map((side) => {
+            const vx = sx * hd - sz * hw * side;
+            const vz = sz * hd + sx * hw * side;
+            const fx = p.centerX + s.x + vx * Math.cos(s.yaw) + vz * Math.sin(s.yaw);
+            const fz = p.centerZ + s.z - vx * Math.sin(s.yaw) + vz * Math.cos(s.yaw);
+            return city.roads.nearestEdge(fx, fz, 30, true)!.dist - half;
+          });
+          expect(Math.min(...gaps)).toBeGreaterThan(-0.4);
+          expect(Math.min(...gaps)).toBeLessThan(0.5);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(2);
+    expect(turned).toBeGreaterThan(0);
+  });
+});

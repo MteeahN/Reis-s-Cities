@@ -4,6 +4,7 @@ import { ROAD_TYPES } from '../data/roads';
 import { ARCH_STYLES, isArchStyle } from '../data/styles';
 import { PAINTS } from '../data/decor';
 import type { PlacedProp } from '../systems/UndoHistory';
+import type { TransitData } from '../simulation/Transit';
 import { HEIGHT_LIMITS } from '../data/buildings';
 import { ZoneType } from '../data/zones';
 import type { PlacedBuilding } from '../entities/building/BuildingRegistry';
@@ -48,6 +49,8 @@ export interface CityState {
   paint?: number[];
   /** Decorations. */
   props?: { nextId: number; items: PlacedProp[] };
+  /** Bus stops and lines. */
+  transit?: TransitData;
   buildings: { nextId: number; items: SavedBuilding[] };
   /** Run-length encoded zone per cell: [value, count, …]. */
   zones: number[];
@@ -138,6 +141,7 @@ export function serializeCity(city: City, sim: CitySimulation): CityState {
     wealth: rle(city.districtWealth),
     heights: rle(city.districtHeight),
     ...(city.paint.some((v) => v !== 0) ? { paint: rle(city.paint) } : {}),
+    ...(city.transit.stops.size ? { transit: city.transit.serialize() } : {}),
     ...(city.props.size ? { props: { nextId: city.nextPropIdValue, items: [...city.props.values()].map((x) => ({ ...x })) } } : {}),
     ...(city.entries.length ? { entries: city.entries.map((e) => ({ x: e.x, z: e.z })) } : {}),
     ...(city.entryLink ? { entryLink: { x: city.entryLink.x, z: city.entryLink.z } } : {}),
@@ -181,6 +185,7 @@ export function restoreCity(city: City, sim: CitySimulation, s: CityState, tick:
     city.paintVersion++;
   }
   if (s.props && Array.isArray(s.props.items)) city.restoreProps(s.props.items, Number(s.props.nextId) || 1);
+  if (s.transit && typeof s.transit === 'object') city.transit.restore(s.transit);
   city.migrateGrowableZones();
   city.economy.restore(s.economy);
   city.population.restore(s.population, (id) => city.buildings.items.get(id)?.zone === ZoneType.Residential);

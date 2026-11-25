@@ -250,6 +250,8 @@ export class TrafficModel {
   private flowTotal = 0;
   /** Average commute time (s) per home building; Infinity when no workplace is reachable. */
   readonly commute = new Map<number, number>();
+  /** Share of a home's work / shop trips made by bus (set by the city). */
+  transitShare: ((buildingId: number) => { work: number; shop: number }) | null = null;
   stats: TrafficStats = { vehicles: 0, tripsPerHour: 0, congestion: 0, avgSpeedKmh: 0, congestedLength: 0, commuteMinutes: 0, unroutable: 0, worst: [] };
 
   // Dijkstra scratch.
@@ -525,8 +527,10 @@ export class TrafficModel {
         if (!hh) continue;
         const residents = residentsOf(hh);
         if (residents <= 0) continue;
-        addOrigin(b, at, 'work', hh.ages[2] * employmentRate * CAR_SHARE);
-        addOrigin(b, at, 'shop', residents * SHOP_TRIPS_PER_RESIDENT);
+        // Trips made by bus are off the roads.
+        const bus = this.transitShare ? this.transitShare(b.id) : { work: 0, shop: 0 };
+        addOrigin(b, at, 'work', hh.ages[2] * employmentRate * CAR_SHARE * (1 - bus.work));
+        addOrigin(b, at, 'shop', residents * SHOP_TRIPS_PER_RESIDENT * (1 - bus.shop));
       }
       if (isWork) addDest('work', at, b.occupants);
       if (isShop && b.occupants > 0) {

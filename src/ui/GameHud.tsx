@@ -3,6 +3,7 @@ import { useGameStore } from '../store/gameStore';
 import { saveCity } from '../store/saveManager';
 import { AchievementsPanel } from './panels/AchievementsPanel';
 import { FeedPanel } from './panels/FeedPanel';
+import { AdvisorsPanel } from './panels/AdvisorsPanel';
 import { StatsPanel } from './panels/StatsPanel';
 import { DemandMeter } from './hud/DemandMeter';
 import { LayerLegend } from './hud/LayerLegend';
@@ -37,6 +38,7 @@ export function GameHud() {
       <StatsPanel />
       <AchievementsPanel />
       <FeedPanel />
+      <AdvisorsPanel />
       <Toasts />
       <Tutorial />
       <LayerLegend />

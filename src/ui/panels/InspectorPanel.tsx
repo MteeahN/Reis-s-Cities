@@ -128,7 +128,16 @@ function GrowableDetails({ b }: { b: BuildingInfo }) {
       {b.level < 3 && b.state === 'active' && (
         <div className="levelup">
           <div className="section-title">Seviye {b.level + 1} için</div>
-          {b.levelBlockers.length === 0 ? <div className="notice ok">Gereksinimler karşılandı</div> : (
+          {b.levelBlockers.length === 0 ? (
+            <>
+              <div className="notice ok">Gereksinimler karşılandı — bina kendiliğinden de büyüyecek</div>
+              {b.upgradePrice !== null && (
+                <button className="btn full upgrade-btn" onClick={() => getGame()?.upgradeBuilding(b.id)} data-testid="btn-upgrade">
+                  <Icon name="upgrade" size={14} /> Şimdi yükselt ({formatMoney(b.upgradePrice)})
+                </button>
+              )}
+            </>
+          ) : (
             <ul className="notice warn">{b.levelBlockers.map((x) => <li key={x}>{x}</li>)}</ul>
           )}
         </div>

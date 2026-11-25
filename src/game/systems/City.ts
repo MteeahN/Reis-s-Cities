@@ -3,7 +3,7 @@ import { growablePrice, type DistrictRules } from '../data/buildings';
 import { CELL_SIZE, GRID_CELLS, WATER_LEVEL, START_TILES, TILE_CELLS, WORLD_SIZE, TILES_PER_SIDE } from '../core/config';
 import { LINE_TYPES, type LineKind } from '../data/infrastructure';
 import { UtilityLines } from '../entities/infra/UtilityLines';
-import { bezierTangent, sampleBezier, type P2 } from '../entities/road/curve';
+import { sampleBezier, type P2 } from '../entities/road/curve';
 import { ServiceCoverage } from '../simulation/Services';
 import { computeUtilities, type UtilityResult } from '../simulation/Utilities';
 import { getBuilding, storeysOf } from '../data/buildings';
@@ -25,6 +25,7 @@ import { ZoneMap } from '../world/ZoneMap';
 import { Economy } from './Economy';
 import { Treasury } from './Treasury';
 import type { LedgerCategory } from './Treasury';
+import { BUS_PRICE, DEPOT_BUSES, DEPOT_ID, MAX_BUSES, STOP_COST, Transit } from '../simulation/Transit';
 import { UndoHistory, type CellZoning, type PlacedProp, type Spot, type UndoEntry } from './UndoHistory';
 import { getPaint, getProp, isPropId, PAINT_RES, PAINT_STEP } from '../data/decor';
 
@@ -67,6 +68,8 @@ export class City {
   readonly pipes = new UtilityLines('pipe');
   readonly services = new ServiceCoverage();
   readonly traffic = new TrafficModel(this.roads);
+  /** Bus stops and lines. */
+  readonly transit = new Transit(this.roads);
   /** Latest utility network solution (recomputed when infrastructure changes). */
   utilities: UtilityResult;
   private utilitiesDirty = true;
@@ -145,6 +148,7 @@ export class City {
       rulesAt: (i, j) => this.rulesAt(i, j),
     };
 
+    this.traffic.transitShare = (id) => this.transit.shareOf(id);
     // Buildings are drawn up to the kerb of the road in front of them.
     this.buildings.snapper = (i, j, w, d, rot) => this.roadSnap(i, j, w, d, rot);
     this.buildings.seater = (defId, i, j, w, d) => this.groundSeat(defId, i, j, w, d);
@@ -432,6 +436,137 @@ export class City {
       j1 = Math.max(j1, j);
     }
     if (i1 >= i0) this.afterTerrainChange(i0, j0, i1, j1);
+  }
+
+  // ---------------------------------------------------------------- transit
+  /** Records an action for undo (unless an undo / redo is being applied). */
+  recordUndo(e: UndoEntry): void {
+    if (this.recording) this.undo.push(e);
+  }
+
+  /** Runs a transit edit and records it for undo (stops and lines before / after, money). */
+  editTransit<T>(label: string, fn: () => T): T {
+    if (!this.recording) return fn();
+    const before = this.transit.serialize();
+    const version = this.transit.version;
+    const balance = this.treasury.balance;
+    const out = fn();
+    if (this.transit.version !== version) this.undo.push({ kind: 'transit', label, before, after: this.transit.serialize(), net: this.treasury.balance - balance });
+    return out;
+  }
+
+  /** Why a bus stop can't go at (x, z), or null. */
+  busStopError(x: number, z: number): string | null {
+    const i = Math.floor(x / CELL_SIZE);
+    const j = Math.floor(z / CELL_SIZE);
+    if (!this.world.isCellUnlocked(i, j)) return 'Satın alınmamış arazi';
+    const hit = this.roads.nearestEdge(x, z, 6, true, (e) => !getRoadType(e.typeId).pedestrian);
+    if (!hit) return 'Durak araç geçen bir yolun üzerine konur';
+    if (getRoadType(hit.edge.typeId).category === 'highway') return 'Otoyola durak konamaz';
+    if (this.transit.stopAt(hit.point.x, hit.point.z, 24)) return 'Yakında başka bir durak var';
+    if (STOP_COST > this.treasury.balance) return 'Yetersiz bütçe';
+    return null;
+  }
+
+  addBusStop(x: number, z: number): number | null {
+    if (this.busStopError(x, z)) return null;
+    const hit = this.roads.nearestEdge(x, z, 6, true, (e) => !getRoadType(e.typeId).pedestrian)!;
+    return this.editTransit('Otobüs durağı', () => {
+      this.treasury.spend(STOP_COST, 'infra');
+      return this.transit.addStop(hit.point.x, hit.point.z).id;
+    });
+  }
+
+  /** Removes a stop (half its price back); lines left with fewer than two stops are closed and their buses sold. */
+  removeBusStop(id: number): number {
+    if (!this.transit.stops.has(id)) return 0;
+    return this.editTransit('Otobüs durağı kaldırma', () => {
+      const before = new Set(this.transit.lines.keys());
+      const buses = new Map([...this.transit.lines.values()].map((l) => [l.id, l.buses]));
+      this.transit.removeStop(id);
+      let refund = Math.round(STOP_COST * DEMOLISH_REFUND);
+      for (const lid of before) if (!this.transit.lines.has(lid)) refund += Math.round((buses.get(lid) ?? 0) * BUS_PRICE * DEMOLISH_REFUND);
+      this.treasury.refund(refund, 'infra');
+      return refund;
+    });
+  }
+
+  /** Buses the city's bus depots can house. */
+  busDepotCapacity(): number {
+    let n = 0;
+    for (const b of this.buildings.items.values()) if (b.defId === DEPOT_ID && b.state === 'active') n++;
+    return n * DEPOT_BUSES;
+  }
+
+  /** Why `extra` more buses can't be bought, or null. */
+  busFleetError(extra: number): string | null {
+    const cap = this.busDepotCapacity();
+    if (cap === 0) return 'Önce bir otobüs garajı kurun (Hizmetler)';
+    if (this.transit.busCount + extra > cap) return `Garajlar dolu (${cap} otobüs): yeni garaj kurun`;
+    if (!this.treasury.canAfford(extra * BUS_PRICE)) return 'Yetersiz bütçe';
+    return null;
+  }
+
+  /** Opens a line through the given stops with one bus (bought). */
+  createBusLine(stops: number[]): number | null {
+    if (stops.length < 2 || stops.some((s) => !this.transit.stops.has(s))) return null;
+    if (this.busFleetError(1)) return null;
+    return this.editTransit('Otobüs hattı', () => {
+      this.treasury.spend(BUS_PRICE, 'infra');
+      return this.transit.addLine(stops).id;
+    });
+  }
+
+  /** Buys buses (full price) or sells them (half back). */
+  setLineBuses(id: number, n: number): boolean {
+    const l = this.transit.lines.get(id);
+    if (!l) return false;
+    const next = Math.max(0, Math.min(MAX_BUSES, n));
+    const diff = next - l.buses;
+    if (diff === 0) return false;
+    if (diff > 0 && this.busFleetError(diff)) return false;
+    this.editTransit(diff > 0 ? 'Otobüs alma' : 'Otobüs satma', () => {
+      if (diff > 0) this.treasury.spend(diff * BUS_PRICE, 'infra');
+      else this.treasury.refund(Math.round(-diff * BUS_PRICE * DEMOLISH_REFUND), 'infra');
+      this.transit.setBuses(id, next);
+    });
+    return true;
+  }
+
+  /** Adds a stop to a line (where it adds the least detour) or takes it out (a line keeps two). */
+  toggleLineStop(id: number, stop: number): 'added' | 'removed' | null {
+    const l = this.transit.lines.get(id);
+    const s = this.transit.stops.get(stop);
+    if (!l || !s) return null;
+    const at = l.stops.indexOf(stop);
+    if (at >= 0) {
+      if (l.stops.length <= 2) return null;
+      const next = l.stops.filter((_, k) => k !== at);
+      this.editTransit('Hattan durak çıkarma', () => this.transit.setLineStops(id, next));
+      return 'removed';
+    }
+    const next = [...l.stops];
+    next.splice(this.transit.insertIndex(l, s), 0, stop);
+    this.editTransit('Hatta durak ekleme', () => this.transit.setLineStops(id, next));
+    return 'added';
+  }
+
+  renameBusLine(id: number, name: string): void {
+    this.editTransit('Hat adı', () => this.transit.renameLine(id, name));
+  }
+
+  recolorBusLine(id: number, color: string): void {
+    this.editTransit('Hat rengi', () => this.transit.setLineColor(id, color));
+  }
+
+  /** Closes a line and sells its buses (half back). */
+  removeBusLine(id: number): void {
+    const l = this.transit.lines.get(id);
+    if (!l) return;
+    this.editTransit('Otobüs hattını kapatma', () => {
+      this.treasury.refund(Math.round(l.buses * BUS_PRICE * DEMOLISH_REFUND), 'infra');
+      this.transit.removeLine(id);
+    });
   }
 
   // ---------------------------------------------------------------- ground paint
@@ -1039,28 +1174,73 @@ export class City {
 
   /** Restores saved buildings (save system): occupancy, zoning index and cleared trees follow. */
   /**
-   * How far a building on these cells is drawn towards the road in front of
-   * it, so the lot meets the kerb (straight roads running along the front;
-   * nothing for curved, diagonal or distant roads).
+   * How a building on these cells is drawn against the road in front of it
+   * (straight, angled or curved): turned by up to 50° to face the road (a
+   * diagonal road is 45° off every side of the grid), then moved along the
+   * road's normal until the front meets the kerb — towards the road across a
+   * strip of grass, or back from it where a curve cuts into the lot. Visual
+   * only; the cells stay where they are.
    */
-  roadSnap(i: number, j: number, w: number, d: number, rot: Rotation): { x: number; z: number } | null {
+  roadSnap(i: number, j: number, w: number, d: number, rot: Rotation): { x: number; z: number; yaw: number } | null {
     const [sx, sz] = frontStep(rot);
     const cx = (i + w / 2) * CELL_SIZE;
     const cz = (j + d / 2) * CELL_SIZE;
-    const half = (sx !== 0 ? w : d) * CELL_SIZE * 0.5;
-    const fx = cx + sx * half;
-    const fz = cz + sz * half;
-    const hit = this.roads.nearestEdge(fx + sx * CELL_SIZE * 0.5, fz + sz * CELL_SIZE * 0.5, CELL_SIZE * 1.5, true, (e) => !this.roads.isElevated(e));
+    const halfDepth = (sx !== 0 ? w : d) * CELL_SIZE * 0.5;
+    const halfWidth = (sx !== 0 ? d : w) * CELL_SIZE * 0.5;
+    const accept = (e: RoadEdge) => !this.roads.isElevated(e);
+    const fx = cx + sx * halfDepth;
+    const fz = cz + sz * halfDepth;
+    const hit = this.roads.nearestEdge(fx + sx * CELL_SIZE, fz + sz * CELL_SIZE, CELL_SIZE * 2.2, true, accept);
     if (!hit) return null;
-    const t = bezierTangent(this.roads.curveOf(hit.edge), hit.t);
-    // The road must run along the front (within about 15°).
-    if (Math.abs(sx * t.z - sz * t.x) < 0.965) return null;
-    const ahead = (hit.point.x - fx) * sx + (hit.point.z - fz) * sz;
-    const gap = ahead - getRoadType(hit.edge.typeId).width / 2 - 0.1;
-    if (gap < 0.05 || gap > CELL_SIZE * 1.25) return null;
+    // Unit normal from the road towards the lot.
+    let nx = fx - hit.point.x;
+    let nz = fz - hit.point.z;
+    const nl = Math.hypot(nx, nz);
+    if (nl < 1e-3) return null;
+    nx /= nl;
+    nz /= nl;
+    // Turn the front to face the road (−n), at most 50°.
+    const mx = -nx;
+    const mz = -nz;
+    const yaw = Math.atan2(sz * mx - sx * mz, sx * mx + sz * mz);
+    if (Math.abs(yaw) > (50 * Math.PI) / 180) return null;
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    const turn = (x: number, z: number) => ({ x: x * cos + z * sin, z: -x * sin + z * cos });
+    // Front centre and corners after turning; their gaps to the road surface.
+    const px = -sz;
+    const pz = sx;
+    // Gap from a point of the turned front (moved `shift` m towards the road) to the road surface.
+    const gapAt = (ox: number, oz: number, shift: number): number => {
+      const v = turn(ox, oz);
+      const x = cx + v.x - nx * shift;
+      const z = cz + v.z - nz * shift;
+      const near = this.roads.nearestEdge(x, z, CELL_SIZE * 3, true, accept);
+      if (!near) return Infinity;
+      const surface = getRoadType(near.edge.typeId).width / 2;
+      const side = (x - near.point.x) * nx + (z - near.point.z) * nz >= 0 ? 1 : -1;
+      return side * near.dist - surface;
+    };
+    const frontGap = (shift: number) =>
+      Math.min(
+        gapAt(sx * halfDepth, sz * halfDepth, shift),
+        gapAt(sx * halfDepth + px * halfWidth * 0.95, sz * halfDepth + pz * halfWidth * 0.95, shift),
+        gapAt(sx * halfDepth - px * halfWidth * 0.95, sz * halfDepth - pz * halfWidth * 0.95, shift),
+      );
+    // A few steps: the closest front point ends up 0.1 m from the kerb.
+    let gap = 0;
+    for (let k = 0; k < 3; k++) {
+      const g = frontGap(gap) - 0.1;
+      if (!Number.isFinite(g)) return null;
+      gap += g;
+      if (Math.abs(g) < 0.02) break;
+    }
+    if (!Number.isFinite(gap) || gap > CELL_SIZE * 2.25 || gap < -CELL_SIZE) return null;
+    if (Math.abs(gap) < 0.05 && Math.abs(yaw) < 0.01) return null;
     // Never over a building standing between the lot and the road.
-    if (gap > 1 && frontCells(i, j, w, d, rot, 1).some(([ci, cj]) => this.occupancy.buildingAt(ci, cj) !== 0)) return null;
-    return { x: sx * gap, z: sz * gap };
+    if (gap > 1 && [...frontCells(i, j, w, d, rot, 1), ...(gap > CELL_SIZE ? frontCells(i, j, w, d, rot, 2) : [])].some(([ci, cj]) => this.occupancy.buildingAt(ci, cj) !== 0)) return null;
+    // (avoid -0: saves compare exactly)
+    return { x: -nx * gap || 0, z: -nz * gap || 0, yaw: yaw || 0 };
   }
 
   /**
@@ -1329,6 +1509,22 @@ export class City {
         });
         this.settle(e.net, dir, 'infra');
         this.afterTerrainChange(i0, j0, i1, j1);
+        return null;
+      }
+      if (e.kind === 'upgrade') {
+        const b = this.buildings.items.get(e.id);
+        const at = dir === 'undo' ? e.to : e.from;
+        const goal = dir === 'undo' ? e.from : e.to;
+        if (!b || b.defId !== at.defId) return 'Bina değişti';
+        if (!this.treasury.canAfford(Math.max(0, dir === 'undo' ? e.net : -e.net))) return 'Yetersiz bütçe';
+        this.buildings.replace(b.id, { defId: goal.defId, level: goal.level });
+        this.settle(e.net, dir, 'buildings');
+        return null;
+      }
+      if (e.kind === 'transit') {
+        if (!this.treasury.canAfford(Math.max(0, dir === 'undo' ? e.net : -e.net))) return 'Yetersiz bütçe';
+        this.transit.restore(dir === 'undo' ? e.before : e.after);
+        this.settle(e.net, dir, 'infra');
         return null;
       }
       if (e.kind === 'paint') {

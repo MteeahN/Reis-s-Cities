@@ -19,6 +19,8 @@ import type {
   TrafficToolState,
   TerrainToolState,
   PaintToolState,
+  TransitToolState,
+  TransitView,
   DecorToolState,
 } from '../game/core/events';
 import type { PopulationStats } from '../game/simulation/CitySimulation';
@@ -30,6 +32,7 @@ import type { CellInfo } from '../game/world/WorldGrid';
 import type { CitySaveData, SaveMeta } from '../game/save/CitySave';
 import type { AchievementView } from '../game/systems/Achievements';
 import type { FeedPost } from '../game/systems/CitizenFeed';
+import type { Advice } from '../game/systems/Advisors';
 import type { RoadSurface } from '../game/data/roads';
 import type { StatsSample } from '../game/systems/StatsHistory';
 
@@ -74,6 +77,8 @@ export interface GameUIState {
   trafficTool: TrafficToolState;
   terrainTool: TerrainToolState;
   paintTool: PaintToolState;
+  transitTool: TransitToolState;
+  transit: TransitView;
   decorTool: DecorToolState;
   cityStats: CityStats | null;
   zoneTool: ZoneToolState;
@@ -113,7 +118,8 @@ export interface GameUIState {
   achievements: AchievementView[];
   history: StatsSample[];
   /** Open HUD popup (achievements, statistics or the citizens' feed). */
-  popup: 'achievements' | 'stats' | 'feed' | null;
+  popup: 'achievements' | 'stats' | 'feed' | 'advisors' | null;
+  advice: Advice[];
   feed: FeedPost[];
   /** Feed posts that arrived since the feed was last opened. */
   feedUnread: number;
@@ -145,6 +151,8 @@ export const INITIAL_GAME_STATE = {
   trafficTool: { mode: 'oneway', target: null } as TrafficToolState,
   terrainTool: { op: 'raise', size: 'M', strength: 0.5 } as TerrainToolState,
   paintTool: { paint: 1, radius: 4 } as PaintToolState,
+  transitTool: { mode: 'stop', draft: [], editLine: null, hint: null } as TransitToolState,
+  transit: { stops: 0, ridersPerDay: 0, faresPerDay: 0, upkeepPerDay: 0, buses: 0, depotCapacity: 0, lines: [] } as TransitView,
   decorTool: { defId: 'bench', rot: 0, error: null } as DecorToolState,
   cityStats: null,
   zoneTool: { zone: 1, mode: 'fill', brush: 1, depth: 4, style: 'modern', wealth: 0, height: 0 } as ZoneToolState,
@@ -166,6 +174,7 @@ export const INITIAL_GAME_STATE = {
   popup: null as GameUIState['popup'],
   feed: [] as FeedPost[],
   feedUnread: 0,
+  advice: [] as Advice[],
 };
 
 export const useGameStore = create<GameUIState>((set) => ({

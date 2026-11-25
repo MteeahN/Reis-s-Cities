@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { settlementOf } from '../../game/data/settlement';
 import { STARTING_BUDGET, type GameSpeed } from '../../game/core/config';
 import { getGame } from '../../store/gameBridge';
 import { saveCity } from '../../store/saveManager';
@@ -137,6 +138,17 @@ const SpeedControls = memo(function SpeedControls() {
   );
 });
 
+/** Köy, belde, kasaba… by the real population. */
+function Settlement() {
+  const pop = useGameStore((s) => s.population?.total ?? 0);
+  const t = settlementOf(pop);
+  return (
+    <span className="settlement" data-testid="settlement" title={t.next ? `${t.next.min.toLocaleString('tr-TR')} nüfusta ${t.next.name}` : 'En büyük yerleşim'}>
+      {t.name}
+    </span>
+  );
+}
+
 export function TopBar() {
   const cityName = useGameStore((s) => s.cityName);
   const level = useGameStore((s) => s.cityLevel);
@@ -147,7 +159,8 @@ export function TopBar() {
   const saving = useGameStore((s) => s.saving);
   const earned = useGameStore((s) => s.achievements.filter((a) => a.earnedAt !== null).length);
   const unread = useGameStore((s) => s.feedUnread);
-  const togglePopup = (p: 'achievements' | 'stats' | 'feed') => set({ popup: popup === p ? null : p, settingsOpen: false, helpOpen: false, ...(p === 'feed' ? { feedUnread: 0 } : {}) });
+  const urgent = useGameStore((s) => s.advice.filter((a) => a.level === 'high').length);
+  const togglePopup = (p: 'achievements' | 'stats' | 'feed' | 'advisors') => set({ popup: popup === p ? null : p, settingsOpen: false, helpOpen: false, ...(p === 'feed' ? { feedUnread: 0 } : {}) });
 
   return (
     <header className="topbar panel">
@@ -160,6 +173,7 @@ export function TopBar() {
         <div className="brand-text">
           <span className="brand-title">REIS'S CITIES</span>
           <span className="brand-city" data-testid="city-name">{cityName}</span>
+          <Settlement />
           <span className="brand-level" data-testid="city-level" title={level.next === null ? `En yüksek seviye · ${level.xp} XP` : `${level.xp} / ${level.next} XP — görevleri tamamlayarak seviye atlayın`}>
             Sv {level.level}
             <span className="brand-xp"><span style={{ width: `${level.next === null ? 100 : ((level.xp - level.base) / (level.next - level.base)) * 100}%` }} /></span>
@@ -180,6 +194,10 @@ export function TopBar() {
         <div className="divider" />
         <button className={`icon-btn ${saving ? 'active' : ''}`} onClick={() => void saveCity('manual')} disabled={saving} title="Kaydet (Ctrl+S)" data-testid="btn-save">
           <Icon name="save" size={18} />
+        </button>
+        <button className={`icon-btn badge-btn ${popup === 'advisors' ? 'active' : ''}`} onClick={() => togglePopup('advisors')} title="Danışmanlar — şehrin en çok neye ihtiyacı var" data-testid="btn-advisors">
+          <Icon name="advisor" size={18} />
+          {urgent > 0 && <span className="count-badge alert" data-testid="advisors-urgent">{urgent}</span>}
         </button>
         <button className={`icon-btn badge-btn ${popup === 'feed' ? 'active' : ''}`} onClick={() => togglePopup('feed')} title="Kent Sesi — vatandaşların istekleri ve şikâyetleri" data-testid="btn-feed">
           <Icon name="chat" size={18} />

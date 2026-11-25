@@ -10,6 +10,10 @@ export interface DailyRates {
   upkeepPower: number;
   upkeepWater: number;
   upkeepServices: number;
+  /** Bus fares (income). */
+  transitFares: number;
+  /** Bus upkeep. */
+  upkeepTransit: number;
   loanPayments: number;
 }
 
@@ -56,6 +60,8 @@ export const ZERO_RATES: DailyRates = {
   upkeepPower: 0,
   upkeepWater: 0,
   upkeepServices: 0,
+  transitFares: 0,
+  upkeepTransit: 0,
   loanPayments: 0,
 };
 
@@ -143,7 +149,7 @@ export class Economy {
   /** Projected net per day at current rates (taxes − upkeep − loan payments). */
   projectedDailyNet(): number {
     const r = this.rates;
-    return r.taxResidential + r.taxCommercial + r.taxIndustrial - r.upkeepRoads - r.upkeepBuildings - r.upkeepPower - r.upkeepWater - r.upkeepServices - r.loanPayments;
+    return r.taxResidential + r.taxCommercial + r.taxIndustrial + r.transitFares - r.upkeepRoads - r.upkeepBuildings - r.upkeepPower - r.upkeepWater - r.upkeepServices - r.upkeepTransit - r.loanPayments;
   }
 
   /** Applies `days` (fraction of a game day) of income and expenses. */
@@ -160,6 +166,8 @@ export class Economy {
     t.charge(rates.upkeepPower * days, 'upkeepPower');
     t.charge(rates.upkeepWater * days, 'upkeepWater');
     t.charge(rates.upkeepServices * days, 'upkeepServices');
+    t.credit(rates.transitFares * days, 'transitFares');
+    t.charge(rates.upkeepTransit * days, 'upkeepTransit');
     for (const loan of this.loans) {
       const pay = Math.min(loan.remaining, loan.dailyPayment * days);
       loan.remaining -= pay;

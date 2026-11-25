@@ -45,6 +45,8 @@ export interface PlacedBuilding {
    */
   ox?: number;
   oz?: number;
+  /** Extra turn (radians) so the front faces an angled or curved road. Visual only. */
+  oyaw?: number;
   /** How the building sits on sloping ground (visual only): tilt with the slope (gentle, low-rise) or set into it. */
   seat?: GroundSeat;
 }
@@ -88,21 +90,23 @@ export class BuildingRegistry {
   private nextId = 1;
   private listeners = new Set<(c: BuildingChange) => void>();
   /** Where a new building is drawn relative to its cells (set by the city: towards the road). */
-  snapper: ((i: number, j: number, w: number, d: number, rot: Rotation) => { x: number; z: number } | null) | null = null;
+  snapper: ((i: number, j: number, w: number, d: number, rot: Rotation) => { x: number; z: number; yaw?: number } | null) | null = null;
   /** How a new building sits on the ground (set by the city from the terrain). */
   seater: ((defId: string, i: number, j: number, w: number, d: number) => GroundSeat | null) | null = null;
 
-  private snap<T extends { defId: string; i: number; j: number; w: number; d: number; rot: Rotation }>(b: T): T & { ox?: number; oz?: number; seat?: GroundSeat } {
+  private snap<T extends { defId: string; i: number; j: number; w: number; d: number; rot: Rotation }>(b: T): T & { ox?: number; oz?: number; oyaw?: number; seat?: GroundSeat } {
     const s = this.snapper?.(b.i, b.j, b.w, b.d, b.rot);
-    const out = { ...b } as T & { ox?: number; oz?: number; seat?: GroundSeat };
+    const out = { ...b } as T & { ox?: number; oz?: number; oyaw?: number; seat?: GroundSeat };
     delete out.ox;
     delete out.oz;
+    delete out.oyaw;
     delete out.seat;
     const seat = this.seater?.(b.defId, b.i, b.j, b.w, b.d);
     if (seat) out.seat = seat;
-    if (s && (s.x !== 0 || s.z !== 0)) {
+    if (s) {
       out.ox = s.x;
       out.oz = s.z;
+      if (s.yaw) out.oyaw = s.yaw;
     }
     return out;
   }

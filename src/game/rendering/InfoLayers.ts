@@ -3,6 +3,8 @@ import { GRID_CELLS } from '../core/config';
 import { getBuilding, type ServiceKind } from '../data/buildings';
 import type { PlacedBuilding } from '../entities/building/BuildingRegistry';
 import type { City } from '../systems/City';
+import { CELL_SIZE } from '../core/config';
+import { DEPOT_ID, WALK } from '../simulation/Transit';
 
 const N = GRID_CELLS;
 
@@ -20,7 +22,8 @@ export type InfoLayerId =
   | 'pollution'
   | 'traffic'
   | 'noise'
-  | 'happiness';
+  | 'happiness'
+  | 'transit';
 
 export interface InfoLayerDef {
   id: InfoLayerId;
@@ -43,6 +46,7 @@ export const INFO_LAYERS: readonly InfoLayerDef[] = [
   { id: 'pollution', name: 'Kirlilik', legend: [['#3fd18a', 'Temiz'], ['#8a4fd0', 'Kirli (sanayi, egzoz, atık su)']] },
   { id: 'traffic', name: 'Trafik yoğunluğu', legend: [['#3fd18a', 'Akıcı'], ['#ffd23c', 'Yoğun'], ['#f05a50', 'Kapasite aşıldı'], ['#8e1f1f', 'Tıkalı']] },
   { id: 'noise', name: 'Gürültü', legend: [['#3fd18a', 'Sessiz'], ['#ff8a3c', 'Gürültülü (trafik, sanayi)']] },
+  { id: 'transit', name: 'Toplu taşıma', legend: [['#2f7dd1', 'Çalışan hattın durağına yürüme mesafesi'], ['#8a8f96', 'Hatsız / otobüssüz durak çevresi'], ['#3fd18a', 'Otobüse binen haneler']] },
   { id: 'happiness', name: 'Mutluluk', legend: [['#f05a50', 'Mutsuz'], ['#ffd23c', 'Orta'], ['#3fd18a', 'Mutlu']] },
 ];
 
@@ -139,6 +143,34 @@ export function paintLayer(layer: InfoLayerId, city: City, out: Uint8Array): voi
       set(k, 255, 138, 60, Math.min(220, 40 + p * 2.6));
     }
   }
+  if (layer === 'transit') {
+    // Walking circles around stops: blue where a running line serves the stop.
+    const t = city.transit;
+    const served = new Set<number>();
+    for (const l of t.lines.values()) if (t.route(l).ok && t.running(l) > 0) for (const s of l.stops) served.add(s);
+    const r = Math.ceil(WALK / CELL_SIZE);
+    for (const s of t.stops.values()) {
+      const ci = Math.floor(s.x / CELL_SIZE);
+      const cj = Math.floor(s.z / CELL_SIZE);
+      const on = served.has(s.id);
+      for (let dj = -r; dj <= r; dj++) {
+        for (let di = -r; di <= r; di++) {
+          const i = ci + di;
+          const j = cj + dj;
+          if (i < 0 || j < 0 || i >= N || j >= N) continue;
+          const d = Math.hypot((i + 0.5) * CELL_SIZE - s.x, (j + 0.5) * CELL_SIZE - s.z);
+          if (d > WALK) continue;
+          const k = j * N + i;
+          const a = Math.round(70 + 90 * (1 - d / WALK));
+          if (on) {
+            const prev = out[k * 4] === 47 ? out[k * 4 + 3] : 0;
+            set(k, 47, 125, 209, Math.max(a, prev));
+          } else if (out[k * 4 + 3] === 0) set(k, 138, 143, 150, 90);
+        }
+      }
+    }
+    return;
+  }
   // traffic: strips over the roads (TrafficOverlay); happiness: buildings only.
 }
 
@@ -175,6 +207,12 @@ export function buildingLayerColor(layer: InfoLayerId, b: PlacedBuilding, city: 
       return rgb(ramp(1 - city.landValue.averageOver(b.cells, city.landValue.noise) / 60, c));
     case 'traffic':
       return NEUTRAL;
+    case 'transit': {
+      if (b.defId === DEPOT_ID) return tmp.set(0xffffff);
+      if (b.zone !== 1) return NEUTRAL;
+      const sh = city.transit.shareOf(b.id);
+      return sh.work + sh.shop > 0 ? rgb(GOOD) : NEUTRAL;
+    }
     case 'happiness': {
       const hh = city.population.households.get(b.id);
       if (b.zone !== 1 || !hh) return NEUTRAL;
@@ -209,6 +247,7 @@ export function buildingLayerColor(layer: InfoLayerId, b: PlacedBuilding, city: 
 /** Which layer a tool should show automatically for a building it places. */
 export function layerForBuilding(defId: string): InfoLayerId | null {
   const def = getBuilding(defId);
+  if (defId === DEPOT_ID) return 'transit';
   if (def.group === 'power') return 'power';
   if (def.group === 'water') return def.utility?.sewage ? 'sewage' : 'water';
   if (def.service) {

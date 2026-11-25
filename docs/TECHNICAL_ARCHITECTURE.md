@@ -57,6 +57,20 @@ React HUD (src/ui)  ←  Zustand store (src/store)  ←  EventBus olayları  ←
   `World.refreshTerrain` hücreleri yeniden sınıflar ve etkilenen parçaların geometrisini yeniden kurar. Değişen
   köşelerin son yükseklikleri `terrainEdits` olarak kaydedilir ve yüklemede yollardan önce uygulanır; her basış
   bir `terrain` geri alma girdisidir.
+- Hemen yükseltme: `CitySimulation.canUpgrade / upgradePrice / upgradeNow`; seviye gereksinimleri otomatik büyümeyle
+  aynıdır, yalnızca bekleme süresi atlanır. Geri alma girdisi binanın önceki şablonunu ve seviyesini tutar.
+- Toplu taşıma: `simulation/Transit.ts` durakları (konum) ve hatları (durak sırası, otobüs sayısı) tutar. Durak en
+  yakın araç yoluna bağlanır; hat rotası ardışık duraklar arasında yön kurallı Dijkstra ile bulunur (yol / ağ sürümüne
+  göre önbellekli). `Transit.update` trafik adımından önce her ev için otobüs payını hesaplar; `TrafficModel` ev
+  kökenli iş ve alışveriş yolculuklarını `1 − pay` ile çarpar. Bilet ve işletme `Economy` günlük oranlarındadır.
+  `TransitRenderer` kulübeleri, sağ şeritte giden otobüsleri ve araç açıkken hat çizgilerini çizer.
+  Garaj: `Transit.update` etkin `bus_depot` binalarından `depotCapacity` (garaj başına 30) hesaplar; toplam otobüs
+  fazlaysa `running(line)` her hatta adil pay verir, yolcu ve çizim bu sayıyla yapılır. `City.busFleetError` alımı
+  engeller. Aktarma: `connected(id)` durakları `TRANSFER_WALK` içindeki hatları (geçişli) bulur; erişim hesabında
+  doğrudan ulaşılmayan ama bağlı hatla ulaşılan iş/dükkân 0,7 ile sayılır. `stopRiders` gidişi eve en yakın durağa,
+  dönüşü varış yerlerine yakın duraklara dağıtır; `TransitRenderer` bunu bekleyen insan figürlerine çevirir.
+  Hat düzenleme `City.toggleLineStop` (`Transit.insertIndex` en az sapma), `renameBusLine`, `recolorBusLine`;
+  hepsi `editTransit` ile geri alınır. Katman: `InfoLayers` `'transit'`.
 - Zemin kaplama: `City.paint` 2 m'lik ızgarada (1024²) malzeme kimliği tutar; `DecorRenderer` bu diziyi doğrudan
   arazi malzemesine doku olarak verir, desen arazi shader'ında dünya koordinatında çizilir. Kayıtta RLE.
 - Süsler: `data/decor.ts` ilkel parçalardan modeller; `DecorRenderer` tür başına bir InstancedMesh kullanır.

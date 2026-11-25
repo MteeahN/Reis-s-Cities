@@ -45,6 +45,7 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
       ['E', 'Arazi: yükselt, alçalt, düzle, yumuşat, gölet ( [ / ] fırça)'],
       ['Q', 'Zemin kaplama (parke, karo, tuğla, çakıl, kum, çim, ahşap)'],
       ['N', 'Süsler: bank, çardak, havuz, oyun alanı… (R: döndür)'],
+      ['O', 'Otobüs: durak koy, hat çiz (Tab: mod, Enter: hattı aç); garaj gerekir, panelden hat düzenlenir'],
       ['PageUp / PageDown', 'Yol aracında yolu yükselt / alçalt'],
       ['Ctrl+S', 'Şehri kaydet'],
       ['H / F1', 'Bu pencere'],

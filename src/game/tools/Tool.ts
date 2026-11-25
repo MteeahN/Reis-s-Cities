@@ -27,6 +27,8 @@ export interface ToolContext {
   pipesVisible(): boolean;
   roadInfo(edgeId: number): RoadInfo | null;
   buildingInfo(id: number): BuildingInfo | null;
+  /** Show the bus line routes (transit tool). */
+  setTransitRoutes(on: boolean): void;
 }
 
 /** A player tool. Exactly one is active at a time (managed by ToolManager). */

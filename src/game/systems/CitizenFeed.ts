@@ -32,6 +32,7 @@ export interface FeedPost {
 export interface FeedContext {
   minute: number;
   stats: PopulationStats;
+  /** Zone demand, 0–100 per zone. */
   demand: Demand;
   taxRates: Record<TaxKind, number>;
   inDebt: boolean;
@@ -126,16 +127,16 @@ const TOPICS: Topic[] = [
   {
     id: 'housing',
     kind: 'request',
-    active: (c) => people(c) > 0 && c.demand.residential > 0.6 && c.stats.vacantHomes < 5,
+    active: (c) => people(c) > 0 && c.demand.residential > 60 && c.stats.vacantHomes < 5,
     texts: ['Kiralık ev bulamıyorum, her yer dolu. Yeni konut alanı açılsın lütfen 🏠', 'Kuzenim şehre taşınmak istiyor ama boş ev yok.'],
-    affected: (c) => `talep %${Math.round(c.demand.residential * 100)}`,
+    affected: (c) => `talep %${Math.round(c.demand.residential)}`,
   },
   {
     id: 'shops',
     kind: 'request',
-    active: (c) => people(c) >= 100 && c.demand.commercial > 0.6,
+    active: (c) => people(c) >= 100 && c.demand.commercial > 60,
     texts: ['Ekmek almak için şehrin öbür ucuna gidiyorum. Mahalleye market açılsın!', 'Kafe, lokanta, mağaza… bu şehirde alışveriş yapacak yer yok. #ticaret'],
-    affected: (c) => `talep %${Math.round(c.demand.commercial * 100)}`,
+    affected: (c) => `talep %${Math.round(c.demand.commercial)}`,
   },
   {
     id: 'traffic',

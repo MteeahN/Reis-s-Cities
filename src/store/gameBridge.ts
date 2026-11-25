@@ -55,6 +55,9 @@ export async function startGame(container: HTMLElement): Promise<void> {
   ev.on('trafficTool', (trafficTool) => set({ trafficTool }));
   ev.on('terrainTool', (terrainTool) => set({ terrainTool }));
   ev.on('paintTool', (paintTool) => set({ paintTool }));
+  ev.on('transitTool', (transitTool) => set({ transitTool }));
+  ev.on('transit', (transit) => set({ transit }));
+  ev.on('advice', (advice) => set({ advice }));
   ev.on('decorTool', (decorTool) => set({ decorTool }));
   ev.on('budget', (budget) => set({ budget }));
   ev.on('cityStats', (cityStats) => set({ cityStats }));

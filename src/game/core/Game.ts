@@ -18,6 +18,7 @@ import { StatsHistory, type StatsSample } from '../systems/StatsHistory';
 import type { PopulationStats } from '../simulation/CitySimulation';
 import type { Demand } from '../simulation/Demand';
 import { CitizenFeed } from '../systems/CitizenFeed';
+import { cityAdvice } from '../systems/Advisors';
 import { getRoadType, isRoadTypeUnlocked, type RoadSurface } from '../data/roads';
 import { hasRoadAccess } from '../entities/building/BuildingPlacement';
 import { BuildingRenderer } from '../rendering/BuildingRenderer';
@@ -25,6 +26,8 @@ import { RoadRenderer } from '../rendering/roads/RoadRenderer';
 import { City } from '../systems/City';
 import { ZoneOverlay } from '../rendering/ZoneOverlay';
 import { DecorRenderer } from '../rendering/DecorRenderer';
+import { TransitRenderer } from '../rendering/TransitRenderer';
+import { BUS_DAILY_CAPACITY, BUS_DAILY_UPKEEP, DEPOT_ID, FARE, LINE_COLORS } from '../simulation/Transit';
 import { PowerLineRenderer } from '../rendering/PowerLineRenderer';
 import { PipeRenderer } from '../rendering/PipeRenderer';
 import { PedestrianRenderer } from '../rendering/PedestrianRenderer';
@@ -120,6 +123,8 @@ export class Game {
   private zoneOverlay!: ZoneOverlay;
   /** Ground paint and decorations. */
   decor!: DecorRenderer;
+  private transitRenderer!: TransitRenderer;
+  private transitSeen = -1;
   private selectionRefresh = 1;
   private roadRenderer!: RoadRenderer;
   private buildingRenderer!: BuildingRenderer;
@@ -221,6 +226,8 @@ export class Game {
     this.trafficOverlay = new TrafficOverlay(this.city.traffic, this.city.roads, this.roadRenderer);
     this.signals = new TrafficSignals(this.city.roads);
     this.vehicles = new VehicleRenderer(this.city.traffic, this.city.roads, this.roadRenderer, this.signals);
+    this.transitRenderer = new TransitRenderer(this.city.transit, this.city.roads, this.roadRenderer);
+    this.scene.add(this.transitRenderer.group);
     this.pedestrians = new PedestrianRenderer(this.city.roads, this.city.buildings, this.city.occupancy, this.roadRenderer, this.signals);
     // Drivers yield to people on crosswalks; people wait for approaching vehicles.
     this.vehicles.crosswalkBusy = (node, edge) => this.pedestrians.isCrossing(node, edge);
@@ -238,6 +245,8 @@ export class Game {
         this.events.emit('population', stats);
         this.events.emit('demand', demand);
         this.updateFeed(stats, demand);
+        this.emitTransit();
+        this.events.emit('advice', cityAdvice({ stats, demand, taxRates: { ...this.city.economy.taxRates }, inDebt: this.city.economy.inDebt, dailyNet: this.city.economy.projectedDailyNet(), buses: { bought: this.city.transit.busCount, depotCapacity: this.city.busDepotCapacity() } }));
         this.events.emit('maxPopulation', this.citySim.maxPopulation);
         this.trackProgress();
       },
@@ -275,6 +284,7 @@ export class Game {
         this.applyLayer();
       },
       pipesVisible: () => this.pipeRenderer.visible,
+      setTransitRoutes: (on) => this.transitRenderer.setRoutesVisible(on),
       tick: () => this.sim.tick,
       roadInfo: (id) => this.roadInfo(id),
       buildingInfo: (id) => this.buildingInfo(id),
@@ -460,8 +470,8 @@ export class Game {
       population: st.total,
       happiness: st.happiness,
       balance: this.city.treasury.balance,
-      income: r.taxResidential + r.taxCommercial + r.taxIndustrial,
-      expenses: r.upkeepRoads + r.upkeepBuildings + r.upkeepPower + r.upkeepWater + r.upkeepServices + r.loanPayments,
+      income: r.taxResidential + r.taxCommercial + r.taxIndustrial + (r.transitFares ?? 0),
+      expenses: r.upkeepRoads + r.upkeepBuildings + r.upkeepPower + r.upkeepWater + r.upkeepServices + (r.upkeepTransit ?? 0) + r.loanPayments,
       unemployment: st.unemploymentRate,
       jobs: st.jobs,
       congestion: st.traffic.congestion,
@@ -559,6 +569,12 @@ export class Game {
     this.signals.update(dt * this.sim.speed);
     this.trafficControls.update();
     this.vehicles.update(dt, this.sim.speed, this.cameraCtl.target.x, this.cameraCtl.target.z, this.cameraCtl.distance);
+    this.transitRenderer.update(dt, this.sim.speed);
+    if (this.city.transit.version !== this.transitSeen) {
+      this.transitSeen = this.city.transit.version;
+      this.emitTransit();
+      if ((this.toolLayer ?? this.userLayer) === 'transit') this.infoView.refresh();
+    }
     this.pedestrians.update(dt, this.sim.speed, this.minuteOfDay() / 60, this.cameraCtl.target.x, this.cameraCtl.target.z, this.cameraCtl.distance);
     this.zoneOverlay.update();
     this.decor.update();
@@ -773,6 +789,9 @@ export class Game {
         break;
       case 'KeyQ':
         this.setTool('paint');
+        break;
+      case 'KeyO':
+        this.setTool('transit');
         break;
       case 'KeyN':
         this.setTool('decor');
@@ -1040,6 +1059,66 @@ export class Game {
     this.tools.road.setElevation(m);
   }
 
+/** Bus network summary for the panel. */
+  private emitTransit(): void {
+    const t = this.city.transit;
+    this.events.emit('transit', {
+      stops: t.stops.size,
+      ridersPerDay: t.ridersPerDay,
+      faresPerDay: t.ridersPerDay * FARE,
+      upkeepPerDay: t.busCount * BUS_DAILY_UPKEEP,
+      buses: t.busCount,
+      depotCapacity: this.city.busDepotCapacity(),
+      lines: [...t.lines.values()].map((l) => {
+        const st = t.lineStats.get(l.id);
+        const r = t.route(l);
+        return { id: l.id, name: l.name, color: l.color, stops: l.stops.length, buses: l.buses, running: st?.running ?? t.running(l), transfers: st?.transfers ?? 0, riders: st?.riders ?? 0, capacity: (st?.running ?? l.buses) * BUS_DAILY_CAPACITY, km: r.length / 1000, ok: r.ok };
+      }),
+    });
+  }
+
+  setTransitMode(mode: 'stop' | 'line' | 'edit', editLine: number | null = null): void {
+    this.tools.transit.setMode(mode, editLine);
+  }
+
+  setLineBuses(id: number, n: number): void {
+    const l = this.city.transit.lines.get(id);
+    if (!this.city.setLineBuses(id, n) && l && n > l.buses) this.events.emit('toast', { kind: 'error', text: this.city.busFleetError(n - l.buses) ?? 'Otobüs alınamadı' });
+  }
+
+  renameBusLine(id: number, name: string): void {
+    this.city.renameBusLine(id, name);
+  }
+
+  /** Gives a line the next colour of the palette. */
+  cycleLineColor(id: number): void {
+    const l = this.city.transit.lines.get(id);
+    if (!l) return;
+    const k = LINE_COLORS.indexOf(l.color);
+    this.city.recolorBusLine(id, LINE_COLORS[(k + 1) % LINE_COLORS.length]);
+  }
+
+  /** Opens the services picker on the bus depot. */
+  placeBusDepot(): void {
+    this.setTool('services');
+    this.setBuildingType(DEPOT_ID);
+  }
+
+  removeBusLine(id: number): void {
+    this.city.removeBusLine(id);
+  }
+
+/** The green arrow: upgrade a building now, for a price. */
+  upgradeBuilding(id: number): void {
+    const err = this.citySim.upgradeNow(id);
+    this.events.emit('toast', err ? { kind: 'error', text: err } : { kind: 'success', text: 'Bina yükseltildi' });
+    if (!err) {
+      this.events.emit('sfx', 'upgrade');
+      this.refreshOverlays();
+      this.tools.select.revalidate();
+    }
+  }
+
   setPaintTool(patch: Partial<PaintToolState>): void {
     this.tools.paint.setState(patch);
   }
@@ -1087,10 +1166,17 @@ export class Game {
     this.refreshLighting();
     this.trafficOverlay.refresh();
     const total = this.citySim.stats?.total ?? 0;
-    this.problemIcons.refresh(total > 300, (id) => {
-      const b = this.city.buildings.items.get(id);
-      return !!b && hasRoadAccess(b.i, b.j, b.w, b.d, b.rot, this.city.placementWorld);
-    });
+    this.problemIcons.refresh(
+      total > 300,
+      (id) => {
+        const b = this.city.buildings.items.get(id);
+        return !!b && hasRoadAccess(b.i, b.j, b.w, b.d, b.rot, this.city.placementWorld);
+      },
+      (id) => {
+        const b = this.city.buildings.items.get(id);
+        return !!b && this.citySim.canUpgrade(b);
+      },
+    );
   }
 
   private roadInfo(id: number): RoadInfo | null {
@@ -1156,6 +1242,7 @@ export class Game {
       groundPollution: Math.round(this.city.landValue.averageOver(b.cells, this.city.landValue.pollution)),
       happiness: b.zone === ZoneType.Residential ? Math.round(this.city.population.households.get(id)?.happiness ?? 0) : null,
       levelBlockers: this.citySim.levelBlockers(b),
+      upgradePrice: this.citySim.canUpgrade(b) ? this.citySim.upgradePrice(b) : null,
       dailyTax: b.zone ? (this.citySim.buildingTax.get(id) ?? 0) : null,
       ...this.serviceInfo(b.id),
     };
@@ -1283,6 +1370,7 @@ export class Game {
     this.buildingRenderer?.dispose();
     this.zoneOverlay?.dispose();
     this.decor?.dispose();
+    this.transitRenderer?.dispose();
     this.trafficOverlay?.dispose();
     this.trafficControls?.dispose();
     this.vehicles?.dispose();

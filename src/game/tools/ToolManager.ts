@@ -12,6 +12,7 @@ import { MoveTool } from './MoveTool';
 import { TerrainTool } from './TerrainTool';
 import { PaintTool } from './PaintTool';
 import { DecorTool } from './DecorTool';
+import { TransitTool } from './TransitTool';
 import type { Tool, ToolContext } from './Tool';
 
 /** Routes pointer/key input to the single active tool. */
@@ -31,6 +32,7 @@ export class ToolManager implements InputListener {
   readonly terrain: TerrainTool;
   readonly paint: PaintTool;
   readonly decor: DecorTool;
+  readonly transit: TransitTool;
   private active: Tool;
   private readonly tools: Record<ToolId, Tool>;
 
@@ -50,6 +52,7 @@ export class ToolManager implements InputListener {
     this.terrain = new TerrainTool(ctx);
     this.paint = new PaintTool(ctx);
     this.decor = new DecorTool(ctx);
+    this.transit = new TransitTool(ctx);
     this.tools = {
       select: this.select,
       road: this.road,
@@ -66,6 +69,7 @@ export class ToolManager implements InputListener {
       terrain: this.terrain,
       paint: this.paint,
       decor: this.decor,
+      transit: this.transit,
     };
     this.active = this.select;
     this.active.activate();

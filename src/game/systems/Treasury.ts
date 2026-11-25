@@ -13,6 +13,8 @@ export type FlowCategory =
   | 'upkeepPower'
   | 'upkeepWater'
   | 'upkeepServices'
+  | 'transitFares'
+  | 'upkeepTransit'
   | 'constructionInfra'
   | 'constructionRoads'
   | 'constructionBuildings'

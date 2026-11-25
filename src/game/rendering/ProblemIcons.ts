@@ -4,7 +4,7 @@ import { getBuilding } from '../data/buildings';
 import { buildingGeometry } from '../entities/building/BuildingModels';
 import type { City } from '../systems/City';
 
-export type ProblemKind = 'fire' | 'power' | 'water' | 'sewage' | 'garbage' | 'road';
+export type ProblemKind = 'fire' | 'power' | 'water' | 'sewage' | 'garbage' | 'road' | 'upgrade';
 
 const STYLE: Record<ProblemKind, { bg: string; draw: (c: CanvasRenderingContext2D) => void }> = {
   fire: {
@@ -69,6 +69,21 @@ const STYLE: Record<ProblemKind, { bg: string; draw: (c: CanvasRenderingContext2
       c.fill();
     },
   },
+  upgrade: {
+    bg: '#2fa36b',
+    draw: (c) => {
+      c.beginPath();
+      c.moveTo(32, 12);
+      c.lineTo(48, 30);
+      c.lineTo(38, 30);
+      c.lineTo(38, 50);
+      c.lineTo(26, 50);
+      c.lineTo(26, 30);
+      c.lineTo(16, 30);
+      c.closePath();
+      c.fill();
+    },
+  },
   road: {
     bg: '#7a7f86',
     draw: (c) => {
@@ -126,9 +141,9 @@ export class ProblemIcons {
   }
 
   /** Rebuild icon positions from the current simulation state. */
-  refresh(garbageMatters: boolean, roadAccess: (id: number) => boolean): void {
+  refresh(garbageMatters: boolean, roadAccess: (id: number) => boolean, upgradeable: (id: number) => boolean = () => false): void {
     if (this.points.size === 0) return;
-    const pos: Record<ProblemKind, number[]> = { fire: [], power: [], water: [], sewage: [], garbage: [], road: [] };
+    const pos: Record<ProblemKind, number[]> = { fire: [], power: [], water: [], sewage: [], garbage: [], road: [], upgrade: [] };
     const u = this.city.utilities;
     for (const b of this.city.buildings.items.values()) {
       if (b.state === 'construction' || b.state === 'abandoned') continue;
@@ -140,6 +155,7 @@ export class ProblemIcons {
       else if (def.water > 0 && !def.utility && !u.water.has(b.id)) kind = 'water';
       else if (def.water > 0 && !def.utility && !u.sewage.has(b.id)) kind = 'sewage';
       else if (garbageMatters && b.zone && this.city.services.average('garbage', b.cells) < 0.3) kind = 'garbage';
+      else if (upgradeable(b.id)) kind = 'upgrade';
       if (!kind) continue;
       const h = buildingGeometry(def).height;
       pos[kind].push((b.i + b.w / 2) * CELL_SIZE + (b.ox ?? 0), b.baseY + h + 4, (b.j + b.d / 2) * CELL_SIZE + (b.oz ?? 0));

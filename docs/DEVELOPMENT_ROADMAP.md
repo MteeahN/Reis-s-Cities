@@ -28,6 +28,14 @@
 17. ✅ Serbest ve yay yol çizimi, yol kaplamaları (parke, tuğla, beton) ve yeniden kaplama, yaya yolu, otoyol rampası,
     arazi aracı (yükselt, alçalt, düzle, yumuşat, gölet)
 18. ✅ Zemin kaplama boyası (8 malzeme) ve 20 süs eşyası (yerleştirme, döndürme, yıkım, geri alma, kayıt)
+19. ✅ Otobüs durakları ve hatları: yol ağında rota, yolcu hesabı, trafikten düşülen yolculuklar, bilet ve işletme
+20. ✅ Danışmanlar paneli (gerçek rakamlarla öneriler ve ilgili araç); Kent Sesi'nde talep ölçeği düzeltildi
+21. ✅ Anaokulu, sağlık ocağı, üniversite, kütüphane, yüzme havuzu, beş park türü, açık ve katlı otopark; bölge
+    renkleri yalnızca bölgeleme aracında
+22. ✅ Yeşil okla hemen yükseltme, yerleşim unvanı
+23. ✅ Otobüs garajı (garaj kapasitesi kadar otobüs çalışır), hatlar arası aktarma, hat düzenleme (durak ekle / çıkar,
+    ad, renk), toplu taşıma kapsama katmanı, duraklarda bekleyen yolcular
+24. ✅ Binalar eğri ve açılı yollara döner (en çok 50°), ön cephesi kaldırıma yaslanır
 
 ## Bilinen sınırlar (dürüst durum)
 
@@ -42,22 +50,22 @@
 - Geri al kapsamı: binalar, yollar, bölgeleme, hatlar ve trafik düzenlemeleri. Arazi satın alma, vergi ve kredi
   geri alınmaz; bölgelemeyi geri almak o bölgeleme yüzünden yıkılan büyüyen binaları geri getirmez.
 - Kent Sesi kayda yazılmaz; yüklenen şehirde akış boş başlar ve şehrin o anki durumundan yazılır.
-- Toplu taşıma (otobüs hatları, metro, tren) yok.
 - Tünel ve araç girmeyen yaya yolu yok.
 - Arazi aracında kanal, plaj, tepe / dağ şablonları ve zemin kaplama boyası yok; mini harita arazi düzenlemelerini
   göstermez. Kavşak yüzeyleri her zaman asfalttır.
-- Toplu taşıma henüz yok. Kaplama ve süsler yalnızca görünümdür; simülasyona etkileri yoktur. Kaplama 2 m
+- Toplu taşımada yalnızca otobüs var (metro, tren, tramvay yok). Otobüsler sabit hızla dolaşır, her
+  durakta bekler ama trafikte beklemez; garajdan hatta gidip gelmezler. Aktarma, yolcunun hangi işe gittiğini tek tek
+  izlemez: bağlı hatların ulaştığı işler toplam erişime indirimli eklenir. Kaplama ve süsler yalnızca görünümdür; simülasyona etkileri yoktur. Kaplama 2 m
   karelerle boyanır (kenarlar kademelidir).
 - Afetler ve danışmanlar yok.
 - Günlük (tekrarlanan) görevler yok; tüm görevler kalıcı.
-- Katalog bugün 84 bina tanımı içerir (her biri birçok stil ve varyantla çizilir); 600 hedefine ulaşılmadı.
+- Katalog bugün 96 bina tanımı içerir (her biri birçok stil ve varyantla çizilir); 600 hedefine ulaşılmadı.
 - Dokunmatik kontroller temel düzeyde.
 
 ## Sıradaki adımlar (öneri)
 
-1. Toplu taşıma: otobüs durakları ve hatları, hat başına yolcu ve gider.
-2. Yollar, bölgeler ve hatlar için geri al.
-3. Peyzaj: arazi yükseltme/alçaltma, su kazma, yol kenarı süs eşyaları.
+1. Toplu taşıma: metro ve tramvay; otobüslerin trafikte beklemesi.
+2. Peyzaj: kanal, plaj ve tepe şablonları.
 4. Afetler (yangın yayılması, sel) ve danışman ipuçları.
 5. Daha fazla özgün bina: okul ve hastane çeşitleri, stadyum, liman, havaalanı.
 6. Mobil dokunmatik kontrollerin iyileştirilmesi.

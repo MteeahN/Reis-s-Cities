@@ -59,6 +59,8 @@ const PATHS = {
   terrain: 'M2 19l6-9 4 5 3-4 7 8zM8 10l2-3',
   brush: 'M14 4l6 6-8 8H6v-6zM4 20c0-2 1-3 2-3',
   bench: 'M3 11h18M4 15h16M6 11V8h12v3M6 15v4M18 15v4',
+  advisor: 'M12 3a4 4 0 110 8 4 4 0 010-8zM4 21c0-4 3.6-7 8-7s8 3 8 7M17 3l1.5 1.5L21 2',
+  bus: 'M5 4h14a1 1 0 011 1v11H4V5a1 1 0 011-1zM4 11h16M7 19v-3M17 19v-3M7 14h.01M17 14h.01',
   heart: 'M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z',
   chevronDown: 'M6 9l6 6 6-6',
   elevated: 'M2 9h20M2 12h20M6 12v9M18 12v9M12 12v9',
