@@ -1244,21 +1244,30 @@ export class City {
    */
   private resnapAround(b: PlacedBuilding): void {
     const mine = this.drawnCorners(b.i, b.j, b.w, b.d, { x: b.ox ?? 0, z: b.oz ?? 0, yaw: b.oyaw ?? 0 }, 0.3);
-    const own = this.drawnCorners(b.i, b.j, b.w, b.d, null, 0.3);
+    // A building on the grid also holds its own cells (it may be drawn back onto them); one laid along a road does not.
+    const own = b.free ? null : this.drawnCorners(b.i, b.j, b.w, b.d, null, 0.3);
     const seen = new Set<number>([b.id]);
+    const unsnapped: number[] = [];
     const r = 4;
     for (let cj = b.j - r; cj < b.j + b.d + r; cj++) {
       for (let ci = b.i - r; ci < b.i + b.w + r; ci++) {
         if (ci < 0 || cj < 0 || ci >= GRID_CELLS || cj >= GRID_CELLS) continue;
-        const id = this.occupancy.buildingAt(ci, cj);
-        if (!id || seen.has(id)) continue;
-        seen.add(id);
-        const o = this.buildings.items.get(id);
-        if (!o || (!o.ox && !o.oz && !o.oyaw)) continue;
-        const theirs = this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3);
-        if (quadsOverlap(theirs, mine) || quadsOverlap(theirs, own)) this.buildings.resnap(id);
+        for (const id of this.occupancy.ownersAt(cj * GRID_CELLS + ci)) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const o = this.buildings.items.get(id);
+          if (!o || o.free) continue;
+          if (!o.ox && !o.oz && !o.oyaw) {
+            unsnapped.push(id);
+            continue;
+          }
+          const theirs = this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3);
+          if (quadsOverlap(theirs, mine) || (own && quadsOverlap(theirs, own))) this.buildings.resnap(id);
+        }
       }
     }
+    // Neighbours left square on their cells (no room to meet the kerb when they were built) try again.
+    for (const id of unsnapped) this.buildings.resnap(id);
   }
 
   // ---------------------------------------------------------------- making room for wider roads
@@ -1536,6 +1545,8 @@ export class City {
    */
   fitGrowablesToRoads(): number {
     const growables = [...this.buildings.items.values()].filter((b) => b.zone && !b.free && b.state !== 'burning');
+    // Square on their cells (no room to meet the kerb when built, or saved before snapping): try again.
+    for (const b of growables) if (!b.ox && !b.oz && !b.oyaw) this.buildings.resnap(b.id);
     const gaps = new Map(growables.map((b) => [b.id, this.drawnFrontGap(b)]));
     const off = new Set(growables.filter((b) => this.looseBesideAngledRoad(b)).map((b) => b.id));
     if (off.size === 0) return 0;
@@ -2011,13 +2022,15 @@ export class City {
     for (let cj = j - r; cj < j + d + r; cj++) {
       for (let ci = i - r; ci < i + w + r; ci++) {
         if (ci < 0 || cj < 0 || ci >= GRID_CELLS || cj >= GRID_CELLS) continue;
-        const id = this.occupancy.buildingAt(ci, cj);
-        if (!id || seen.has(id)) continue;
-        seen.add(id);
-        const o = this.buildings.items.get(id);
-        if (!o || (o.i === i && o.j === j && o.w === w && o.d === d)) continue;
-        const theirs = this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3);
-        if (quadsOverlap(mine, theirs)) return false;
+        for (const id of this.occupancy.ownersAt(cj * GRID_CELLS + ci)) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const o = this.buildings.items.get(id);
+          // (itself: the building on these very cells)
+          if (!o || (!o.free && o.i === i && o.j === j && o.w === w && o.d === d)) continue;
+          const theirs = this.drawnCorners(o.i, o.j, o.w, o.d, { x: o.ox ?? 0, z: o.oz ?? 0, yaw: o.oyaw ?? 0 }, 0.3);
+          if (quadsOverlap(mine, theirs)) return false;
+        }
       }
     }
     // The road: no corner or side midpoint on the carriageway.
@@ -2337,12 +2350,13 @@ export class City {
   // ---------------------------------------------------------------- moving
 
   /**
-   * Can player building `id` stand at (i, j, rot), or off the grid at `free`
-   * (turned to an angled road)? Its own place counts as free. Moving is free.
+   * Can building `id` (placed by the player, or grown in a zone) stand at
+   * (i, j, rot), or off the grid at `free` (turned to an angled road)? Its own
+   * place counts as free. Moving is free.
    */
   planMove(id: number, i: number, j: number, rot: Rotation, free?: FreeSpot): BuildingPlan | null {
     const b = this.buildings.items.get(id);
-    if (!b || b.zone) return null;
+    if (!b) return null;
     return this.asMove(this.withoutOwnCells(b, () => (free ? this.planFree(b.defId, free) : planBuilding(getBuilding(b.defId), i, j, rot, this.placementWorld, Infinity, 0))));
   }
 
@@ -2352,7 +2366,7 @@ export class City {
    */
   magnetMove(id: number, x: number, z: number): BuildingPlan | null {
     const b = this.buildings.items.get(id);
-    if (!b || b.zone) return null;
+    if (!b) return null;
     const plan = this.withoutOwnCells(b, () => this.magnetPlan(b.defId, x, z));
     return plan && this.asMove(plan);
   }
@@ -2375,18 +2389,29 @@ export class City {
     return plan;
   }
 
-  /** Moves a hand-placed (non-zoned) building, onto the grid or off it (`free`). Returns the building at its new spot. */
+  /**
+   * Moves a building onto the grid or off it (`free`), keeping it as it is:
+   * id, level, style, who lives or works there. A zoned building takes its
+   * zone along (the cells it lands on are zoned for it; the ones it leaves keep
+   * theirs and may grow again); under a player building the zoning goes.
+   * Returns the building at its new spot.
+   */
   moveBuilding(id: number, i: number, j: number, rot: Rotation, free?: FreeSpot): PlacedBuilding | null {
     const b = this.buildings.items.get(id);
     const plan = this.planMove(id, i, j, rot, free);
     if (!b || !plan?.valid) return null;
     const from = spotOf(b);
-    this.buildings.remove(id);
+    const cells = plan.free ? plan.free.cells : footprintCells(plan.i, plan.j, plan.w, plan.d);
+    // Cells first, so the zone map sees the lot it leaves and the one it takes.
     this.occupancy.clearBuilding(id, b.cells);
-    const moved = this.buildings.add({ ...plan, cost: b.cost });
-    this.occupancy.setBuilding(moved.id, moved.cells);
+    this.occupancy.setBuilding(id, cells);
+    const at = { i: plan.i, j: plan.j, rot: plan.rot, w: plan.w, d: plan.d, baseY: plan.baseY, minY: plan.minY };
+    const moved = this.buildings.move(id, at, plan.free ? { cells, ox: plan.free.ox, oz: plan.free.oz, oyaw: plan.free.oyaw } : undefined)!;
     this.resnapAround(moved);
-    this.zones.set(moved.cells, ZoneType.None, () => false);
+    if (moved.zone) {
+      this.zones.set(moved.cells, moved.zone, () => false);
+      for (const k of moved.cells) this.zones.refresh(k, false);
+    } else this.zones.set(moved.cells, ZoneType.None, () => false);
     this.clearVegetationOf(moved);
     if (this.recording) this.undo.push({ kind: 'move', id: moved.id, defId: b.defId, from, to: spotOf(moved) });
     return moved;

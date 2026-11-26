@@ -24,6 +24,7 @@ import type {
   DecorToolState,
   PetitionsView,
   ExportRow,
+  GameEvents,
 } from '../game/core/events';
 import type { PopulationStats } from '../game/simulation/CitySimulation';
 import type { Demand } from '../game/simulation/Demand';
@@ -125,6 +126,7 @@ export interface GameUIState {
   petitions: PetitionsView;
   exports: ExportRow[];
   walking: boolean;
+  follow: GameEvents['follow'];
   feed: FeedPost[];
   /** Feed posts that arrived since the feed was last opened. */
   feedUnread: number;
@@ -182,6 +184,7 @@ export const INITIAL_GAME_STATE = {
   advice: [] as Advice[],
   exports: [] as ExportRow[],
   walking: false,
+  follow: null,
   petitions: { open: null, promised: [], recent: [], trust: 0, happiness: 0 } as PetitionsView,
 };
 

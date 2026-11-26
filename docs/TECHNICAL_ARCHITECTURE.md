@@ -104,6 +104,16 @@ React HUD (src/ui)  ←  Zustand store (src/store)  ←  EventBus olayları  ←
   hücrelerinden kaldırır, yol boyunca sırayla (arka sıra en son) `relayTarget` ile dizer (`BuildingRegistry.relay` id ve
   durumu korur); yer bulamayan yerinde kalır, ona çarpan dizilmişler `reset` ile geri alınır (en çok 3 deneme, sonra
   zincirleme geri alma). Kalanlar `relayOneByOne` ile tek tek denenir. Bölge haritası sonda yeniden hesaplanır.
+- Su: `Water` arazinin işaretli derinliğini (0,1 m adım, 128 = su yüzeyi) dünyanın 3 katı alanı kaplayan 768² bir
+  dokuya yazar (`setDepth`, bir sonraki karede okunur; arazi aracı yalnızca değişen dikdörtgeni yeniler). Shader
+  derinlikten renk ve saydamlık, sığlıkta köpük, üç kayan dalga katmanından dünya uzayında normal üretir.
+- Zemin: `TerrainMaterial` (v6) dünya normali (`vWorldNormal`) ile dik yamaçta kaya, `rcWet` ile kıyıda ıslaklık
+  (pürüzlülük de düşer); ince çim ve çiçekler yalnız yakında (fwidth ile söner).
+- Araç takibi: `VehicleRenderer` çizdiği konumu `Vehicle.drawn`a yazar; `followAt`, `followState` (yolculuk bitince
+  null), `Game.updateFollow` → `CameraController.track(x, z, yaw?)`; olay `follow`, arayüz `FollowHud`.
+- Kavşakta park: `VehicleRenderer.spacesOf` park yerlerini `RoadRenderer.setbackAt` + 4 m'den başlatır (en az 8 m),
+  ağ değişince yeniden düzenler.
+- Taşıma: `BuildingRegistry.move` kimliği ve durumu koruyarak ızgaraya ya da serbest yere taşır; bölge binaları da taşınır.
 - Taşıma: `City.magnetMove` ve `planMove(…, free)` binanın kendi hücrelerini boş sayar (`withoutOwnCells`), `asMove` ücreti
   ve tekillik hatasını kaldırır. `tools/placement/nearLot.gridPlanNear` bina ve taşıma araçlarının ortak ızgara araması.
 - Dilekçeler: `systems/Petitions.ts` (`City.petitions`). `CitySimulation.populationStep` her adımda

@@ -88,15 +88,30 @@ describe('Undo / redo of buildings', () => {
     expect(only(t, 'plaza')[0].cells).toEqual(moved.cells);
   });
 
-  it('refuses to move zoned buildings or onto occupied cells', () => {
+  it('moves a zoned building with its residents, level and zone, never onto occupied cells', () => {
     const t = buildTown();
     t.run(1500);
-    const grown = [...t.city.buildings.items.values()].find((b) => b.zone === ZoneType.Residential);
-    expect(grown).toBeDefined();
-    expect(t.city.planMove(grown!.id, grown!.i, grown!.j, grown!.rot)).toBeNull();
-    placeNearRoad(t.city, 'plaza');
-    const p = only(t, 'plaza')[0];
-    expect(t.city.planMove(p.id, grown!.i, grown!.j, 0)?.valid).toBe(false);
+    const homes = [...t.city.buildings.items.values()].filter((b) => b.zone === ZoneType.Residential && b.state === 'active');
+    // Two homes on lots of the same size: the second makes room for the first.
+    const a = homes.find((x) => x.occupants > 0 && homes.some((y) => y !== x && y.w === x.w && y.d === x.d))!;
+    const b = homes.find((y) => y !== a && y.w === a.w && y.d === a.d)!;
+    expect(a && b).toBeTruthy();
+    // Onto another building's cells: not allowed.
+    expect(t.city.planMove(a.id, b.i, b.j, b.rot)?.valid).toBe(false);
+    t.city.removeGrowable(b.id);
+    const was = { id: a.id, defId: a.defId, level: a.level, occupants: a.occupants, style: a.style, i: a.i, j: a.j };
+    const plan = t.city.planMove(a.id, b.i, b.j, b.rot)!;
+    expect(plan.valid).toBe(true);
+    expect(plan.cost).toBe(0);
+    const moved = t.city.moveBuilding(a.id, plan.i, plan.j, plan.rot)!;
+    expect({ id: moved.id, defId: moved.defId, level: moved.level, occupants: moved.occupants, style: moved.style }).toEqual({ id: was.id, defId: was.defId, level: was.level, occupants: was.occupants, style: was.style });
+    for (const k of moved.cells) {
+      expect(t.city.zones.zone[k]).toBe(ZoneType.Residential);
+      expect(t.city.occupancy.ownersAt(k)).toEqual([moved.id]);
+    }
+    expect(t.city.undoLast()).toBeNull();
+    const back = t.city.buildings.items.get(was.id)!;
+    expect({ i: back.i, j: back.j, occupants: back.occupants }).toEqual({ i: was.i, j: was.j, occupants: was.occupants });
   });
 
   it('an undo that no longer fits fails and is dropped', () => {

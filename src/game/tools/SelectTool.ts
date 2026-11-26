@@ -99,6 +99,11 @@ export class SelectTool implements Tool {
     if (Math.hypot(p.x - this.downX, p.y - this.downY) > 5) return; // was a drag
     if (!ground) return;
     const city = this.ctx.city;
+    // A car or truck under the cursor: the camera follows it.
+    if (this.ctx.followVehicleAt?.(ground.x, ground.z)) {
+      this.clearSelection();
+      return;
+    }
     const { i, j } = WorldGrid.cellOf(ground.x, ground.z);
     const bid = city.buildingAtWorld(ground.x, ground.z);
     const building = bid ? this.ctx.buildingInfo(bid) : null;

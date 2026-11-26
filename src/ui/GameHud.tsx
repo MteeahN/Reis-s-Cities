@@ -6,6 +6,7 @@ import { FeedPanel } from './panels/FeedPanel';
 import { AdvisorsPanel } from './panels/AdvisorsPanel';
 import { PetitionCard } from './panels/PetitionCard';
 import { WalkHud } from './hud/WalkHud';
+import { FollowHud } from './hud/FollowHud';
 import { StatsPanel } from './panels/StatsPanel';
 import { DemandMeter } from './hud/DemandMeter';
 import { LayerLegend } from './hud/LayerLegend';
@@ -44,6 +45,7 @@ export function GameHud() {
       <AdvisorsPanel />
       <PetitionCard />
       <WalkHud />
+      <FollowHud />
       <Toasts />
       <Tutorial />
       <LayerLegend />

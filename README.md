@@ -108,9 +108,13 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   değiştirmez (örneğin konutun yanına sanayi çizerken konut korunur). Fırça modu ve "Kaldır" eskisi gibi her şeye işler.
 - **Yol eklemleri:** aynı türden iki yol hafif açıyla birleştiğinde uçları ortak bir gönye çizgisinde buluşur;
   araya yırtık gibi görünen boşluk girmez.
-- **Taşı (M):** simge, hizmet ve altyapı binaları ücretsiz taşınır; binaya tıklayın, yeni yere tıklayın. Taşınan bina
-  yeni bina gibi en yakın yola döner ve kıvrık ya da çapraz yolun kaldırımına mıknatısla çekilir; R ile elle
-  döndürülünce ikisi de durur. Bölgede büyüyen binalar taşınmaz.
+- **Taşı (M):** her bina ücretsiz taşınır; binaya tıklayın, yeni yere tıklayın. Taşınan bina yeni bina gibi en yakın
+  yola döner ve kıvrık ya da çapraz yolun kaldırımına mıknatısla çekilir; R ile elle döndürülünce ikisi de durur.
+  Bina kimliğini, seviyesini, stilini ve içindekileri (oturanlar, çalışanlar) korur. Bölge binası bölgesini de götürür:
+  vardığı hücreler onun bölgesi olur, bıraktığı hücreler bölgeli kalır ve yeniden dolabilir.
+- **Araç takibi:** Seç aracıyla bir arabaya ya da kamyona tıklayın: kamera onu izler, alt panelde türü, hızı ve
+  hedefe kalan yol görünür. "Arkadan izle" kamerayı aracın arkasına döndürür. Esc, yön tuşları ya da başka bir yere
+  tıklamak takibi bırakır; araç park edince ya da varınca takip biter.
 - **Eğik yolda büyüme:** çapraz ya da kıvrık yol kenarındaki bölgede binalar ızgara karelerine basamak basamak
   (yolla arasında çim üçgenler kalarak) değil, yola dönük ve ön yüzü kaldırımda, komşusuna (10 m'ye kadar kayarak)
   yaslanarak büyür; yalnızca kendi bölgesinin hücrelerine taşar. Izgara parselinin artık sığmadığı aralar da yol
@@ -270,6 +274,12 @@ Tarayıcıda çalışan, stilize gerçekçi 3D şehir kurma ve yönetme simülas
   yolun park yerlerine eklenir. "Sokağa park şeridi" yol aracını yenileme kipinde açar: tıklanan sokak iki yanı
   park şeritli Otoparklı Sokak olur. Hizmet seçicisi sekmelere ayrıldı (Güvenlik, Sağlık, Eğitim, Ulaşım ve otopark,
   Parklar) ve ekrandan taşmaz; itfaiye Güvenlik sekmesindedir (500 nüfusta açılır).
+- **Kavşakta park yok:** park yerleri kavşak yüzeyinin ve yaya geçitlerinin 4 m ötesinden başlar (keskin yol
+  ayrımlarında kavşak yolun 20 m içine kadar uzanır); araçlar kavşağın ortasında durmaz.
+- **Su ve zemin:** su, altındaki arazinin derinliğine göre renklenir: sığlıkta berrak turkuaz (kum görünür),
+  derinde koyu mavi-yeşil; kıyıda dalgalarla kayan köpük bandı, birbirinden bağımsız kayan üç dalga katmanı. Zeminde
+  geniş çayır lekeleri (taze yeşil / güneşte sararmış), yakında ince çim dokusu ve seyrek çiçekler, yer yer toprak,
+  dik yamaçta kaya katmanları, su kenarında ıslak ve parlak kum, su altında bulanık ton.
 - **Park manevrası:** araç park yerine şeritte ilerleyip yanaşarak girer, park yerinden önce yana açılıp sonra
   şeride katılarak çıkar. Kaçak park edenler yarısı kaldırımda durur, yoldan geçen araçların önünü kesmez.
 - **Şehir Giriş Bulvarı:** şehirlerarası yoldan şehre giren yol şehrin en geniş yoludur: 32 m, 6 şerit, ortası

@@ -29,6 +29,8 @@ export interface ToolContext {
   buildingInfo(id: number): BuildingInfo | null;
   /** Show the bus line routes (transit tool). */
   setTransitRoutes(on: boolean): void;
+  /** Follow the vehicle at a ground point with the camera; false if there is none there (any follow stops). */
+  followVehicleAt?(x: number, z: number): boolean;
 }
 
 /** A player tool. Exactly one is active at a time (managed by ToolManager). */

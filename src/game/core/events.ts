@@ -15,6 +15,7 @@ import type { CellInfo } from '../world/WorldGrid';
 import type { GameSpeed } from './config';
 import type { AchievementView } from '../systems/Achievements';
 import type { StatsSample } from '../systems/StatsHistory';
+import type { FollowState } from '../rendering/VehicleRenderer';
 
 export type ToolId = 'select' | 'road' | 'building' | 'demolish' | 'zone' | 'power' | 'water' | 'services' | 'powerline' | 'pipe' | 'traffic' | 'move' | 'terrain' | 'paint' | 'decor' | 'transit';
 
@@ -337,6 +338,8 @@ export type GameEvents = {
   exports: ExportRow[];
   /** First-person walking mode is on. */
   walking: boolean;
+  /** The vehicle the camera follows (null: none); `behind`: the view turns with it. */
+  follow: (FollowState & { behind: boolean }) | null;
   decorTool: DecorToolState;
   budget: number;
   cityStats: CityStats;

@@ -48,6 +48,7 @@
 34. ✅ Patika, ağaçlı refüjlü sokak, çimli refüjlü cadde; derinlikli pencereler; ayrıntılı otobüs; yumuşak gün doğumu
 35. ✅ Şehir Giriş Bulvarı (en geniş yol), sekmeli hizmet seçicisi, dört otopark türü ve park şeridi aracı, park manevraları
 36. ✅ Eğik yolda yola dönük büyüme, paylaşılan hücreler (yan yana otoparklar), taşımada yola mıknatıs, dönen kaideler, alt çubuk yerleşimi; eski kayıtlardaki kopuk evler yüklemede yola dizilir
+37. ✅ Bölge binalarını taşıma, araç takibi (arkadan izleme), kavşakta park etmeme, derinliğe göre su ve ayrıntılı zemin
 
 ## Bilinen sınırlar (dürüst durum)
 

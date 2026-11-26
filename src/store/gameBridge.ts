@@ -61,6 +61,7 @@ export async function startGame(container: HTMLElement): Promise<void> {
   ev.on('petitions', (petitions) => set({ petitions }));
   ev.on('exports', (exports) => set({ exports }));
   ev.on('walking', (walking) => set({ walking }));
+  ev.on('follow', (follow) => set({ follow }));
   ev.on('decorTool', (decorTool) => set({ decorTool }));
   ev.on('budget', (budget) => set({ budget }));
   ev.on('cityStats', (cityStats) => set({ cityStats }));

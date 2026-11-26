@@ -43,6 +43,26 @@ interface Vehicle {
   enter: number;
   /** Parking into a kerb space, or pulling out of one: a curve between the two poses. */
   manoeuvre: Manoeuvre | null;
+  /** Where it was last drawn (to pick and follow it). */
+  drawn?: { x: number; y: number; z: number; heading: number };
+}
+
+/** The vehicle the camera follows: where it is, which way it heads and how far it still has to go. */
+export interface FollowState {
+  x: number;
+  y: number;
+  z: number;
+  /** Heading (radians, as the model is turned). */
+  heading: number;
+  truck: boolean;
+  /** Car model (sedan, hatchback, SUV, van) or truck model index. */
+  model: number;
+  /** km/h at the game speed shown. */
+  kmh: number;
+  /** Metres left to the end of its trip. */
+  remaining: number;
+  /** Parking into or out of a kerb space, or turning into its lot. */
+  manoeuvring: boolean;
 }
 
 /** A car steering from one pose to another along a smooth S (cubic Bézier), over `dur` game seconds. */
@@ -130,6 +150,10 @@ export class VehicleRenderer {
   private readonly parked: Parked[] = [];
   /** Occupied kerb spaces per edge ("slot:side"). */
   private readonly taken = new Map<number, Set<string>>();
+  /** The vehicle the camera follows (it stops being followed when its trip ends). */
+  private followed: Vehicle | null = null;
+  /** Kerb space layout per edge (cached; laid out again when the network changes). */
+  private readonly runs = new Map<number, { n: number; start: number; lane: boolean; len: number }>();
   private readonly seeded = new Set<number>();
   private cx = 0;
   private cz = 0;
@@ -177,26 +201,45 @@ export class VehicleRenderer {
 
   // ---------------------------------------------------------------- parking
 
-  /** Kerb spaces along an edge: count per side, and whether the road has a parking lane. */
-  private spacesOf(edgeId: number): { n: number; lane: boolean } {
+  /**
+   * Kerb spaces along an edge: count per side, where the first begins (m from
+   * node a) and whether the road has a parking lane. They keep clear of the
+   * junctions at both ends — 4 m past where the junction surface and its
+   * crosswalks begin, at least 8 m — so no car is left standing in a junction
+   * (a fork's surface reaches far along its roads).
+   */
+  private spacesOf(edgeId: number): { n: number; start: number; lane: boolean } {
     const e = this.roads.edges.get(edgeId);
-    if (!e) return { n: 0, lane: false };
+    if (!e) return { n: 0, start: 0, lane: false };
+    const c = this.runs.get(edgeId);
+    if (c && c.len === e.length) return c;
     const t = getRoadType(e.typeId);
-    if (t.pedestrian || t.category === 'highway') return { n: 0, lane: false };
-    return { n: Math.max(0, Math.floor((e.length - 16) / SPACE_LENGTH)), lane: !!t.parking };
+    let run = { n: 0, start: 0, lane: false, len: e.length };
+    if (!t.pedestrian && t.category !== 'highway') {
+      const a = Math.max(8, this.roadRenderer.setbackAt(e.a, edgeId) + 4);
+      const b = Math.max(8, this.roadRenderer.setbackAt(e.b, edgeId) + 4);
+      run = { n: Math.max(0, Math.floor((e.length - a - b) / SPACE_LENGTH)), start: a, lane: !!t.parking, len: e.length };
+    }
+    this.runs.set(edgeId, run);
+    return run;
+  }
+
+  /** Where kerb space k of an edge is (m from node a, its middle). */
+  private spaceAt(edgeId: number, k: number): number {
+    return this.spacesOf(edgeId).start + (k + 0.5) * SPACE_LENGTH;
   }
 
   /** A free kerb space on an edge nearest to `s` metres from node a, on `side` (both sides if none). */
   private freeSpace(edgeId: number, s: number, side: 1 | -1 | 0, ahead = 0): { slot: number; side: 1 | -1 } | null {
-    const { n } = this.spacesOf(edgeId);
+    const { n, start } = this.spacesOf(edgeId);
     if (n === 0) return null;
     const taken = this.taken.get(edgeId);
-    const k0 = Math.round((s - 8 - SPACE_LENGTH / 2) / SPACE_LENGTH);
+    const k0 = Math.round((s - start - SPACE_LENGTH / 2) / SPACE_LENGTH);
     for (let d = 0; d < n; d++) {
       for (const k of d === 0 ? [k0] : [k0 + d, k0 - d]) {
         if (k < 0 || k >= n) continue;
         // Driving on: only spaces level with or ahead of the car (+1 towards node b, −1 towards a).
-        if (ahead !== 0 && (8 + (k + 0.5) * SPACE_LENGTH - s) * ahead < 6) continue;
+        if (ahead !== 0 && (start + (k + 0.5) * SPACE_LENGTH - s) * ahead < 6) continue;
         for (const sd of side === 0 ? ([1, -1] as const) : [side]) if (!taken?.has(`${k}:${sd}`)) return { slot: k, side: sd };
       }
       if (d > 6) break; // within ~40 m
@@ -313,12 +356,12 @@ export class VehicleRenderer {
       this.seeded.add(id);
       const p = this.parking.edges.get(id);
       if (!p) continue;
-      const { n, lane } = this.spacesOf(id);
+      const { n, start, lane } = this.spacesOf(id);
       if (n === 0) continue;
       const inLane = lane ? Math.min(2 * n, Math.round(Math.min(p.parked, p.laneSpaces))) : 0;
       const illegal = lane ? 0 : Math.min(2 * n, Math.round(p.illegal));
       for (let k = 0; k < inLane + illegal; k++) {
-        const space = this.freeSpace(id, 8 + this.rand() * n * SPACE_LENGTH, 0);
+        const space = this.freeSpace(id, start + this.rand() * n * SPACE_LENGTH, 0);
         if (!space) break;
         this.park(id, space.slot, space.side, !lane, CAR_COLORS[Math.floor(this.rand() * CAR_COLORS.length)], pickWeighted(CAR_MIX, this.rand()));
       }
@@ -333,7 +376,7 @@ export class VehicleRenderer {
       const p = this.parked[i];
       // Only from the kerb of the way it will drive (it pulls straight out into its lane).
       if (p.edge !== edgeId || p.side !== side) continue;
-      const d = Math.abs(8 + (p.slot + 0.5) * SPACE_LENGTH - s);
+      const d = Math.abs(this.spaceAt(edgeId, p.slot) - s);
       if (d < bd) (bd = d), (best = i);
     }
     return best;
@@ -345,7 +388,7 @@ export class VehicleRenderer {
     const e = this.roads.edges.get(p.edge);
     if (!prof || !e) return null;
     const t = getRoadType(e.typeId);
-    const s = 8 + (p.slot + 0.5) * SPACE_LENGTH;
+    const s = this.spaceAt(p.edge, p.slot);
     sampleProfile(prof, (s / e.length) * prof.length, this.pt);
     const kerb = t.width / 2 - t.sidewalk;
     // In a parking lane; or, illegally, half up on the pavement (clear of the traffic lane).
@@ -368,6 +411,8 @@ export class VehicleRenderer {
     const t = this.traffic;
     if (t.version !== this.version) {
       this.version = t.version;
+      // Junctions may have changed: kerb spaces are laid out again.
+      this.runs.clear();
       // The road network was rebuilt: cars driving now pull over where they are.
       for (const v of this.vehicles) {
         const e = this.roads.edges.get(v.edge);
@@ -381,6 +426,8 @@ export class VehicleRenderer {
         this.parkAt(v, v.edge, s, true, true);
       }
       this.vehicles.length = 0;
+      // A parked car whose space is gone leaves.
+      for (let i = this.parked.length - 1; i >= 0; i--) if (this.parked[i].slot >= this.spacesOf(this.parked[i].edge).n) this.unpark(i);
       this.taken.clear();
       for (const p of this.parked) this.reserve(p.edge, p.slot, p.side);
     }
@@ -404,6 +451,44 @@ export class VehicleRenderer {
     if (simSpeed > 0) this.spawn();
     this.move(dt * simSpeed);
     this.draw();
+  }
+
+  /** Follows the moving vehicle drawn nearest (x, z), within `radius` m; false if there is none. */
+  followAt(x: number, z: number, radius = 4): boolean {
+    let best: Vehicle | null = null;
+    let bd = radius;
+    for (const v of this.vehicles) {
+      if (!v.drawn) continue;
+      const d = Math.hypot(v.drawn.x - x, v.drawn.z - z);
+      if (d < bd) (bd = d), (best = v);
+    }
+    this.followed = best;
+    return !!best;
+  }
+
+  stopFollow(): void {
+    this.followed = null;
+  }
+
+  /** The followed vehicle now, or null (none, or its trip has ended: parked, arrived or gone). */
+  followState(): FollowState | null {
+    const v = this.followed;
+    if (!v) return null;
+    if (!v.drawn || !this.vehicles.includes(v)) {
+      this.followed = null;
+      return null;
+    }
+    const t = this.traffic;
+    let remaining = Math.max(0, t.linkLen[v.path.links[v.idx]] - v.s);
+    for (let k = v.idx + 1; k < v.path.links.length; k++) remaining += t.linkLen[v.path.links[k]];
+    return {
+      ...v.drawn,
+      truck: v.truck,
+      model: v.model,
+      kmh: v.speed * 3.6,
+      remaining,
+      manoeuvring: !!v.manoeuvre || v.enter > 0,
+    };
   }
 
   /** Vehicles on the visible roads right now: Σ flow × travel time over visible links. */
@@ -457,7 +542,7 @@ export class VehicleRenderer {
           const p = this.unpark(k);
           color = p.color;
           model = p.model;
-          const at = 8 + (p.slot + 0.5) * SPACE_LENGTH;
+          const at = this.spaceAt(edgeId, p.slot);
           s = Math.max(from, Math.min(to - 1, reverse && e ? e.length - at : at));
           pullOut = pose;
         }
@@ -795,6 +880,8 @@ export class VehicleRenderer {
         this.scale.setScalar(1 - 0.15 * w);
       } else this.scale.setScalar(1);
       this.pos.set(p.x, p.y, p.z);
+      if (v.drawn) (v.drawn.x = p.x), (v.drawn.y = p.y), (v.drawn.z = p.z), (v.drawn.heading = ang);
+      else v.drawn = { x: p.x, y: p.y, z: p.z, heading: ang };
       this.q.setFromAxisAngle(this.up, ang);
       this.m.compose(this.pos, this.q, this.scale);
       this.color.setHex(v.color);

@@ -1,5 +1,5 @@
 import { Group, type Scene } from 'three';
-import { GRID_CELLS, WORLD_SIZE } from '../core/config';
+import { CELL_SIZE, GRID_CELLS, WORLD_SIZE } from '../core/config';
 import { TerrainMaterial } from '../rendering/materials/TerrainMaterial';
 import type { GeneratedWorld } from './generation/generateWorld';
 import { TerrainShape } from './generation/TerrainShape';
@@ -44,6 +44,7 @@ export class World {
     this.root.add(this.chunks);
     this.root.add(buildOuterTerrain(this.outer, this.shape, this.terrainMaterial));
     this.root.add(this.water.mesh);
+    this.water.setDepth(this.heightAt);
     // 256 m cells: fine-grained LOD switching and frustum/shadow culling.
     this.vegetation.addSet(data.vegetation, 256, true, true);
     this.vegetation.addSet(data.outerVegetation, 1400, false);
@@ -68,6 +69,8 @@ export class World {
       mesh.geometry.dispose();
       mesh.geometry = buildChunkGeometry(this.field, this.shape, c.cx, c.cz);
     }
+    // The water's depth (its colour, the shallows and foam) follows the new ground.
+    this.water.setDepth(this.heightAt, (i0 - 1) * CELL_SIZE, (j0 - 1) * CELL_SIZE, (i1 + 2) * CELL_SIZE, (j1 + 2) * CELL_SIZE);
   }
 
   addTo(scene: Scene): void {

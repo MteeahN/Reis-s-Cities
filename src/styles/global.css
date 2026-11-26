@@ -2553,3 +2553,29 @@ kbd {
     display: none;
   }
 }
+
+/* Following a vehicle: what it is, its speed and the way left; above the toolbar. */
+.follow-hud {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px 7px 12px;
+  font-size: 12.5px;
+  pointer-events: auto;
+  z-index: 25;
+}
+.follow-hud .follow-name {
+  font-weight: 700;
+}
+.follow-hud .follow-stat {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.follow-hud .btn.active {
+  border-color: rgba(63, 209, 160, 0.55);
+  color: var(--accent);
+}

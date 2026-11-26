@@ -212,12 +212,22 @@ export class BuildingRegistry {
    * its fixed drawn offset.
    */
   relay(id: number, at: { i: number; j: number; rot: Rotation; w: number; d: number; baseY: number; minY: number }, free: { cells: number[]; ox: number; oz: number; oyaw: number }): PlacedBuilding | null {
+    return this.move(id, at, free);
+  }
+
+  /**
+   * Moves a building to another lot, on the grid (drawn up to the road again)
+   * or off it with `free` (cells covered and fixed drawn offset), keeping its
+   * id and state: level, style, who lives or works there.
+   */
+  move(id: number, at: { i: number; j: number; rot: Rotation; w: number; d: number; baseY: number; minY: number }, free?: { cells: number[]; ox: number; oz: number; oyaw: number }): PlacedBuilding | null {
     const b = this.items.get(id);
     if (!b) return null;
     const before = { ...b, cells: [...b.cells] };
-    delete b.seat;
-    delete b.oyaw;
-    Object.assign(b, at, { free: [...free.cells], cells: [...free.cells], ox: free.ox, oz: free.oz }, free.oyaw ? { oyaw: free.oyaw } : {});
+    for (const k of ['free', 'ox', 'oz', 'oyaw', 'seat'] as const) delete b[k];
+    Object.assign(b, at);
+    if (free) Object.assign(b, { free: [...free.cells], cells: [...free.cells], ox: free.ox, oz: free.oz }, free.oyaw ? { oyaw: free.oyaw } : {});
+    else Object.assign(b, this.snap(b), { cells: footprintCells(b.i, b.j, b.w, b.d) });
     this.emit({ added: [b], removed: [before] });
     return b;
   }

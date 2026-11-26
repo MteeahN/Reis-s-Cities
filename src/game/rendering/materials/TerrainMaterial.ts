@@ -8,7 +8,7 @@ import {
   Vector4,
   type IUniform,
 } from 'three';
-import { CELL_SIZE, CHUNK_CELLS, TILES_PER_SIDE, WORLD_SIZE } from '../../core/config';
+import { CELL_SIZE, CHUNK_CELLS, TILES_PER_SIDE, WATER_LEVEL, WORLD_SIZE } from '../../core/config';
 import type { UnlockMap } from '../../world/UnlockMap';
 import { nightUniform } from '../nightUniform';
 
@@ -33,9 +33,11 @@ export interface TerrainUniforms {
 
 /**
  * Terrain shading is a MeshStandardMaterial (so it gets PBR lighting, shadows
- * and fog for free) with shader injections for: fine surface detail noise,
- * the build grid, the hover/footprint highlight, locked-land tint and the
- * owned-land border. All overlays are GPU-side — no extra geometry.
+ * and fog for free) with shader injections for: ground detail (meadow tones
+ * over large patches, fine grass and a few flowers up close, bare earth,
+ * rock strata on steep ground, wet sand at the waterline and a murky tint
+ * under water), the build grid, the hover/footprint highlight, locked-land
+ * tint and the owned-land border. All overlays are GPU-side — no extra geometry.
  */
 export class TerrainMaterial extends MeshStandardMaterial {
   readonly uniforms: TerrainUniforms;
@@ -67,15 +69,16 @@ export class TerrainMaterial extends MeshStandardMaterial {
     this.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, this.uniforms);
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWorldNormal = normalize(mat3(modelMatrix) * objectNormal);');
 
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>\n${FRAGMENT_HEADER}`)
         .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAGMENT_COLOR}`)
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.38, rcWet);')
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAGMENT_EMISSIVE}`);
     };
-    this.customProgramCacheKey = () => 'reis-terrain-v5';
+    this.customProgramCacheKey = () => 'reis-terrain-v6';
   }
 
   private syncUnlockMask(): void {
@@ -108,6 +111,9 @@ function emptyZoneTex(): DataTexture {
 
 const FRAGMENT_HEADER = /* glsl */ `
 varying vec3 vWorldPos;
+varying vec3 vWorldNormal;
+float rcWet = 0.0;
+const float WATER = ${WATER_LEVEL.toFixed(2)};
 uniform float uGridOpacity;
 uniform vec4 uHoverRect;
 uniform vec3 uHoverColor;
@@ -185,6 +191,37 @@ const FRAGMENT_COLOR = /* glsl */ `
   vec2 p = vWorldPos.xz;
   float n = rcNoise(p * 0.42) * 0.35 + rcNoise(p * 0.11) * 0.35 + rcNoise(p * 0.023) * 0.3;
   diffuseColor.rgb *= 0.84 + 0.3 * n;
+  // Ground detail. Grass is where the base colour is clearly green.
+  float grassy = smoothstep(0.015, 0.09, diffuseColor.g - max(diffuseColor.r, diffuseColor.b));
+  // Large patches: fresh green in places, sun-dried and yellower in others.
+  float macro = rcNoise(p * 0.0042) * 0.65 + rcNoise(p * 0.017 + 3.7) * 0.35;
+  vec3 meadow = mix(vec3(0.86, 1.06, 0.8), vec3(1.16, 1.03, 0.7), smoothstep(0.3, 0.75, macro));
+  diffuseColor.rgb *= mix(vec3(1.0), meadow, grassy);
+  // Up close: blades of grass and a few flowers (faded out with distance, so no shimmer).
+  float near = 1.0 - smoothstep(0.05, 0.3, length(fwidth(p)));
+  if (near > 0.0 && grassy > 0.0) {
+    float blades = rcNoise(vec2(p.x * 9.0, p.y * 2.3) + rcNoise(p * 0.8) * 3.0) * 0.6 + rcNoise(p * 4.3) * 0.4;
+    diffuseColor.rgb *= 1.0 + (blades - 0.5) * 0.32 * near * grassy;
+    vec2 fc = floor(p * 1.6);
+    vec2 fo = fract(p * 1.6) - 0.5;
+    float flower = step(0.993, rcHash(fc)) * step(0.42, macro) * (1.0 - smoothstep(0.1, 0.19, length(fo))) * near * grassy;
+    vec3 petal = rcHash(fc + 7.1) > 0.5 ? vec3(0.85, 0.72, 0.12) : vec3(0.82, 0.82, 0.86);
+    diffuseColor.rgb = mix(diffuseColor.rgb, petal, flower);
+  }
+  // Bare earth showing through here and there.
+  float dirt = smoothstep(0.66, 0.78, rcNoise(p * 0.021 + 11.3)) * smoothstep(0.4, 0.7, rcNoise(p * 0.09));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.15, 0.085) * (0.85 + 0.3 * n), dirt * grassy * 0.32);
+  // Steep ground: layered rock.
+  float steep = smoothstep(0.22, 0.45, 1.0 - clamp(vWorldNormal.y, 0.0, 1.0));
+  if (steep > 0.0) {
+    float strata = rcNoise(vec2((p.x + p.y) * 0.04, vWorldPos.y * 0.9)) * 0.6 + rcNoise(p * 0.5) * 0.4;
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.24, 0.225, 0.2) * (0.7 + 0.6 * strata), steep * 0.75);
+  }
+  // The waterline: darker wet sand (and glossier, see roughness); under water a murky tint.
+  float above = vWorldPos.y - WATER;
+  rcWet = (1.0 - smoothstep(0.1, 0.9, above)) * step(-0.05, above);
+  diffuseColor.rgb *= 1.0 - 0.35 * rcWet;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.1, 0.085), smoothstep(0.0, 2.5, -above) * 0.55);
   if (p.x >= 0.0 && p.y >= 0.0 && p.x <= WORLD && p.y <= WORLD) {
     float pid = floor(texture2D(uPaintTex, p / WORLD).r * 255.0 + 0.5);
     if (pid > 0.5) diffuseColor.rgb = rcPaint(pid, p);

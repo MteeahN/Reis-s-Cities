@@ -57,6 +57,17 @@ export class CameraController {
     this.clampDesired();
   }
 
+  /**
+   * Keeps the view on a moving point (a followed vehicle); with `yaw`, it
+   * also turns to look that way (from behind it).
+   */
+  track(x: number, z: number, yaw?: number): void {
+    this.desiredTarget.set(x, 0, z);
+    if (yaw !== undefined) this.desiredYaw = this.yaw + angleDelta(this.yaw, yaw);
+    this.transition = false;
+    this.clampDesired();
+  }
+
   /** Jumps straight to a view (loading a saved city). */
   setView(x: number, z: number, yaw: number, pitch: number, distance: number): void {
     this.desiredTarget.set(x, 0, z);

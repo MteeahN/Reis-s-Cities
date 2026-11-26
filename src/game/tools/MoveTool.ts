@@ -13,7 +13,8 @@ import type { Tool, ToolContext } from './Tool';
  * click again to drop it. Right click or ESC puts it back. Like a new
  * building it turns to face the nearest road and is pulled to an angled or
  * curved road's kerb (R turns it by hand, which stops both). Zoned buildings
- * grow where they stand and cannot be moved.
+ * move too, with their residents or jobs, level and style; the cells they
+ * land on take their zone.
  */
 export class MoveTool implements Tool {
   readonly id = 'move' as const;
@@ -34,7 +35,7 @@ export class MoveTool implements Tool {
 
   activate(): void {
     this.drop();
-    this.ctx.events.emit('toast', { kind: 'info', text: 'Taşımak istediğiniz binaya tıklayın (bölge binaları taşınamaz)' });
+    this.ctx.events.emit('toast', { kind: 'info', text: 'Taşımak istediğiniz binaya tıklayın' });
   }
 
   deactivate(): void {
@@ -51,15 +52,12 @@ export class MoveTool implements Tool {
   private pickUp(id: number): void {
     const b = this.ctx.city.buildings.items.get(id);
     if (!b) return;
-    if (b.zone) {
-      this.ctx.events.emit('toast', { kind: 'warning', text: 'Bölge binaları taşınamaz; yıkıp yeniden yerleştirin' });
-      return;
-    }
     this.picked = id;
     this.rot = b.rot;
     this.manualRotation = false;
     this.ghost.clear();
-    const g = buildingGeometry(getBuilding(b.defId), 0, true, 'modern');
+    const def = getBuilding(b.defId);
+    const g = buildingGeometry(def, 0, true, def.zone ? (b.style ?? 'modern') : 'modern');
     for (const geo of [g.plain, g.facade, g.detail]) if (geo) this.ghost.add(new Mesh(geo, this.ghostMat));
     this.refresh();
   }

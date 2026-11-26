@@ -300,6 +300,7 @@ export class Game {
       tick: () => this.sim.tick,
       roadInfo: (id) => this.roadInfo(id),
       buildingInfo: (id) => this.buildingInfo(id),
+      followVehicleAt: (x, z) => this.followVehicleAt(x, z),
     });
     this.city.treasury.onChange((b) => this.events.emit('budget', b));
     const onCityChange = () => {
@@ -580,6 +581,7 @@ export class Game {
     if (this.walk) {
       this.updateWalk(dt);
     } else {
+      if (this.following) this.updateFollow(dt);
       const cursorGround =
         this.input.wheel !== 0 && this.input.pointerInside ? this.pick(this.input.pointerX, this.input.pointerY)?.clone() ?? null : null;
       this.cameraCtl.update(dt, this.input, this.container.clientHeight, cursorGround);
@@ -772,7 +774,8 @@ export class Game {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     switch (code) {
       case 'Escape':
-        this.tools.handleKey('Escape');
+        if (this.following) this.stopFollow();
+        else this.tools.handleKey('Escape');
         break;
       case 'Space':
         this.togglePause();
@@ -900,6 +903,56 @@ export class Game {
   }
 
   /** Walk the streets in first person, starting at the camera's focus (the nearest free spot). */
+  // ---------------------------------------------------------------- following a vehicle
+
+  private following = false;
+  private followBehind = false;
+  private followEmit = 0;
+
+  /** Starts following the vehicle at a ground point (select tool click); false if there is none (any follow stops). */
+  followVehicleAt(x: number, z: number): boolean {
+    if (!this.vehicles.followAt(x, z)) {
+      this.stopFollow();
+      return false;
+    }
+    this.following = true;
+    this.followEmit = 0;
+    if (this.cameraCtl.distance > 160) this.cameraCtl.focusOn(x, z, 90);
+    this.events.emit('sfx', 'click');
+    this.events.emit('toast', { kind: 'info', text: 'Araç takip ediliyor (Esc ya da yön tuşları bırakır)' });
+    return true;
+  }
+
+  stopFollow(): void {
+    if (!this.following) return;
+    this.following = false;
+    this.vehicles.stopFollow();
+    this.events.emit('follow', null);
+  }
+
+  /** The view turns with the followed vehicle, seen from behind (or stays as the player turned it). */
+  setFollowBehind(on: boolean): void {
+    this.followBehind = on;
+    this.followEmit = 0;
+  }
+
+  private updateFollow(dt: number): void {
+    // Panning by keyboard takes the camera back.
+    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((k) => this.input.isDown(k))) return this.stopFollow();
+    const st = this.vehicles.followState();
+    if (!st) {
+      this.stopFollow();
+      this.events.emit('toast', { kind: 'info', text: 'Takip edilen araç yolculuğunu bitirdi' });
+      return;
+    }
+    this.cameraCtl.track(st.x, st.z, this.followBehind ? st.heading + Math.PI : undefined);
+    this.followEmit -= dt;
+    if (this.followEmit <= 0) {
+      this.followEmit = 0.25;
+      this.events.emit('follow', { ...st, behind: this.followBehind });
+    }
+  }
+
   startWalk(): void {
     if (this.walk) return;
     const c = this.cameraCtl;
