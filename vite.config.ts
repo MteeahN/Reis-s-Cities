@@ -3,6 +3,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  // GitHub Pages serves the game under /Reis-s-Cities/ (the deploy workflow sets PAGES_BASE).
+  base: (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.PAGES_BASE ?? '/',
   plugins: [react()],
   server: { port: 5173, strictPort: true },
   worker: { format: 'es' },

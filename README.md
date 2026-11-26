@@ -407,6 +407,7 @@ toplu taşıma ve tünel planlanmadı (ileride).
 ## Çalıştırma
 
 ```powershell
+# Kurmadan oynamak için: https://mteeahn.github.io/Reis-s-Cities/ (main dalına her push GitHub Pages'e yayınlanır)
 npm install          # bağımlılıklar
 npm run dev          # geliştirme sunucusu → http://localhost:5173
 npm test             # Vitest birim testleri
