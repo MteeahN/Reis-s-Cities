@@ -2,7 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  timeout: 90_000,
+  // The first smoke test walks the whole HUD (several screen sizes, settings, walking): it needs more than 90 s on a software GPU.
+  timeout: 180_000,
   expect: { timeout: 30_000 },
   use: {
     baseURL: 'http://localhost:5173',
