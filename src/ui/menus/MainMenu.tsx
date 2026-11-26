@@ -5,7 +5,7 @@ import { useGameStore } from '../../store/gameStore';
 import { deleteSave, exportSave, importSave, loadSave, refreshSaves } from '../../store/saveManager';
 import { formatGameDate, formatMoney, formatNumber } from '../../utils/format';
 import { Icon } from '../components/Icon';
-import { MenuSkyline } from './MenuSkyline';
+import { MenuLogo } from './MenuLogo';
 
 /** What the game is about (each is a real system in the game). */
 const FEATURES: { icon: 'zone' | 'traffic' | 'money'; title: string; text: string }[] = [
@@ -118,24 +118,16 @@ export function MainMenu() {
   return (
     <div className="menu-screen menu-v2">
       <div className="menu-bg" aria-hidden>
-        <div className="menu-grid" />
-        <div className="menu-contours" />
-        <div className="menu-glow" />
+        <div className="menu-haze" />
+        <div className="menu-haze two" />
+        <div className="menu-vignette" />
       </div>
       <section className="menu-hero" aria-label="Oyun hakkında">
-        <div className="menu-hero-brand">
-          <div className="brand-mark big" aria-hidden>
-            <span />
-            <span />
-            <span />
-          </div>
-          <span className="menu-kicker">Şehir kurma simülasyonu</span>
-        </div>
-        <h1 className="menu-title">
-          Reis's <em>Cities</em>
+        <h1 className="menu-logo-wrap">
+          <MenuLogo className="menu-logo-svg" />
         </h1>
+        <span className="menu-kicker">Şehir kurma simülasyonu</span>
         <p className="menu-lead">Boş bir vadiden yaşayan bir şehre. Yolları çiz, bölgeleri aç, insanları taşı; gerisini şehrin kendisi yapar.</p>
-        <MenuSkyline />
         <ul className="menu-features">
           {FEATURES.map((f) => (
             <li key={f.title}>
@@ -152,12 +144,7 @@ export function MainMenu() {
       </section>
       <div className="menu-card panel" data-testid="main-menu">
         <div className="menu-card-brand" aria-hidden>
-          <div className="brand-mark">
-            <span />
-            <span />
-            <span />
-          </div>
-          Reis's Cities
+          <MenuLogo className="menu-card-logo" />
         </div>
         <div className="menu-logo">
           <h2>{tab === 'new' ? 'Yeni şehir kur' : 'Kayıtlı şehirler'}</h2>

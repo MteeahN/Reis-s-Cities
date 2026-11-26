@@ -2580,61 +2580,54 @@ kbd {
   color: var(--accent);
 }
 
-/* ---------------------------------------------------------------- main menu (planning table) */
+/* ---------------------------------------------------------------- main menu (night-blue, logo first) */
 .menu-v2 {
-  grid-template-columns: minmax(0, 560px) 440px;
+  --menu-blue: #4da3ff;
+  --menu-blue-deep: #1f6fd1;
+  grid-template-columns: minmax(0, 600px) 430px;
   justify-content: center;
   align-items: center;
-  gap: clamp(32px, 6vw, 88px);
+  gap: clamp(40px, 7vw, 110px);
   padding: 32px;
   overflow: auto;
 }
 .menu-v2 .menu-bg {
-  background:
-    radial-gradient(900px 520px at 18% 30%, rgba(63, 209, 160, 0.14), transparent 65%),
-    radial-gradient(800px 600px at 85% 90%, rgba(90, 169, 255, 0.16), transparent 60%),
-    linear-gradient(165deg, #0a1520 0%, #070c12 60%, #05080c 100%);
   overflow: hidden;
+  background:
+    radial-gradient(1100px 700px at 32% 42%, #143a6e 0%, rgba(20, 58, 110, 0) 70%),
+    linear-gradient(180deg, #0c2349 0%, #081a37 45%, #050f22 100%);
 }
 .menu-v2 .menu-bg::after {
   display: none;
 }
-/* Blueprint grid: fine cells and stronger 5-cell blocks. */
-.menu-grid {
+/* Slow drifting haze, like light cloud over the city at dusk. */
+.menu-haze {
   position: absolute;
-  inset: -2px;
-  background-image:
-    linear-gradient(rgba(120, 190, 255, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(120, 190, 255, 0.07) 1px, transparent 1px),
-    linear-gradient(rgba(120, 190, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(120, 190, 255, 0.035) 1px, transparent 1px);
-  background-size: 160px 160px, 160px 160px, 32px 32px, 32px 32px;
-  mask-image: radial-gradient(ellipse 75% 70% at 40% 45%, black 25%, transparent 80%);
+  inset: -25%;
+  background:
+    radial-gradient(40% 18% at 20% 30%, rgba(170, 200, 240, 0.09), transparent 70%),
+    radial-gradient(35% 14% at 75% 22%, rgba(170, 200, 240, 0.07), transparent 70%),
+    radial-gradient(45% 20% at 60% 78%, rgba(170, 200, 240, 0.06), transparent 70%);
+  filter: blur(18px);
+  animation: haze-drift 48s ease-in-out infinite alternate;
 }
-/* Contour lines of the valley the city will grow in, drifting slowly. */
-.menu-contours {
+.menu-haze.two {
+  transform: rotate(180deg);
+  animation-duration: 64s;
+  animation-direction: alternate-reverse;
+  opacity: 0.8;
+}
+.menu-vignette {
   position: absolute;
-  inset: -20%;
-  background: repeating-radial-gradient(ellipse 60% 42% at 30% 60%, transparent 0 22px, rgba(63, 209, 160, 0.07) 23px, transparent 24px);
-  animation: contour-drift 60s ease-in-out infinite alternate;
-  mask-image: radial-gradient(ellipse 60% 60% at 30% 55%, black 20%, transparent 75%);
+  inset: 0;
+  background: radial-gradient(ellipse 85% 80% at 40% 45%, transparent 55%, rgba(2, 6, 16, 0.75) 100%);
 }
-.menu-glow {
-  position: absolute;
-  width: 520px;
-  height: 520px;
-  left: 8%;
-  top: 18%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(245, 196, 81, 0.1), transparent 65%);
-  filter: blur(10px);
-}
-@keyframes contour-drift {
+@keyframes haze-drift {
   from {
-    transform: translate3d(-2%, 1%, 0) rotate(-2deg);
+    transform: translate3d(-3%, 1%, 0) scale(1);
   }
   to {
-    transform: translate3d(2%, -1%, 0) rotate(2deg);
+    transform: translate3d(3%, -2%, 0) scale(1.06);
   }
 }
 
@@ -2642,100 +2635,73 @@ kbd {
   position: relative;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
   gap: 14px;
   min-width: 0;
 }
-.menu-hero-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.menu-logo-wrap {
+  margin: 0;
+  width: 100%;
+  max-width: 560px;
+  animation: logo-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.menu-logo-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.logo-word {
+  font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 900;
+  font-style: italic;
+  font-size: 92px;
+  letter-spacing: -1px;
 }
 .menu-kicker {
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.32em;
   text-transform: uppercase;
-  color: var(--accent);
-}
-.menu-title {
-  margin: 0;
-  font-size: clamp(40px, 5.4vw, 68px);
-  line-height: 1;
-  font-weight: 850;
-  letter-spacing: -0.03em;
-  color: #f2f6fa;
-}
-.menu-title em {
-  font-style: normal;
-  background: linear-gradient(100deg, var(--accent) 10%, var(--blue) 90%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #8fbff2;
 }
 .menu-lead {
   margin: 0;
   max-width: 470px;
-  font-size: 16px;
+  font-size: 15.5px;
   line-height: 1.6;
-  color: #a9b6c5;
-}
-.menu-skyline {
-  width: 100%;
-  max-width: 440px;
-  height: auto;
-  margin: 4px 0 0 -8px;
-  filter: drop-shadow(0 24px 40px rgba(0, 0, 0, 0.45));
-}
-.sky-ground {
-  fill: rgba(63, 209, 160, 0.08);
-  stroke: rgba(63, 209, 160, 0.35);
-  stroke-width: 0.6;
-}
-.sky-win {
-  fill: #ffd27a;
-  opacity: 0.08;
-  animation: window-light 9s ease-in-out infinite;
-}
-@keyframes window-light {
-  0%,
-  35% {
-    opacity: 0.08;
-  }
-  50%,
-  92% {
-    opacity: 0.95;
-  }
-  100% {
-    opacity: 0.08;
-  }
+  color: #a7b8cd;
 }
 .menu-features {
   list-style: none;
-  margin: 6px 0 0;
+  margin: 14px 0 0;
   padding: 0;
+  width: 100%;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  text-align: left;
 }
 .menu-features li {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border);
+  padding: 14px;
+  border: 1px solid rgba(140, 190, 255, 0.14);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.025);
+  background: linear-gradient(180deg, rgba(30, 70, 130, 0.22), rgba(10, 25, 50, 0.25));
 }
 .menu-features strong {
   display: block;
   font-size: 13px;
   margin-bottom: 3px;
+  color: #eef4fb;
 }
 .menu-features small {
   display: block;
   font-size: 12px;
   line-height: 1.45;
-  color: var(--muted);
+  color: #92a4ba;
 }
 .menu-feature-icon {
   display: grid;
@@ -2743,19 +2709,30 @@ kbd {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: rgba(77, 163, 255, 0.16);
+  color: var(--menu-blue);
 }
 
 .menu-v2 .menu-card {
-  width: 440px;
+  width: 430px;
   padding: 30px 30px 20px;
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(18, 28, 40, 0.86), rgba(10, 16, 24, 0.9));
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(18px) saturate(1.2);
-  animation: card-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(16, 36, 68, 0.82), rgba(8, 19, 38, 0.9));
+  border: 1px solid rgba(140, 190, 255, 0.18);
+  box-shadow: 0 30px 90px rgba(0, 5, 20, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(20px) saturate(1.2);
+  animation: card-in 0.5s 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+/* A thin blue line along the top of the card, like the logo's horizon. */
+.menu-v2 .menu-card::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--menu-blue), transparent);
 }
 .menu-v2 .menu-logo {
   text-align: left;
@@ -2769,6 +2746,7 @@ kbd {
 }
 .menu-v2 .menu-logo p {
   font-size: 14px;
+  color: #94a7bf;
 }
 .menu-v2 .field input {
   height: 44px;
@@ -2776,12 +2754,35 @@ kbd {
 }
 .menu-v2 .field input:focus-visible,
 .menu-v2 button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--menu-blue);
   outline-offset: 2px;
 }
 .menu-v2 .btn.big {
   min-height: 48px;
   font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.menu-v2 .btn.primary {
+  background: linear-gradient(180deg, #5aaeff, var(--menu-blue-deep));
+  border-color: rgba(160, 210, 255, 0.5);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(31, 111, 209, 0.4);
+}
+.menu-v2 .btn.primary:hover {
+  filter: brightness(1.08);
+}
+.menu-v2 .menu-tabs button.active {
+  color: #fff;
+}
+@keyframes logo-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @keyframes card-in {
   from {
@@ -2793,12 +2794,25 @@ kbd {
     transform: none;
   }
 }
+/* The logo on the card when the side is hidden (narrow screens). */
+.menu-card-brand {
+  display: none;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.menu-card-logo {
+  width: 220px;
+  height: auto;
+}
 @media (max-width: 1080px) {
   .menu-v2 {
-    grid-template-columns: 440px;
+    grid-template-columns: 430px;
   }
   .menu-hero {
     display: none;
+  }
+  .menu-card-brand {
+    display: flex;
   }
 }
 @media (max-width: 500px) {
@@ -2807,26 +2821,9 @@ kbd {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .menu-contours,
-  .sky-win,
+  .menu-haze,
+  .menu-logo-wrap,
   .menu-v2 .menu-card {
     animation: none;
-  }
-  .sky-win {
-    opacity: 0.6;
-  }
-}
-/* The game's name on the card when the side picture is hidden (narrow screens). */
-.menu-card-brand {
-  display: none;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-@media (max-width: 1080px) {
-  .menu-card-brand {
-    display: flex;
   }
 }
